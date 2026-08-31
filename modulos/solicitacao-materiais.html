@@ -1,0 +1,1793 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Solicitação de Materiais</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0a2540;
+    --surface:#0e2f52;
+    --surface-2:#0a2947;
+    --surface-3:#123a63;
+    --ink:#eaf1f8;
+    --ink-soft:#93aac2;
+    --ink-faint:#5f7996;
+    --border:#1c4570;
+    --border-soft:#153a5f;
+    --brand:#4fa3da;
+    --brand-deep:#055385;
+    --brand-2:#4a6792;
+    --focus:#7cc2f2;
+
+    --stage-nova:#8b9bb4;
+    --stage-separacao:#e0a83e;
+    --stage-envio:#4fa3da;
+    --stage-concluido:#3fae7c;
+    --stage-cancelado:#e0645a;
+
+    --danger:#e0645a;
+    --danger-ink:#ffece9;
+    --ok:#3fae7c;
+
+    --shadow: 0 8px 24px rgba(2,10,20,0.35), 0 2px 6px rgba(2,10,20,0.3);
+    --radius: 10px;
+    --radius-lg: 14px;
+  }
+
+  *,*::before,*::after{ box-sizing:border-box; }
+  [hidden]{ display:none !important; }
+  html,body{ margin:0; padding:0; height:100%; }
+  body{
+    background: radial-gradient(1200px 800px at 15% -10%, #0d3357 0%, var(--bg) 55%);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    font-size: 14.5px;
+    line-height: 1.45;
+    min-height: 100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  h1,h2,h3{ font-family:'Archivo', system-ui, sans-serif; text-wrap:balance; margin:0; }
+  button{ font-family:inherit; }
+  ::selection{ background: var(--brand); color:#04141f; }
+
+  a{ color: var(--brand); }
+
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{ background: var(--border); border-radius:8px; }
+  ::-webkit-scrollbar-thumb:hover{ background: var(--brand-2); }
+
+  :focus-visible{ outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .mono{ font-family:'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Header ---------- */
+  .topbar{
+    display:flex; align-items:center; gap:14px;
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--border-soft);
+    background: linear-gradient(180deg, rgba(5,83,133,0.35), rgba(5,83,133,0.05));
+    flex-wrap: wrap;
+  }
+  .mark{ display:flex; align-items:center; gap:12px; }
+  .mark svg{ flex:none; }
+  .logo-chip{
+    flex:none; display:flex; align-items:center;
+    background:#fff; border-radius:10px; padding:6px 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .logo-chip img{ display:block; height:34px; width:auto; }
+  .mark-text{ display:flex; flex-direction:column; gap:1px; }
+  .mark-title{ font-family:'Archivo'; font-weight:800; font-size:1.15rem; letter-spacing:0.2px; }
+  .mark-sub{ font-size:0.76rem; color:var(--ink-soft); letter-spacing:0.4px; text-transform:uppercase; }
+
+  .topbar-spacer{ flex:1 1 auto; }
+
+  .readonly-pill{
+    display:none;
+    align-items:center; gap:6px;
+    background: rgba(224,100,90,0.15);
+    border:1px solid rgba(224,100,90,0.45);
+    color: var(--danger-ink);
+    padding:5px 10px; border-radius:999px; font-size:0.78rem; font-weight:600;
+  }
+  body.read-only .readonly-pill{ display:inline-flex; }
+
+  .saving-pill{
+    display:none;
+    align-items:center; gap:6px;
+    background: var(--surface-2);
+    border:1px solid var(--border-soft);
+    color: var(--ink-soft);
+    padding:5px 10px; border-radius:999px; font-size:0.78rem; font-weight:600;
+  }
+  body.saving .saving-pill{ display:inline-flex; }
+  .saving-pill .dot{
+    width:6px; height:6px; border-radius:50%; background: var(--brand);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{ opacity:0.3; } 50%{ opacity:1; } }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    display:flex; align-items:center; gap:10px;
+    padding: 12px 22px;
+    border-bottom: 1px solid var(--border-soft);
+    flex-wrap: wrap;
+  }
+  .search-wrap{ position:relative; flex:1 1 260px; max-width:360px; }
+  .search-wrap input{
+    width:100%;
+    background: var(--surface-2);
+    border:1px solid var(--border);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 9px 14px 9px 34px;
+    font-size: 0.88rem;
+  }
+  .search-wrap svg{ position:absolute; left:12px; top:50%; transform:translateY(-50%); opacity:0.6; }
+
+  .btn{
+    display:inline-flex; align-items:center; gap:7px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--ink);
+    padding: 9px 14px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    cursor:pointer;
+    transition: background .12s ease, border-color .12s ease, transform .05s ease;
+    white-space: nowrap;
+  }
+  .btn:hover{ background: var(--surface-3); border-color: var(--brand-2); }
+  .btn:active{ transform: translateY(1px); }
+  .btn-primary{
+    background: linear-gradient(180deg, var(--brand), #3d8cc0);
+    border-color: transparent;
+    color: #04141f;
+  }
+  .btn-primary:hover{ filter: brightness(1.06); background: linear-gradient(180deg, var(--brand), #3d8cc0); }
+  .btn-danger{ background: transparent; border-color: rgba(224,100,90,0.5); color:#f2a099; }
+  .btn-danger:hover{ background: rgba(224,100,90,0.12); }
+  .btn-ghost{ background: transparent; border-color: transparent; color: var(--ink-soft); }
+  .btn-ghost:hover{ background: var(--surface-2); color: var(--ink); }
+  .btn-sm{ padding:6px 10px; font-size:0.78rem; }
+  .btn[disabled]{ opacity:0.45; cursor:not-allowed; }
+
+  .myname-wrap{ display:flex; align-items:center; gap:8px; margin-left:auto; }
+  .myname-btn{ display:flex; align-items:center; gap:8px; }
+  .avatar{
+    width:26px; height:26px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:0.72rem; font-weight:700; color:#04141f;
+    flex:none;
+  }
+
+  /* ---------- Board ---------- */
+  .board{
+    flex:1 1 auto;
+    display:flex;
+    gap:14px;
+    padding: 16px 22px 22px;
+    overflow-x:auto;
+    align-items:flex-start;
+  }
+  .column{
+    background: var(--surface);
+    border:1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    width: 300px;
+    flex: none;
+    height: calc(100vh - 180px);
+    min-height: 320px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .column-head{
+    display:flex; align-items:center; gap:9px;
+    padding: 13px 13px 11px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .stage-dot{ width:9px; height:9px; border-radius:50%; flex:none; box-shadow: 0 0 0 3px rgba(255,255,255,0.05); }
+  .column-name{ font-weight:700; font-size:0.88rem; flex:1 1 auto; }
+  .column-count{
+    font-family:'IBM Plex Mono'; font-size:0.72rem; color: var(--ink-soft);
+    background: var(--surface-2); border:1px solid var(--border-soft);
+    padding: 2px 7px; border-radius:999px;
+  }
+  .column-add{
+    background:transparent; border:none; color:var(--ink-faint); cursor:pointer;
+    width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+    flex:none;
+  }
+  .column-add:hover{ background: var(--surface-2); color: var(--brand); }
+
+  .card-list{
+    flex:1 1 auto;
+    overflow-y:auto;
+    padding: 10px;
+    display:flex;
+    flex-direction:column;
+    gap:9px;
+    min-height: 60px;
+  }
+  .card-list.drop-target{ background: rgba(79,163,218,0.06); outline: 2px dashed rgba(79,163,218,0.35); outline-offset:-6px; border-radius:10px; }
+
+  .empty-hint{
+    color: var(--ink-faint); font-size:0.8rem; text-align:center;
+    padding: 18px 8px; border:1px dashed var(--border-soft); border-radius:10px;
+  }
+
+  .card{
+    background: var(--surface-2);
+    border:1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 11px 12px;
+    cursor:pointer;
+    transition: border-color .12s ease, transform .05s ease;
+  }
+  .card:hover{ border-color: var(--brand-2); }
+  .card.dragging{ opacity:0.35; }
+  .card.hidden-by-filter{ display:none; }
+
+  .card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  .card-code{ font-family:'IBM Plex Mono'; font-size:0.68rem; color: var(--ink-faint); }
+  .card-title{ font-weight:600; font-size:0.9rem; margin-top:2px; text-wrap:balance; }
+
+  .card-meta{ display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+  .pill{
+    font-size:0.7rem; padding:3px 8px; border-radius:999px;
+    background: var(--surface-3); border:1px solid var(--border-soft); color: var(--ink-soft);
+    display:inline-flex; align-items:center; gap:4px; white-space:nowrap;
+  }
+  .pill-warn{ background: rgba(224,100,90,0.14); border-color: rgba(224,100,90,0.4); color:#f2a099; }
+  .pill-final-entregue{ background: rgba(63,174,124,0.16); border-color: rgba(63,174,124,0.45); color:#8fe0bb; }
+  .pill-final-pendente{ background: rgba(224,168,62,0.16); border-color: rgba(224,168,62,0.45); color:#f0c675; }
+
+  .card-bottom{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; }
+  .card-people{ display:flex; align-items:center; gap:6px; min-width:0; }
+  .card-people .name{ font-size:0.76rem; color: var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .progress{
+    width:56px; height:5px; border-radius:3px; background: var(--surface-3); overflow:hidden; flex:none;
+  }
+  .progress > span{ display:block; height:100%; background: var(--brand); }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background: rgba(3,12,22,0.62);
+    display:flex; align-items:center; justify-content:center;
+    padding: 24px; z-index:100;
+  }
+  .modal-overlay[hidden]{ display:none; }
+  .modal{
+    background: var(--surface);
+    border:1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    width: 100%; max-width: 640px;
+    max-height: 88vh;
+    display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  .modal-head{
+    display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+    padding: 18px 20px 14px; border-bottom:1px solid var(--border-soft);
+  }
+  .modal-head h2{ font-size:1.08rem; }
+  .modal-head .card-code{ margin-top:3px; }
+  .modal-close{
+    background:transparent; border:none; color: var(--ink-soft); cursor:pointer;
+    width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex:none;
+  }
+  .modal-close:hover{ background: var(--surface-2); color: var(--ink); }
+
+  .modal-body{ padding: 16px 20px 6px; overflow-y:auto; }
+  .modal-foot{
+    padding: 14px 20px 18px; border-top:1px solid var(--border-soft);
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+
+  .field-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .field{ display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+  .field.full{ grid-column: 1 / -1; }
+  .field label{ font-size:0.74rem; font-weight:600; color: var(--ink-soft); text-transform:uppercase; letter-spacing:0.4px; }
+  .field input[type="text"], .field input[type="date"], .field input[type="url"], .field textarea{
+    background: var(--surface-2); border:1px solid var(--border); color: var(--ink);
+    border-radius:8px; padding:9px 11px; font-size:0.88rem; font-family:inherit; resize:vertical;
+  }
+  .field textarea{ min-height: 64px; }
+  .field input::placeholder, .field textarea::placeholder{ color: var(--ink-faint); }
+
+  .radio-row{ display:flex; gap:14px; }
+  .radio-opt{ display:flex; align-items:center; gap:6px; font-size:0.85rem; }
+
+  .section-title{
+    font-family:'Archivo'; font-weight:700; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.5px;
+    color: var(--ink-soft); margin: 18px 0 8px; display:flex; align-items:center; gap:8px;
+  }
+  .section-title .count{ font-family:'IBM Plex Mono'; font-weight:400; text-transform:none; letter-spacing:0; }
+
+  .checklist-section{ margin-bottom:6px; }
+  .checklist-group-label{ font-size:0.72rem; color: var(--ink-faint); text-transform:uppercase; letter-spacing:0.4px; margin: 10px 0 4px; }
+  .check-item{ display:flex; align-items:flex-start; gap:9px; padding:5px 2px; border-radius:6px; }
+  .check-item:hover{ background: var(--surface-2); }
+  .check-item input[type="checkbox"]{ margin-top:3px; width:16px; height:16px; accent-color: var(--brand); flex:none; }
+  .check-item .txt{ font-size:0.86rem; }
+  .check-item.done .txt{ color: var(--ink-faint); text-decoration: line-through; }
+  .check-meta{ font-size:0.68rem; color: var(--ink-faint); margin-top:2px; }
+
+  .comment{ display:flex; gap:9px; padding:8px 2px; }
+  .comment .txt-wrap{ background: var(--surface-2); border:1px solid var(--border-soft); border-radius:10px; padding:8px 10px; flex:1 1 auto; }
+  .comment .who{ font-size:0.76rem; font-weight:700; }
+  .comment .when{ font-size:0.68rem; color: var(--ink-faint); font-weight:400; margin-left:6px; }
+  .comment .body{ font-size:0.85rem; margin-top:3px; white-space:pre-wrap; }
+  .comment-form{ display:flex; gap:9px; align-items:flex-start; margin-top:8px; }
+  .comment-form textarea{ flex:1 1 auto; min-height:44px; }
+
+  .attach-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+  .attach-item{
+    display:flex; align-items:center; gap:10px;
+    background: var(--surface-2); border:1px solid var(--border-soft); border-radius:8px;
+    padding:7px 9px;
+  }
+  .attach-badge{
+    font-family:'IBM Plex Mono'; font-size:0.62rem; font-weight:600; letter-spacing:0.3px;
+    background: var(--surface-3); border:1px solid var(--border-soft); color: var(--brand);
+    border-radius:5px; padding:3px 6px; flex:none; white-space:nowrap;
+  }
+  .attach-info{ min-width:0; flex:1 1 auto; }
+  .attach-name{ font-size:0.83rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .attach-meta{ font-size:0.68rem; color: var(--ink-faint); }
+  .attach-actions{ display:flex; align-items:center; gap:4px; flex:none; }
+  .attach-actions button{
+    background:transparent; border:none; color: var(--ink-soft); cursor:pointer;
+    padding:5px; border-radius:6px; display:flex; align-items:center;
+  }
+  .attach-actions .attach-download:hover{ background: var(--surface-3); color: var(--brand); }
+  .attach-actions .attach-remove:hover{ background: rgba(224,100,90,0.14); color:#f2a099; }
+  .attach-add-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .attach-hint{ font-size:0.7rem; color: var(--ink-faint); }
+  .card-clip{ display:inline-flex; align-items:center; gap:3px; font-size:0.72rem; color: var(--ink-soft); }
+
+  .move-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .move-row select{
+    background: var(--surface-2); border:1px solid var(--border); color: var(--ink);
+    border-radius:8px; padding:8px 10px; font-size:0.84rem;
+  }
+
+  .empty-state-list{ color:var(--ink-faint); font-size:0.82rem; padding: 4px 2px; }
+
+  /* ---------- Toast ---------- */
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background: var(--surface-3); border:1px solid var(--border); color:var(--ink);
+    padding:11px 16px; border-radius:10px; box-shadow: var(--shadow);
+    font-size:0.85rem; z-index:200; max-width:90vw;
+  }
+  .toast.error{ border-color: rgba(224,100,90,0.5); }
+  .toast[hidden]{ display:none; }
+
+  .visually-hidden{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; animation:none !important; }
+  }
+
+  @media (max-width: 640px){
+    .field-grid{ grid-template-columns:1fr; }
+    .topbar{ padding:14px; }
+    .toolbar{ padding:10px 14px; }
+    .board{ padding:12px 14px 18px; }
+    .myname-wrap{ margin-left:0; }
+  }
+
+  /* ---------- sessão / carregamento ---------- */
+  .bloqueio{
+    position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center;
+    background:rgba(6,20,36,0.86); backdrop-filter:blur(3px); padding:24px;
+  }
+  .bloqueio-cx{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:30px 28px; max-width:420px; text-align:center; box-shadow:var(--shadow);
+  }
+  .bloqueio-msg{ margin:0 0 20px; color:var(--ink-soft); font-size:0.95rem; line-height:1.5; }
+  .faixa-demo{
+    background:#4a3a12; color:#f3d99b; border-bottom:1px solid #6b5320;
+    padding:9px 22px; font-size:0.8rem; text-align:center;
+  }
+</style>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="mark">
+        <div class="logo-chip">
+          <!-- logo omitida nesta cópia de backup (arquivo binário não cabe no upload de texto do Dropbox) -->
+        </div>
+        <div class="mark-text">
+          <span class="mark-title">Solicitação de Materiais</span>
+          <span class="mark-sub">Almoxarifado</span>
+        </div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <span class="readonly-pill">Somente leitura</span>
+      <span class="saving-pill"><span class="dot"></span>Salvando…</span>
+    </header>
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#93aac2" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="searchInput" type="text" placeholder="Buscar por projeto, solicitante ou código..." aria-label="Buscar solicitações" />
+      </div>
+      <button class="btn btn-primary" id="newCardBtn" type="button">+ Nova solicitação</button>
+      <button class="btn" id="exportCsvBtn" type="button" title="Baixa uma planilha CSV com todas as solicitações, para uso em painéis externos">Exportar CSV</button>
+      <div class="myname-wrap">
+        <button class="btn btn-ghost myname-btn" id="myNameBtn" type="button">
+          <span class="avatar" id="myNameAvatar" style="background:#4fa3da;">–</span>
+          <span id="myNameLabel">Definir meu nome</span>
+        </button>
+      </div>
+    </div>
+
+    <main id="board" class="board" aria-label="Quadro de solicitações"></main>
+  </div>
+
+  <!-- Card modal (create / view / edit) -->
+  <div class="modal-overlay" id="cardModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <div>
+          <h2 id="modalTitle">Nova solicitação</h2>
+          <div class="card-code mono" id="modalCode"></div>
+        </div>
+        <button class="modal-close" id="closeModalBtn" type="button" aria-label="Fechar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="cardForm">
+          <div class="field-grid">
+            <div class="field">
+              <label for="f_projeto">Projeto / Parque</label>
+              <input type="text" id="f_projeto" placeholder="ex.: Trairi" required />
+            </div>
+            <div class="field">
+              <label for="f_solicitante">Solicitante</label>
+              <input type="text" id="f_solicitante" placeholder="Nome do supervisor" required />
+            </div>
+            <div class="field">
+              <label for="f_data">Data de necessidade</label>
+              <input type="date" id="f_data" />
+            </div>
+            <div class="field full">
+              <label>Anexar arquivo <span class="count mono" id="attachCount" style="text-transform:none; letter-spacing:0; font-weight:400;"></span></label>
+              <div class="attach-list" id="attachmentsContainer"></div>
+              <div class="attach-add-row">
+                <button class="btn btn-sm" id="attachTriggerBtn" type="button">+ Anexar arquivo</button>
+                <input type="file" id="attachInput" multiple hidden accept=".gif,.png,.jpg,.jpeg,.webp,.mp4,.webm,.txt,.json,.md,.docx,.pptx,.epub,.csv,.ttf,.html,.svg,.pdf,.xlsx,.xls" />
+                <span class="attach-hint">Fotos, PDF, DOCX, XLSX, CSV — até 4&nbsp;MB por arquivo.</span>
+              </div>
+            </div>
+            <div class="field full">
+              <label for="f_endereco">Endereço de entrega</label>
+              <input type="text" id="f_endereco" placeholder="Local de entrega do material" />
+            </div>
+            <div class="field full">
+              <label for="f_obs">Observações</label>
+              <textarea id="f_obs" placeholder="Detalhes adicionais (opcional)"></textarea>
+            </div>
+            <div class="field full" id="finalStatusField" hidden>
+              <label>Status de conclusão</label>
+              <div class="radio-row">
+                <label class="radio-opt"><input type="radio" name="finalStatus" value="entregue" /> Entregue</label>
+                <label class="radio-opt"><input type="radio" name="finalStatus" value="pendente_assinatura" /> Pendente de assinatura</label>
+                <label class="radio-opt"><input type="radio" name="finalStatus" value="" /> —</label>
+              </div>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="saveFieldsBtn">Salvar alterações</button>
+        </form>
+
+        <div id="existingCardSections" hidden>
+          <div class="section-title">Checklist <span class="count mono" id="checklistCount"></span></div>
+          <div id="checklistContainer"></div>
+
+          <div class="section-title">Mover</div>
+          <div class="move-row">
+            <select id="moveSelect" aria-label="Mover para etapa"></select>
+            <button class="btn btn-sm" id="moveBtn" type="button">Mover</button>
+            <button class="btn btn-sm btn-danger" id="cancelCardBtn" type="button">Cancelar solicitação</button>
+            <button class="btn btn-sm" id="reopenCardBtn" type="button" hidden>Reabrir</button>
+            <button class="btn btn-sm btn-danger" id="deleteCardBtn" type="button" hidden>Excluir definitivamente</button>
+          </div>
+
+          <div class="section-title">Comentários <span class="count mono" id="commentCount"></span></div>
+          <div id="commentsContainer"></div>
+          <div class="comment-form">
+            <textarea id="commentInput" placeholder="Escreva um comentário..." aria-label="Novo comentário"></textarea>
+            <button class="btn btn-sm" id="commentBtn" type="button">Comentar</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span style="color:var(--ink-faint); font-size:0.76rem;" id="modalTimestamps"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="faixa-demo" id="faixaDemo" hidden>
+    Modo demonstração — nada é salvo e ninguém mais vê estas alterações.
+    Configure <span class="mono">API_URL</span> em <span class="mono">config/config.js</span> e
+    deixe <span class="mono">MODO_DEMO = false</span>.
+  </div>
+
+  <div class="bloqueio" id="bloqueio" hidden>
+    <div class="bloqueio-cx">
+      <p class="bloqueio-msg" id="bloqueioMsg"></p>
+      <button class="btn primary" id="bloqueioAcao" type="button">Ir para o portal</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+
+  <script>
+  /* Segue o tema escolhido no portal (mesma chave ew_theme). O quadro já tem
+     paleta escura própria; isto só garante que ele não brigue com a escolha. */
+  (function(){
+    try{
+      var t = localStorage.getItem('ew_theme');
+      if(t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    }catch(e){}
+  })();
+  </script>
+  <script src="../config/config.js"></script>
+  <script>
+  (function(){
+    "use strict";
+
+    /* ================= constants ================= */
+    var COLUMN_META = {
+      nova:       { color: 'var(--stage-nova)' },
+      separacao:  { color: 'var(--stage-separacao)' },
+      envio:      { color: 'var(--stage-envio)' },
+      concluido:  { color: 'var(--stage-concluido)' },
+      cancelado:  { color: 'var(--stage-cancelado)' }
+    };
+
+    var CHECKLIST_TEMPLATE = [
+      { section:'solicitante', text:'Anexar arquivo ou link da requisição' },
+      { section:'solicitante', text:'Informar projeto/parque e data de necessidade' },
+      { section:'solicitante', text:'Enviar para separação' },
+      { section:'almoxarifado', text:'Conferir itens solicitados com o estoque' },
+      { section:'almoxarifado', text:'Separar material' },
+      { section:'almoxarifado', text:'Enviar para logística' },
+      { section:'logistica', text:'Definir transporte e rota' },
+      { section:'logistica', text:'Confirmar ponto de entrega' },
+      { section:'logistica', text:'Confirmar entrega / coletar assinatura' }
+    ];
+    var SECTION_LABEL = { solicitante:'Solicitante', almoxarifado:'Almoxarifado', logistica:'Logística' };
+    // Completing every item of a section auto-advances the card to the next stage —
+    // only fires while the card is still sitting in that section's home column.
+    var SECTION_AUTO_ADVANCE = {
+      solicitante:  { from:'nova',      to:'separacao' },
+      almoxarifado: { from:'separacao', to:'envio' },
+      logistica:    { from:'envio',     to:'concluido' }
+    };
+    var AVATAR_COLORS = ['#4fa3da','#e0a83e','#3fae7c','#e0645a','#8b9bb4','#a476d9','#4ac0c0'];
+    // 4 MB por arquivo. O limite não é da planilha (o arquivo vai para o Drive), e sim do
+    // tempo de execução do Apps Script: acima disso o upload começa a estourar o timeout.
+    var MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+    // Lista de extensões aceitas. Agora que o download é do próprio navegador, não há
+    // restrição de plataforma — dá para incluir ou tirar tipo à vontade.
+    var ALLOWED_ATTACHMENT_EXT = ['gif','png','jpg','jpeg','webp','mp4','webm','txt','json','md','docx','pptx','epub','csv','ttf','html','svg','pdf','xlsx','xls'];
+
+    /* ================= utils ================= */
+    function uid(prefix){
+      return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+    }
+    function nowISO(){ return new Date().toISOString(); }
+    function todayISODate(){ return new Date().toISOString().slice(0,10); }
+    function escapeHtml(s){
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+      });
+    }
+    function formatDateBR(iso){
+      if(!iso) return '';
+      var parts = iso.split('-');
+      if(parts.length !== 3) return iso;
+      return parts[2] + '/' + parts[1] + '/' + parts[0];
+    }
+    function formatDateTimeBR(iso){
+      if(!iso) return '';
+      var d = new Date(iso);
+      if(isNaN(d.getTime())) return '';
+      var dd = String(d.getDate()).padStart(2,'0');
+      var mm = String(d.getMonth()+1).padStart(2,'0');
+      var yy = d.getFullYear();
+      var hh = String(d.getHours()).padStart(2,'0');
+      var mi = String(d.getMinutes()).padStart(2,'0');
+      return dd + '/' + mm + '/' + yy + ' ' + hh + ':' + mi;
+    }
+    function initials(name){
+      if(!name) return '?';
+      var parts = name.trim().split(/\s+/).filter(Boolean);
+      if(parts.length === 0) return '?';
+      if(parts.length === 1) return parts[0].slice(0,2).toUpperCase();
+      return (parts[0][0] + parts[parts.length-1][0]).toUpperCase();
+    }
+    function colorForName(name){
+      var s = String(name || '');
+      var h = 0;
+      for(var i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) >>> 0; }
+      return AVATAR_COLORS[h % AVATAR_COLORS.length];
+    }
+    function cloneState(state){ return JSON.parse(JSON.stringify(state)); }
+    function formatBytes(n){
+      if(n < 1024) return n + ' B';
+      if(n < 1024*1024) return (n/1024).toFixed(0) + ' KB';
+      return (n/(1024*1024)).toFixed(1) + ' MB';
+    }
+    function fileExtBadge(name){
+      var m = /\.([a-z0-9]+)$/i.exec(name || '');
+      return m ? m[1].toUpperCase().slice(0,4) : 'ARQ';
+    }
+    function readFileAsDataURL(file){
+      return new Promise(function(resolve, reject){
+        var reader = new FileReader();
+        reader.onload = function(){ resolve(reader.result); };
+        reader.onerror = function(){ reject(reader.error); };
+        reader.readAsDataURL(file);
+      });
+    }
+    // Decodes a base64 data: URL straight into bytes with atob() — no fetch() involved.
+    // Fetching a data: URL depends on the host's connect-src CSP allowing it, which the
+    // artifact viewer's sandbox does not; atob() is plain JS with no network permission
+    // needed, so it works regardless of that policy.
+    function dataURLToBytes(dataUrl){
+      var comma = dataUrl.indexOf(',');
+      var meta = dataUrl.slice(0, comma);
+      var payload = dataUrl.slice(comma + 1);
+      if(!/;base64/i.test(meta)){ payload = decodeURIComponent(payload); }
+      else { payload = atob(payload); }
+      var bytes = new Uint8Array(payload.length);
+      for(var i = 0; i < payload.length; i++){ bytes[i] = payload.charCodeAt(i); }
+      return bytes;
+    }
+    function defaultChecklist(){
+      return CHECKLIST_TEMPLATE.map(function(t){
+        return { id: uid('chk'), section: t.section, text: t.text, done:false, doneBy:null, doneAt:null };
+      });
+    }
+    function defaultState(){
+      return {
+        version:1, nextSeq:1,
+        columns:[
+          { id:'nova', name:'Nova Solicitação' },
+          { id:'separacao', name:'Separação (Almoxarifado)' },
+          { id:'envio', name:'Envio (Logística)' },
+          { id:'concluido', name:'Concluído' },
+          { id:'cancelado', name:'Cancelado' }
+        ],
+        cards: []
+      };
+    }
+
+    /* ================= sessão do portal =================
+       O quadro não tem login próprio: ele usa a sessão aberta no index.html.
+       O portal grava { token, nome, matricula, perfil } em localStorage['ew_sessao'].
+       Sem token válido, o quadro não carrega nada. */
+    var SESSAO = null;
+    function lerSessao(){
+      try {
+        var raw = localStorage.getItem('ew_sessao');
+        if(!raw) return null;
+        var s = JSON.parse(raw);
+        return (s && s.token && s.nome) ? s : null;
+      } catch(e){ return null; }
+    }
+    function encerrarSessao(){
+      try { localStorage.removeItem('ew_sessao'); } catch(e){}
+    }
+
+    /* ================= state ================= */
+    var boardState = defaultState();
+    var readOnly = true;            // só libera depois que o servidor responde
+    var activeCardId = null;        // card aberto no modal, null = modo criação
+    var pendingAttachments = [];    // anexos escolhidos antes de o card existir
+    var pendingNewColumnId = 'nova';
+
+    var revServidor = 0;            // revisão global conhecida
+    var snapshot = {};              // id -> JSON do card como o servidor tem
+    var revCard = {};               // id -> revisão do card no servidor
+    var estadoRemotoPendente = null;// atualização chegada com o modal aberto
+
+    /* ================= toast ================= */
+    var toastTimer = null;
+    function showToast(msg, type){
+      var el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast' + (type === 'error' ? ' error' : '');
+      el.hidden = false;
+      if(toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(function(){ el.hidden = true; }, 4200);
+    }
+
+    /* ================= chamadas ao Apps Script ================= */
+    function chamar(acao, dados){
+      if(typeof MODO_DEMO !== 'undefined' && MODO_DEMO){
+        return Promise.reject({ motivo:'DEMO' });
+      }
+      if(typeof API_URL === 'undefined'){
+        return Promise.reject({ motivo:'SEM_CONFIG' });
+      }
+      var corpo = { acao: acao, token: SESSAO ? SESSAO.token : null };
+      for(var k in dados){ if(Object.prototype.hasOwnProperty.call(dados, k)) corpo[k] = dados[k]; }
+
+      return fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight CORS
+        redirect: 'follow',
+        body: JSON.stringify(corpo)
+      })
+      .then(function(r){
+        if(!r.ok) throw { motivo:'REDE' };
+        return r.json();
+      })
+      .then(function(res){
+        if(res && res.ok === false && res.motivo === 'SESSAO'){
+          encerrarSessao();
+          mostrarBloqueio('Sua sessão expirou. Entre de novo pelo portal para continuar.');
+          throw { motivo:'SESSAO' };
+        }
+        return res;
+      });
+    }
+
+    /* ================= tela de bloqueio ================= */
+    function mostrarBloqueio(mensagem, comBotao){
+      var el = document.getElementById('bloqueio');
+      document.getElementById('bloqueioMsg').textContent = mensagem;
+      document.getElementById('bloqueioAcao').hidden = (comBotao === false);
+      el.hidden = false;
+      readOnly = true;
+      try { render(); } catch(e){}
+    }
+    function esconderBloqueio(){
+      document.getElementById('bloqueio').hidden = true;
+    }
+
+    /* ================= carga inicial e polling ================= */
+    function aplicarEstado(estado){
+      snapshot = {};
+      revCard = {};
+      (estado.cards || []).forEach(function(c){
+        revCard[c.id] = c._rev || 0;
+        var limpo = cloneState(c); delete limpo._rev;
+        snapshot[c.id] = JSON.stringify(limpo);
+        delete c._rev;
+        if(!Array.isArray(c.attachments)) c.attachments = [];
+        if(!Array.isArray(c.comments)) c.comments = [];
+        if(!Array.isArray(c.checklist)) c.checklist = [];
+      });
+      boardState = estado;
+      render();
+    }
+
+    function carregar(primeira){
+      return chamar('materiaisCarregar', { rev: primeira ? -1 : revServidor })
+        .then(function(res){
+          if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
+          revServidor = res.rev;
+          if(res.mudou === false) return;
+
+          // Não sobrescreve o formulário enquanto alguém está digitando no modal.
+          if(!document.getElementById('cardModal').hidden){
+            estadoRemotoPendente = res.estado;
+            return;
+          }
+          aplicarEstado(res.estado);
+        });
+    }
+
+    // Chamado quando o modal fecha: aplica o que chegou enquanto ele estava aberto.
+    function aplicarRemotoPendente(){
+      if(!estadoRemotoPendente) return;
+      var e = estadoRemotoPendente;
+      estadoRemotoPendente = null;
+      aplicarEstado(e);
+      showToast('O quadro foi atualizado por outra pessoa.');
+    }
+
+    var timerPolling = null;
+    function iniciarPolling(){
+      if(timerPolling) clearInterval(timerPolling);
+      timerPolling = setInterval(function(){
+        if(saveInFlight || document.hidden) return;
+        carregar(false).catch(function(){ /* silencioso: a próxima rodada tenta de novo */ });
+      }, 8000);
+    }
+
+    /* ================= salvamento =================
+       Só o que mudou vai para a rede. Cada card carrega sua revisão: se outra pessoa
+       alterou o mesmo card no intervalo, o servidor recusa aquele card e devolve a
+       versão dele, em vez de deixar uma edição sobrescrever a outra em silêncio. */
+    var pendingState = null;
+    var flushing = false;
+    var saveInFlight = false;
+
+    function saveState(newState){
+      boardState = newState;
+      render();
+      if(readOnly) return;
+      if(typeof MODO_DEMO !== 'undefined' && MODO_DEMO) return; // demo: só memória
+      pendingState = newState;
+      saveInFlight = true;
+      updateSavingIndicator();
+      flushSave();
+    }
+
+    function montarPacote(estado){
+      var alterados = [];
+      var vistos = {};
+      estado.cards.forEach(function(c){
+        vistos[c.id] = true;
+        var texto = JSON.stringify(c);
+        if(snapshot[c.id] !== texto){
+          var envio = JSON.parse(texto);
+          envio._rev = revCard[c.id] || 0;
+          alterados.push(envio);
+        }
+      });
+      var removidos = Object.keys(snapshot).filter(function(id){ return !vistos[id]; });
+      return {
+        cards: alterados,
+        removidos: removidos,
+        nextSeq: estado.nextSeq,
+        columns: estado.columns
+      };
+    }
+
+    function flushSave(){
+      if(flushing) return;
+      if(pendingState === null){ saveInFlight = false; updateSavingIndicator(); return; }
+
+      flushing = true;
+      var estadoEnviado = pendingState;
+      pendingState = null;
+      var pacote = montarPacote(estadoEnviado);
+
+      if(!pacote.cards.length && !pacote.removidos.length){
+        flushing = false; saveInFlight = false; updateSavingIndicator(); return;
+      }
+
+      chamar('materiaisSalvar', pacote)
+        .then(function(res){
+          if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
+          revServidor = res.rev;
+
+          // Aceitos: viram a nova base de comparação.
+          (res.aceitos || []).forEach(function(a){
+            revCard[a.id] = a.rev;
+            var card = findCard(boardState, a.id);
+            if(card) snapshot[a.id] = JSON.stringify(card);
+          });
+          pacote.removidos.forEach(function(id){ delete snapshot[id]; delete revCard[id]; });
+
+          if(res.conflitos && res.conflitos.length){
+            res.conflitos.forEach(function(c){
+              var i = boardState.cards.findIndex(function(x){ return x.id === c.id; });
+              var servidor = c.card;
+              revCard[c.id] = c.rev;
+              var limpo = cloneState(servidor); delete limpo._rev;
+              snapshot[c.id] = JSON.stringify(limpo);
+              delete servidor._rev;
+              if(i > -1) boardState.cards[i] = servidor; else boardState.cards.push(servidor);
+            });
+            render();
+            showToast(res.conflitos.length === 1
+              ? 'Outra pessoa alterou esta solicitação antes de você. A versão dela foi mantida — confira e refaça sua alteração.'
+              : res.conflitos.length + ' solicitações foram alteradas por outra pessoa. As versões dela foram mantidas.', 'error');
+            if(!document.getElementById('cardModal').hidden) refreshOpenModal();
+          }
+        })
+        .catch(function(err){
+          var motivo = err && err.motivo;
+          if(motivo === 'SESSAO') return;                 // bloqueio já apareceu
+          if(motivo === 'SEM_CONFIG'){
+            showToast('API_URL não configurada em config/config.js.', 'error');
+            return;
+          }
+          // Devolve o estado para a fila: a próxima ação tenta mandar de novo.
+          pendingState = estadoEnviado;
+          showToast('Sem conexão com o servidor. A alteração ainda não foi salva.', 'error');
+        })
+        .then(function(){
+          flushing = false;
+          if(pendingState !== null) flushSave();
+          else { saveInFlight = false; updateSavingIndicator(); }
+        });
+    }
+
+    function updateSavingIndicator(){
+      document.body.classList.toggle('saving', saveInFlight);
+      if(!saveInFlight && !document.getElementById('cardModal').hidden){
+        refreshOpenModal();
+      }
+    }
+
+    /* ================= identidade =================
+       Vem da sessão do portal, não de um nome digitado. Assim o histórico de
+       checklist e comentário aponta para uma matrícula real. */
+    function getMyName(){
+      return SESSAO ? SESSAO.nome : '';
+    }
+
+    /* ================= derived helpers ================= */
+    function cardTitle(card){
+      if(card.title) return card.title;
+      var proj = card.projeto || 'Sem projeto';
+      var date = card.dataNecessidade ? formatDateBR(card.dataNecessidade) : formatDateBR(card.createdAt ? card.createdAt.slice(0,10) : todayISODate());
+      return 'Requisição de Material – ' + proj + ' – ' + date;
+    }
+    function checklistProgress(card){
+      var done = card.checklist.filter(function(c){ return c.done; }).length;
+      return { done: done, total: card.checklist.length };
+    }
+    function isOverdue(card){
+      if(!card.dataNecessidade) return false;
+      if(card.columnId === 'concluido' || card.columnId === 'cancelado') return false;
+      return card.dataNecessidade < todayISODate();
+    }
+    function findCard(state, id){
+      for(var i=0;i<state.cards.length;i++){ if(state.cards[i].id === id) return state.cards[i]; }
+      return null;
+    }
+
+    /* ================= rendering ================= */
+    var searchQuery = '';
+
+    function render(){
+      document.body.classList.toggle('read-only', readOnly);
+      document.getElementById('newCardBtn').disabled = readOnly;
+      renderBoard();
+      renderMyName();
+      if(activeCardId !== null || activeCardId === 'NEW'){
+        // modal re-render handled by its own open/refresh calls, not here
+      }
+    }
+
+    function renderMyName(){
+      var name = getMyName();
+      var label = document.getElementById('myNameLabel');
+      var avatar = document.getElementById('myNameAvatar');
+      if(name){
+        label.textContent = name;
+        avatar.textContent = initials(name);
+        avatar.style.background = colorForName(name);
+      } else {
+        label.textContent = 'Definir meu nome';
+        avatar.textContent = '–';
+        avatar.style.background = '#4fa3da';
+      }
+    }
+
+    function renderBoard(){
+      var board = document.getElementById('board');
+      board.innerHTML = '';
+      boardState.columns.forEach(function(col){
+        var meta = COLUMN_META[col.id] || { color:'var(--stage-nova)' };
+        var cardsInCol = boardState.cards.filter(function(c){ return c.columnId === col.id; });
+
+        var colEl = document.createElement('div');
+        colEl.className = 'column';
+        colEl.setAttribute('data-column-id', col.id);
+
+        var head = document.createElement('div');
+        head.className = 'column-head';
+        head.innerHTML =
+          '<span class="stage-dot" style="background:' + meta.color + '"></span>' +
+          '<span class="column-name">' + escapeHtml(col.name) + '</span>' +
+          '<span class="column-count mono">' + cardsInCol.length + '</span>' +
+          (readOnly ? '' : ('<button class="column-add" type="button" data-add-column="' + col.id + '" aria-label="Nova solicitação em ' + escapeHtml(col.name) + '">' +
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>'));
+        colEl.appendChild(head);
+
+        var list = document.createElement('div');
+        list.className = 'card-list';
+        list.setAttribute('data-column-id', col.id);
+
+        if(cardsInCol.length === 0){
+          var empty = document.createElement('div');
+          empty.className = 'empty-hint';
+          empty.textContent = 'Nenhuma solicitação nesta etapa';
+          list.appendChild(empty);
+        } else {
+          cardsInCol.forEach(function(card){
+            list.appendChild(renderCardEl(card));
+          });
+        }
+
+        colEl.appendChild(list);
+        board.appendChild(colEl);
+
+        if(!readOnly){
+          list.addEventListener('dragover', function(e){
+            e.preventDefault();
+            list.classList.add('drop-target');
+          });
+          list.addEventListener('dragleave', function(){ list.classList.remove('drop-target'); });
+          list.addEventListener('drop', function(e){
+            e.preventDefault();
+            list.classList.remove('drop-target');
+            var cardId = e.dataTransfer.getData('text/plain');
+            if(!cardId) return;
+            var afterEl = getDragAfterElement(list, e.clientY);
+            var beforeId = afterEl ? afterEl.getAttribute('data-card-id') : null;
+            moveCard(cardId, col.id, beforeId);
+          });
+        }
+      });
+      applySearchFilter();
+    }
+
+    function getDragAfterElement(container, y){
+      var els = Array.prototype.slice.call(container.querySelectorAll('.card:not(.dragging)'));
+      var closest = { offset: -Infinity, element: null };
+      els.forEach(function(el){
+        var box = el.getBoundingClientRect();
+        var offset = y - box.top - box.height/2;
+        if(offset < 0 && offset > closest.offset){
+          closest = { offset: offset, element: el };
+        }
+      });
+      return closest.element;
+    }
+
+    function renderCardEl(card){
+      var el = document.createElement('div');
+      el.className = 'card';
+      el.setAttribute('data-card-id', card.id);
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-label', 'Abrir ' + cardTitle(card));
+      if(!readOnly){ el.setAttribute('draggable', 'true'); }
+
+      var prog = checklistProgress(card);
+      var pct = prog.total ? Math.round((prog.done/prog.total)*100) : 0;
+      var overdue = isOverdue(card);
+
+      var pillsHtml = '<span class="pill">' + escapeHtml(card.projeto || 'Sem projeto') + '</span>';
+      if(card.dataNecessidade){
+        pillsHtml += '<span class="pill' + (overdue ? ' pill-warn' : '') + '">' + (overdue ? 'Atrasado · ' : '') + formatDateBR(card.dataNecessidade) + '</span>';
+      }
+      if(card.columnId === 'concluido' && card.finalStatus){
+        pillsHtml += '<span class="pill ' + (card.finalStatus === 'entregue' ? 'pill-final-entregue' : 'pill-final-pendente') + '">' +
+          (card.finalStatus === 'entregue' ? 'Entregue' : 'Pendente de assinatura') + '</span>';
+      }
+
+      el.innerHTML =
+        '<div class="card-top"><div><div class="card-code mono">' + escapeHtml(card.code) + '</div>' +
+        '<div class="card-title">' + escapeHtml(cardTitle(card)) + '</div></div></div>' +
+        '<div class="card-meta">' + pillsHtml + '</div>' +
+        '<div class="card-bottom">' +
+          '<div class="card-people">' +
+            '<span class="avatar" style="width:22px;height:22px;font-size:0.62rem;background:' + colorForName(card.solicitante) + '">' + escapeHtml(initials(card.solicitante)) + '</span>' +
+            '<span class="name">' + escapeHtml(card.solicitante || 'Sem solicitante') + '</span>' +
+          '</div>' +
+          '<div style="display:flex; align-items:center; gap:8px;">' +
+            (card.attachments && card.attachments.length ? '<span class="card-clip" title="' + card.attachments.length + ' anexo(s)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.4 11.5l-8.5 8.5a4.95 4.95 0 01-7-7l9-9a3.5 3.5 0 015 5l-9 9a2 2 0 01-3-3l8-8"/></svg>' + card.attachments.length + '</span>' : '') +
+            '<div class="progress" title="' + prog.done + ' de ' + prog.total + ' itens"><span style="width:' + pct + '%"></span></div>' +
+          '</div>' +
+        '</div>';
+
+      el.addEventListener('click', function(){ openCardModal(card.id); });
+      el.addEventListener('keydown', function(e){
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openCardModal(card.id); }
+      });
+      if(!readOnly){
+        el.addEventListener('dragstart', function(e){
+          el.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', card.id);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        el.addEventListener('dragend', function(){ el.classList.remove('dragging'); });
+      }
+      return el;
+    }
+
+    function applySearchFilter(){
+      var q = searchQuery.trim().toLowerCase();
+      document.querySelectorAll('.card').forEach(function(el){
+        if(!q){ el.classList.remove('hidden-by-filter'); return; }
+        var card = findCard(boardState, el.getAttribute('data-card-id'));
+        if(!card){ return; }
+        var hay = [card.code, card.projeto, card.solicitante, cardTitle(card)].join(' ').toLowerCase();
+        el.classList.toggle('hidden-by-filter', hay.indexOf(q) === -1);
+      });
+    }
+
+    /* ================= mutations ================= */
+    function moveCard(cardId, targetColumnId, insertBeforeCardId){
+      if(readOnly) return;
+      var newState = cloneState(boardState);
+      var idx = -1;
+      for(var i=0;i<newState.cards.length;i++){ if(newState.cards[i].id === cardId){ idx = i; break; } }
+      if(idx === -1) return;
+      var card = newState.cards.splice(idx,1)[0];
+      var prevColumn = card.columnId;
+      card.columnId = targetColumnId;
+      card.updatedAt = nowISO();
+      if(targetColumnId !== 'concluido'){ card.finalStatus = null; }
+      var insertAt = newState.cards.length;
+      if(insertBeforeCardId){
+        for(var j=0;j<newState.cards.length;j++){ if(newState.cards[j].id === insertBeforeCardId){ insertAt = j; break; } }
+      }
+      newState.cards.splice(insertAt, 0, card);
+      saveState(newState);
+      if(prevColumn !== targetColumnId){
+        showToast('Solicitação movida para "' + labelForColumn(targetColumnId) + '".');
+      }
+    }
+
+    function labelForColumn(id){
+      var col = boardState.columns.filter(function(c){ return c.id === id; })[0];
+      return col ? col.name : id;
+    }
+
+    function createCard(fields, targetColumnId){
+      if(readOnly) return;
+      var newState = cloneState(boardState);
+      var year = new Date().getFullYear();
+      var seq = newState.nextSeq || 1;
+      var code = 'REQ-' + String(seq).padStart(3,'0') + '-' + year;
+      newState.nextSeq = seq + 1;
+      var myName = getMyName();
+      var validColumn = newState.columns.some(function(c){ return c.id === targetColumnId; });
+      var card = {
+        id: uid('card'),
+        code: code,
+        columnId: validColumn ? targetColumnId : 'nova',
+        title: '',
+        projeto: fields.projeto,
+        solicitante: fields.solicitante,
+        dataNecessidade: fields.dataNecessidade,
+        endereco: fields.endereco,
+        observacoes: fields.observacoes,
+        finalStatus: null,
+        checklist: defaultChecklist(),
+        comments: [],
+        attachments: pendingAttachments.slice(),
+        createdAt: nowISO(),
+        updatedAt: nowISO(),
+        createdBy: myName || null
+      };
+      newState.cards.push(card);
+      pendingAttachments = [];
+      activeCardId = card.id; // so a reload triggered by publish reopens the new card, not a blank board
+      saveState(newState);
+      showToast('Solicitação ' + code + ' criada.');
+      return card.id;
+    }
+
+    function updateCardFields(cardId, fields){
+      if(readOnly) return;
+      var newState = cloneState(boardState);
+      var card = findCard(newState, cardId);
+      if(!card) return;
+      card.projeto = fields.projeto;
+      card.solicitante = fields.solicitante;
+      card.dataNecessidade = fields.dataNecessidade;
+      card.endereco = fields.endereco;
+      card.observacoes = fields.observacoes;
+      if(card.columnId === 'concluido'){ card.finalStatus = fields.finalStatus || null; }
+      card.updatedAt = nowISO();
+      saveState(newState);
+      showToast('Alterações salvas.');
+    }
+
+    function toggleChecklistItem(cardId, itemId){
+      if(readOnly) return;
+      var newState = cloneState(boardState);
+      var card = findCard(newState, cardId);
+      if(!card) return;
+      var item = card.checklist.filter(function(c){ return c.id === itemId; })[0];
+      if(!item) return;
+      var myName = getMyName();
+      item.done = !item.done;
+      item.doneBy = item.done ? (myName || 'Anônimo') : null;
+      item.doneAt = item.done ? nowISO() : null;
+      card.updatedAt = nowISO();
+
+      var advancedTo = null;
+      if(item.done){
+        var rule = SECTION_AUTO_ADVANCE[item.section];
+        if(rule && card.columnId === rule.from){
+          var sectionDone = card.checklist.filter(function(c){ return c.section === item.section; }).every(function(c){ return c.done; });
+          if(sectionDone){
+            card.columnId = rule.to;
+            if(rule.to !== 'concluido'){ card.finalStatus = null; }
+            advancedTo = rule.to;
+          }
+        }
+      }
+
+      saveState(newState);
+      refreshOpenModal();
+      if(advancedTo){
+        showToast('Checklist de ' + SECTION_LABEL[item.section] + ' completo — movida automaticamente para "' + labelForColumn(advancedTo) + '".');
+      }
+    }
+
+    function addComment(cardId, text){
+      if(readOnly) return;
+      var trimmed = text.trim();
+      if(!trimmed) return;
+      var newState = cloneState(boardState);
+      var card = findCard(newState, cardId);
+      if(!card) return;
+      var myName = getMyName();
+      card.comments.push({ author: myName || 'Anônimo', text: trimmed, ts: nowISO() });
+      card.updatedAt = nowISO();
+      saveState(newState);
+      refreshOpenModal();
+    }
+
+    function addAttachments(cardId, fileList){
+      if(readOnly) return;
+      var files = Array.prototype.slice.call(fileList || []);
+      if(files.length === 0) return;
+
+      var accepted = [];
+      var rejected = [];
+      var rejectedType = [];
+      files.forEach(function(f){
+        var ext = (/\.([a-z0-9]+)$/i.exec(f.name) || ['',''])[1].toLowerCase();
+        if(ALLOWED_ATTACHMENT_EXT.indexOf(ext) === -1){ rejectedType.push(f.name); }
+        else if(f.size > MAX_ATTACHMENT_BYTES){ rejected.push(f.name); }
+        else { accepted.push(f); }
+      });
+
+      // O arquivo sobe para uma pasta do Drive e o card guarda só a ficha dele.
+      // Guardar o base64 dentro do estado estouraria o limite de 50 mil caracteres
+      // por célula da planilha já no primeiro anexo de alguns MB.
+      var falhasUpload = [];
+      var demoBloqueado = false;
+      var afterRead = accepted.length
+        ? Promise.all(accepted.map(function(f){
+            return readFileAsDataURL(f)
+              .then(function(dataUrl){
+                var virgula = dataUrl.indexOf(',');
+                return chamar('materiaisAnexar', {
+                  nome: f.name,
+                  tipo: f.type || 'application/octet-stream',
+                  base64: dataUrl.slice(virgula + 1)
+                });
+              })
+              .then(function(res){
+                if(!res || !res.ok) throw new Error('falha');
+                return { id: uid('att'), name: f.name, size: f.size,
+                         type: f.type || '', driveId: res.driveId };
+              })
+              .catch(function(err){
+                if(err && err.motivo === 'DEMO'){ demoBloqueado = true; }
+                else { falhasUpload.push(f.name); }
+                return null;
+              });
+          })).then(function(lista){ return lista.filter(Boolean); })
+        : Promise.resolve([]);
+
+      afterRead.then(function(newAttachments){
+        var myName = getMyName();
+        newAttachments.forEach(function(a){
+          a.addedBy = myName || 'Anônimo';
+          a.addedAt = nowISO();
+        });
+
+        if(newAttachments.length){
+          if(cardId){
+            var newState = cloneState(boardState);
+            var card = findCard(newState, cardId);
+            if(!card) return;
+            newAttachments.forEach(function(a){ card.attachments.push(a); });
+            card.updatedAt = nowISO();
+            saveState(newState);
+          } else {
+            // card not created yet — hold in memory, gets saved together with the card
+            pendingAttachments = pendingAttachments.concat(newAttachments);
+            renderAttachments(pendingAttachments, removePendingAttachment);
+          }
+        }
+
+        if(demoBloqueado){
+          showToast('Modo demonstração: anexar arquivo precisa do servidor configurado.', 'error');
+        } else if(falhasUpload.length){
+          showToast('Não foi possível enviar: ' + falhasUpload.join(', ') + '. Tente de novo.', 'error');
+        } else if(rejectedType.length){
+          showToast('Tipo de arquivo não suportado para anexo: ' + rejectedType.join(', ') + '.', 'error');
+        } else if(rejected.length){
+          showToast((rejected.length > 1 ? 'Arquivos muito grandes (limite 4 MB): ' : 'Arquivo muito grande (limite 4 MB): ') + rejected.join(', ') + '.', 'error');
+        } else if(newAttachments.length){
+          showToast(newAttachments.length > 1 ? 'Anexos adicionados.' : 'Anexo adicionado.');
+        }
+        if(cardId){ refreshOpenModal(); }
+      }).catch(function(){
+        showToast('Não foi possível ler o(s) arquivo(s).', 'error');
+      });
+    }
+
+    // O arquivo fica privado no Drive: quem baixa precisa de um token de sessão
+    // válido. O Apps Script confere o token e devolve o conteúdo em base64, que o
+    // navegador remonta como blob. Nenhum link público é gerado.
+    function baixarBytes(bytes, nome, tipo){
+      var blob = new Blob([bytes], { type: tipo || 'application/octet-stream' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = nome;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    }
+
+    function downloadAttachment(attachment){
+      if(!attachment.driveId){
+        showToast('Este anexo é de uma versão antiga do quadro e não pode ser baixado.', 'error');
+        return;
+      }
+      showToast('Preparando ' + attachment.name + '…');
+      chamar('materiaisBaixarAnexo', { driveId: attachment.driveId })
+        .then(function(res){
+          if(!res || !res.ok) throw new Error('falha');
+          baixarBytes(dataURLToBytes('data:;base64,' + res.base64), attachment.name, attachment.type);
+        })
+        .catch(function(err){
+          var motivo = err && err.motivo;
+          if(motivo === 'SESSAO') return;
+          if(motivo === 'DEMO'){
+            showToast('Modo demonstração: baixar anexo precisa do servidor configurado.', 'error');
+            return;
+          }
+          showToast('Não foi possível baixar o arquivo.', 'error');
+        });
+    }
+
+    // Escapes one CSV field per RFC 4180: wraps in quotes and doubles any quote inside
+    // whenever the value contains a comma, quote, or newline.
+    function csvField(value){
+      var s = value === null || value === undefined ? '' : String(value);
+      if(/[",\n\r]/.test(s)){ return '"' + s.replace(/"/g, '""') + '"'; }
+      return s;
+    }
+
+    // Builds a plain-text CSV snapshot of every card — the data source a separate,
+    // script-generated read-only panel (built outside this board, e.g. in the same style
+    // as the calibração panel) can read on its own schedule, without involving Claude.
+    function buildBoardCSV(){
+      var headers = ['Código','Projeto/Parque','Solicitante','Coluna','Status Final','Data de Necessidade','Endereço de Entrega','Checklist Concluído','Checklist Total','Comentários','Anexos','Criado em','Criado por','Atualizado em'];
+      var rows = [headers.map(csvField).join(',')];
+      var sorted = boardState.cards.slice().sort(function(a,b){ return (a.code || '').localeCompare(b.code || ''); });
+      sorted.forEach(function(card){
+        var prog = checklistProgress(card);
+        rows.push([
+          csvField(card.code),
+          csvField(card.projeto),
+          csvField(card.solicitante),
+          csvField(labelForColumn(card.columnId)),
+          csvField(card.finalStatus === 'entregue' ? 'Entregue' : (card.finalStatus === 'pendente_assinatura' ? 'Pendente de assinatura' : '')),
+          csvField(card.dataNecessidade),
+          csvField(card.endereco),
+          csvField(prog.done),
+          csvField(prog.total),
+          csvField(card.comments.length),
+          csvField(card.attachments.length),
+          csvField(formatDateTimeBR(card.createdAt)),
+          csvField(card.createdBy),
+          csvField(formatDateTimeBR(card.updatedAt))
+        ].join(','));
+      });
+      return rows.join('\r\n');
+    }
+
+    function exportBoardCSV(){
+      var csv = '\ufeff' + buildBoardCSV(); // BOM para o Excel abrir os acentos certos
+      var bytes = new TextEncoder().encode(csv);
+      baixarBytes(bytes, 'solicitacoes-materiais-' + todayISODate() + '.csv', 'text/csv;charset=utf-8');
+    }
+
+    function removeAttachment(cardId, attachmentId){
+      if(readOnly) return;
+      var newState = cloneState(boardState);
+      var card = findCard(newState, cardId);
+      if(!card) return;
+      var alvo = card.attachments.filter(function(a){ return a.id === attachmentId; })[0];
+      card.attachments = card.attachments.filter(function(a){ return a.id !== attachmentId; });
+      card.updatedAt = nowISO();
+      saveState(newState);
+      refreshOpenModal();
+      // O arquivo vai para a lixeira do Drive. Se falhar, o card já foi salvo sem ele —
+      // sobra um órfão na pasta, que não aparece para ninguém no quadro.
+      if(alvo && alvo.driveId){
+        chamar('materiaisRemoverAnexo', { driveId: alvo.driveId }).catch(function(){});
+      }
+    }
+
+    // Removes a not-yet-saved attachment from the pending list (new-card flow) — local only,
+    // nothing to persist since the card doesn't exist in board state yet.
+    function removePendingAttachment(attachmentId){
+      pendingAttachments = pendingAttachments.filter(function(a){ return a.id !== attachmentId; });
+      renderAttachments(pendingAttachments, removePendingAttachment);
+    }
+
+    function deleteCard(cardId){
+      if(readOnly) return;
+      var newState = cloneState(boardState);
+      newState.cards = newState.cards.filter(function(c){ return c.id !== cardId; });
+      saveState(newState);
+      closeModal();
+      showToast('Solicitação excluída.');
+    }
+
+    /* ================= modal ================= */
+    function openCardModal(cardIdOrNull, defaultColumnId, opts){
+      opts = opts || {};
+      activeCardId = cardIdOrNull;
+      var modal = document.getElementById('cardModal');
+      var form = document.getElementById('cardForm');
+      form.reset();
+
+      if(cardIdOrNull){
+        var card = findCard(boardState, cardIdOrNull);
+        if(!card){ return; }
+        populateExistingCard(card);
+      } else {
+        var existingSections = document.getElementById('existingCardSections');
+        var finalStatusField = document.getElementById('finalStatusField');
+        pendingNewColumnId = defaultColumnId || 'nova';
+        pendingAttachments = [];
+        document.getElementById('modalTitle').textContent = 'Nova solicitação' + (pendingNewColumnId !== 'nova' ? ' — ' + labelForColumn(pendingNewColumnId) : '');
+        document.getElementById('modalCode').textContent = '';
+        finalStatusField.hidden = true;
+        existingSections.hidden = true;
+        document.getElementById('f_solicitante').value = getMyName();
+        document.getElementById('f_data').value = todayISODate();
+        document.getElementById('modalTimestamps').textContent = '';
+        renderAttachments(pendingAttachments, removePendingAttachment);
+      }
+
+      applyFormDisabledState();
+
+      modal.hidden = false;
+      // Não roubar o foco quando o modal é apenas re-renderizado: focar um campo o traz
+      // para a viewport, e era isso que jogava o leitor para o topo do card a cada clique
+      // no checklist.
+      if(!opts.skipFocus){
+        setTimeout(function(){ document.getElementById('f_projeto').focus(); }, 30);
+      }
+    }
+
+    // Fills in everything that depends on the card's current data. Used both by
+    // openCardModal (fresh open) and refreshOpenModal (in-place update after a save) —
+    // it never touches modal.hidden, form.reset(), or focus, so a refresh can't yank the
+    // viewer back to the top of the modal or steal focus from whatever they're doing.
+    function populateExistingCard(card){
+      var existingSections = document.getElementById('existingCardSections');
+      var finalStatusField = document.getElementById('finalStatusField');
+      var form = document.getElementById('cardForm');
+
+      document.getElementById('modalTitle').textContent = cardTitle(card);
+      document.getElementById('modalCode').textContent = card.code;
+      document.getElementById('f_projeto').value = card.projeto || '';
+      document.getElementById('f_solicitante').value = card.solicitante || '';
+      document.getElementById('f_data').value = card.dataNecessidade || '';
+      document.getElementById('f_endereco').value = card.endereco || '';
+      document.getElementById('f_obs').value = card.observacoes || '';
+
+      var showFinal = card.columnId === 'concluido';
+      finalStatusField.hidden = !showFinal;
+      if(showFinal){
+        var radios = form.querySelectorAll('input[name="finalStatus"]');
+        radios.forEach(function(r){ r.checked = (r.value === (card.finalStatus || '')); });
+      }
+
+      existingSections.hidden = false;
+      renderAttachments(card.attachments, function(attId){ removeAttachment(card.id, attId); });
+      renderChecklist(card);
+      renderComments(card);
+      renderMoveControls(card);
+
+      document.getElementById('modalTimestamps').textContent =
+        'Criado em ' + formatDateTimeBR(card.createdAt) + (card.createdBy ? ' por ' + card.createdBy : '') +
+        ' · Atualizado em ' + formatDateTimeBR(card.updatedAt);
+    }
+
+    function applyFormDisabledState(){
+      document.querySelectorAll('#cardForm input, #cardForm textarea').forEach(function(f){ f.disabled = readOnly || saveInFlight; });
+      document.getElementById('saveFieldsBtn').hidden = readOnly;
+      document.getElementById('saveFieldsBtn').disabled = saveInFlight;
+      document.getElementById('commentBtn').style.display = readOnly ? 'none' : '';
+      document.getElementById('commentBtn').disabled = saveInFlight;
+      document.getElementById('commentInput').style.display = readOnly ? 'none' : '';
+    }
+
+    // Updates an already-open card modal in place (e.g. after a checklist toggle, a
+    // comment, or a save finishing) without resetting scroll position or focus — the
+    // viewer stays exactly where they were, e.g. still looking at the checklist section.
+    function refreshOpenModal(){
+      if(!activeCardId) return;
+      var card = findCard(boardState, activeCardId);
+      if(!card) return;
+      var body = document.querySelector('#cardModal .modal-body');
+      var scrollTop = body ? body.scrollTop : 0;
+      var active = document.activeElement;
+      var activeId = active && active.id;
+      populateExistingCard(card);
+      applyFormDisabledState();
+      if(body){ body.scrollTop = scrollTop; }
+      if(activeId){
+        var toFocus = document.getElementById(activeId);
+        if(toFocus && typeof toFocus.focus === 'function' && !toFocus.disabled){ toFocus.focus(); }
+      }
+    }
+
+    // Renders whichever attachment list is relevant for the open modal: a saved card's
+    // `attachments` (onRemove persists immediately) or the in-memory `pendingAttachments`
+    // held while creating a new card (onRemove just splices the local array).
+    function renderAttachments(list, onRemove){
+      var container = document.getElementById('attachmentsContainer');
+      container.innerHTML = '';
+      var atts = list || [];
+      document.getElementById('attachCount').textContent = String(atts.length);
+      document.getElementById('attachTriggerBtn').hidden = readOnly;
+      document.getElementById('attachTriggerBtn').disabled = saveInFlight;
+      document.querySelector('.attach-hint').style.display = readOnly ? 'none' : '';
+
+      if(atts.length === 0){
+        var empty = document.createElement('div');
+        empty.className = 'empty-state-list';
+        empty.textContent = 'Nenhum arquivo anexado ainda.';
+        container.appendChild(empty);
+        return;
+      }
+      atts.forEach(function(a){
+        var row = document.createElement('div');
+        row.className = 'attach-item';
+        row.innerHTML =
+          '<span class="attach-badge">' + escapeHtml(fileExtBadge(a.name)) + '</span>' +
+          '<div class="attach-info"><div class="attach-name">' + escapeHtml(a.name) + '</div>' +
+          '<div class="attach-meta">' + formatBytes(a.size) + ' · ' + escapeHtml(a.addedBy || 'Anônimo') + ' · ' + formatDateTimeBR(a.addedAt) + '</div></div>' +
+          '<div class="attach-actions">' +
+            '<button type="button" class="attach-download" title="Baixar" aria-label="Baixar ' + escapeHtml(a.name) + '"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14"/></svg></button>' +
+            (readOnly ? '' : '<button type="button" class="attach-remove" ' + (saveInFlight ? 'disabled' : '') + ' title="Remover" aria-label="Remover ' + escapeHtml(a.name) + '"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>') +
+          '</div>';
+        row.querySelector('.attach-download').addEventListener('click', function(){ downloadAttachment(a); });
+        if(!readOnly){
+          row.querySelector('.attach-remove').addEventListener('click', function(){ onRemove(a.id); });
+        }
+        container.appendChild(row);
+      });
+    }
+
+    function renderChecklist(card){
+      var container = document.getElementById('checklistContainer');
+      container.innerHTML = '';
+      var prog = checklistProgress(card);
+      document.getElementById('checklistCount').textContent = prog.done + '/' + prog.total;
+
+      ['solicitante','almoxarifado','logistica'].forEach(function(section){
+        var items = card.checklist.filter(function(c){ return c.section === section; });
+        if(items.length === 0) return;
+        var groupLabel = document.createElement('div');
+        groupLabel.className = 'checklist-group-label';
+        groupLabel.textContent = SECTION_LABEL[section];
+        container.appendChild(groupLabel);
+        items.forEach(function(item){
+          var row = document.createElement('label');
+          row.className = 'check-item' + (item.done ? ' done' : '');
+          var metaHtml = item.done && item.doneBy ? '<div class="check-meta">✓ ' + escapeHtml(item.doneBy) + ' · ' + formatDateTimeBR(item.doneAt) + '</div>' : '';
+          row.innerHTML =
+            '<input type="checkbox" ' + (item.done ? 'checked' : '') + ' ' + ((readOnly || saveInFlight) ? 'disabled' : '') + ' />' +
+            '<span><span class="txt">' + escapeHtml(item.text) + '</span>' + metaHtml + '</span>';
+          row.querySelector('input').addEventListener('change', function(){ toggleChecklistItem(card.id, item.id); });
+          container.appendChild(row);
+        });
+      });
+    }
+
+    function renderComments(card){
+      var container = document.getElementById('commentsContainer');
+      container.innerHTML = '';
+      document.getElementById('commentCount').textContent = String(card.comments.length);
+      if(card.comments.length === 0){
+        var empty = document.createElement('div');
+        empty.className = 'empty-state-list';
+        empty.textContent = 'Nenhum comentário ainda.';
+        container.appendChild(empty);
+        return;
+      }
+      card.comments.forEach(function(c){
+        var row = document.createElement('div');
+        row.className = 'comment';
+        row.innerHTML =
+          '<span class="avatar" style="width:24px;height:24px;font-size:0.66rem;background:' + colorForName(c.author) + '">' + escapeHtml(initials(c.author)) + '</span>' +
+          '<div class="txt-wrap"><span class="who">' + escapeHtml(c.author) + '<span class="when">' + formatDateTimeBR(c.ts) + '</span></span>' +
+          '<div class="body">' + escapeHtml(c.text) + '</div></div>';
+        container.appendChild(row);
+      });
+    }
+
+    function renderMoveControls(card){
+      var select = document.getElementById('moveSelect');
+      select.innerHTML = '';
+      boardState.columns.forEach(function(col){
+        if(col.id === card.columnId) return;
+        var opt = document.createElement('option');
+        opt.value = col.id;
+        opt.textContent = col.name;
+        select.appendChild(opt);
+      });
+      var isCancelled = card.columnId === 'cancelado';
+      document.getElementById('cancelCardBtn').hidden = isCancelled || readOnly;
+      document.getElementById('reopenCardBtn').hidden = !isCancelled || readOnly;
+      document.getElementById('deleteCardBtn').hidden = !isCancelled || readOnly;
+      select.parentElement.style.display = readOnly ? 'none' : '';
+      ['moveBtn','cancelCardBtn','reopenCardBtn','deleteCardBtn'].forEach(function(id){
+        document.getElementById(id).disabled = saveInFlight;
+      });
+      select.disabled = saveInFlight;
+    }
+
+    function closeModal(){
+      document.getElementById('cardModal').hidden = true;
+      activeCardId = null;
+      aplicarRemotoPendente();
+    }
+
+    /* ================= wire up static UI ================= */
+    document.getElementById('newCardBtn').addEventListener('click', function(){ openCardModal(null); });
+    document.getElementById('exportCsvBtn').addEventListener('click', exportBoardCSV);
+    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+    document.getElementById('cardModal').addEventListener('click', function(e){
+      if(e.target.id === 'cardModal'){ closeModal(); }
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && !document.getElementById('cardModal').hidden){ closeModal(); }
+    });
+
+    document.getElementById('board').addEventListener('click', function(e){
+      var addBtn = e.target.closest('[data-add-column]');
+      if(addBtn){ openCardModal(null, addBtn.getAttribute('data-add-column')); }
+    });
+
+    document.getElementById('cardForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      var fields = {
+        projeto: document.getElementById('f_projeto').value.trim(),
+        solicitante: document.getElementById('f_solicitante').value.trim(),
+        dataNecessidade: document.getElementById('f_data').value,
+        endereco: document.getElementById('f_endereco').value.trim(),
+        observacoes: document.getElementById('f_obs').value.trim()
+      };
+      if(!fields.projeto || !fields.solicitante){
+        showToast('Preencha projeto/parque e solicitante.', 'error');
+        return;
+      }
+      var finalRadio = document.querySelector('input[name="finalStatus"]:checked');
+      fields.finalStatus = finalRadio ? finalRadio.value : null;
+
+      if(activeCardId){
+        updateCardFields(activeCardId, fields);
+        refreshOpenModal();
+      } else {
+        var newId = createCard(fields, pendingNewColumnId);
+        closeModal();
+        if(newId){ setTimeout(function(){ openCardModal(newId); }, 60); }
+      }
+    });
+
+    document.getElementById('commentBtn').addEventListener('click', function(){
+      if(!activeCardId) return;
+      var input = document.getElementById('commentInput');
+      addComment(activeCardId, input.value);
+      input.value = '';
+    });
+
+    document.getElementById('attachTriggerBtn').addEventListener('click', function(){
+      document.getElementById('attachInput').click();
+    });
+    document.getElementById('attachInput').addEventListener('change', function(e){
+      addAttachments(activeCardId, e.target.files);
+      e.target.value = '';
+    });
+
+    document.getElementById('moveBtn').addEventListener('click', function(){
+      if(!activeCardId) return;
+      var target = document.getElementById('moveSelect').value;
+      if(!target) return;
+      moveCard(activeCardId, target, null);
+      closeModal();
+    });
+    document.getElementById('cancelCardBtn').addEventListener('click', function(){
+      if(!activeCardId) return;
+      if(!confirm('Cancelar esta solicitação?')) return;
+      moveCard(activeCardId, 'cancelado', null);
+      closeModal();
+    });
+    document.getElementById('reopenCardBtn').addEventListener('click', function(){
+      if(!activeCardId) return;
+      moveCard(activeCardId, 'nova', null);
+      closeModal();
+    });
+    document.getElementById('deleteCardBtn').addEventListener('click', function(){
+      if(!activeCardId) return;
+      if(!confirm('Excluir esta solicitação definitivamente? Essa ação não pode ser desfeita.')) return;
+      deleteCard(activeCardId);
+    });
+
+    document.getElementById('searchInput').addEventListener('input', function(e){
+      searchQuery = e.target.value;
+      applySearchFilter();
+    });
+
+    document.getElementById('myNameBtn').addEventListener('click', function(){
+      showToast('Você aparece no quadro como ' + getMyName() +
+                ' (matrícula ' + (SESSAO ? SESSAO.matricula : '—') + '). ' +
+                'Para mudar, atualize o cadastro em Meus dados, no portal.');
+    });
+
+    /* ================= boot ================= */
+    document.getElementById('bloqueioAcao').addEventListener('click', function(){
+      location.href = '../index.html';
+    });
+
+    (function iniciar(){
+      render();
+
+      SESSAO = lerSessao();
+      if(!SESSAO){
+        mostrarBloqueio('Este quadro usa o login do portal. Entre pelo portal e abra a Solicitação de Materiais pelo menu.');
+        return;
+      }
+
+      if(typeof MODO_DEMO !== 'undefined' && MODO_DEMO){
+        readOnly = false;
+        esconderBloqueio();
+        document.getElementById('faixaDemo').hidden = false;
+        render();
+        return;
+      }
+
+      mostrarBloqueio('Carregando o quadro…', false);
+      carregar(true)
+        .then(function(){
+          esconderBloqueio();
+          readOnly = false;
+          render();
+          iniciarPolling();
+        })
+        .catch(function(err){
+          var motivo = err && err.motivo;
+          if(motivo === 'SESSAO') return;
+          if(motivo === 'SEM_CONFIG'){
+            mostrarBloqueio('API_URL não está configurada em config/config.js.');
+            return;
+          }
+          mostrarBloqueio('Não foi possível carregar o quadro. Verifique a conexão e recarregue a página.');
+        });
+    })();
+
+  })();
+  </script>
+</body>
+</html>

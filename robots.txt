@@ -1,0 +1,3 @@
+# Portal interno. Não deve aparecer em busca.
+User-agent: *
+Disallow: /

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nome do módulo — Extreme Wind</title>
+<!--
+  MODELO DE MÓDULO
+  1. Copie este arquivo com outro nome dentro da pasta modulos/
+     Exemplo: modulos/controle-treinamento.html
+  2. Troque o <title>, o nome na barra e o conteúdo dentro de <main>.
+  3. Registre o arquivo em config/modulos.js.
+
+  Este modelo já vem com a barra superior e a paleta do portal, para as
+  páginas não parecerem de sistemas diferentes.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Mesmos tokens do portal, para o módulo não parecer outro sistema. */
+:root{
+  --gelcoat:#eaf6ff; --gelcoat-alto:#ffffff; --breu:#0e2033; --aco:#0e2033;
+  --aco-medio:#4f6273; --aco-claro:#8798a8; --linha:#e2e8f0; --sinal:#2b7fd0;
+  --raio:14px;
+}
+:root[data-theme="dark"]{
+  --gelcoat:#0b1a2b; --gelcoat-alto:#0f1d2e; --breu:#e8eff8; --aco:#e8eff8;
+  --aco-medio:#9fb2c6; --aco-claro:#7c8fa5; --linha:#2a3c52; --sinal:#4d9ae8;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --gelcoat:#0b1a2b; --gelcoat-alto:#0f1d2e; --breu:#e8eff8; --aco:#e8eff8;
+    --aco-medio:#9fb2c6; --aco-claro:#7c8fa5; --linha:#2a3c52; --sinal:#4d9ae8;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--gelcoat);color:var(--aco);
+  font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+.eyebrow{
+  font-family:'Archivo',sans-serif;font-weight:700;font-size:10px;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--aco-claro);margin:0;
+}
+.barra{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:0 26px;height:62px;background:var(--breu);color:var(--gelcoat);
+}
+.barra__marca{
+  font-family:'Archivo',sans-serif;font-weight:800;font-size:12px;
+  letter-spacing:.2em;text-transform:uppercase;
+}
+.barra__marca em{font-style:normal;color:var(--sinal)}
+.voltar{
+  color:var(--gelcoat);text-decoration:none;font-size:13px;
+  border:1px solid rgba(236,237,232,.28);border-radius:var(--raio);padding:7px 13px;
+}
+.voltar:hover{border-color:var(--sinal)}
+.conteudo{padding:40px 26px 64px;max-width:1080px;margin:0 auto}
+h1{
+  font-family:'Archivo',sans-serif;font-weight:700;font-size:27px;
+  letter-spacing:-.015em;color:var(--breu);margin:6px 0 26px;
+}
+.placa{
+  background:var(--gelcoat-alto);border:1px solid var(--linha);
+  border-left:3px solid var(--sinal);border-radius:0 var(--raio) var(--raio) 0;
+  padding:20px 22px;
+}
+</style>
+  <script>
+  /* Segue o tema escolhido no portal (mesma chave ew_theme). */
+  (function(){
+    try{
+      var t = localStorage.getItem('ew_theme');
+      if(t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    }catch(e){}
+  })();
+  </script>
+
+</head>
+<body>
+
+<header class="barra">
+  <div class="barra__marca">Extreme Wind <em>/</em> Nome do módulo</div>
+  <a class="voltar" href="../index.html">Voltar ao portal</a>
+</header>
+
+<main class="conteudo">
+  <p class="eyebrow">Módulo</p>
+  <h1>Nome do módulo</h1>
+
+  <div class="placa">
+    <p style="margin:0 0 8px"><strong>Substitua este bloco pelo conteúdo do módulo.</strong></p>
+    <p style="margin:0;color:var(--aco-medio)">
+      Depois, registre o arquivo em <span class="mono">config/modulos.js</span> para ele
+      aparecer no menu do portal.
+    </p>
+  </div>
+</main>
+
+</body>
+</html>
