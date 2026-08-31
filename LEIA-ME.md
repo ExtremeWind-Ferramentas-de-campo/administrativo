@@ -19,6 +19,25 @@ portal/
 
 ---
 
+## Cadastrar quem vai usar o portal
+
+Recarregue a planilha depois de colar o `Codigo.gs`: aparece um menu **Portal**
+na barra de cima.
+
+- **Portal > Cadastrar pessoa** — pede tudo num campo só, separado por ponto e
+  vírgula. Ao terminar, mostra a senha do primeiro acesso.
+- **Portal > Resetar senha de alguém** — devolve a senha para o CPF.
+- **Portal > Ver usuários cadastrados** — lista quem existe e quem ainda não
+  trocou a senha.
+
+**A senha do primeiro acesso é sempre o CPF, só os números**, sem ponto e sem
+traço. No primeiro login o sistema obriga a criar uma senha pessoal.
+
+As senhas do modo demonstração do site (`Torre2026`, por exemplo) só existiam no
+navegador. No servidor elas não valem.
+
+---
+
 ## Visual
 
 O portal usa a mesma linguagem dos apps de campo: cena de fundo com os
@@ -61,8 +80,8 @@ Resumo:
 3. Roda `definirPepper()` — **uma vez só**. Se apagar essa propriedade depois,
    nenhuma senha funciona mais.
 4. Cola `Materiais.gs` como um segundo script e roda `configurarMateriais()`
-5. Roda `criarUsuariosExemplo()` para testar, ou `criarUsuario({...})` com os
-   dados reais
+5. Cadastra as pessoas: recarregue a planilha e use o menu **Portal >
+   Cadastrar pessoa**
 6. Implantar > App da Web → *Executar como: eu* / *Acesso: qualquer pessoa* →
    copia a URL `/exec`
 7. Em `config/config.js`: `MODO_DEMO = false` e cola a URL em `API_URL`
