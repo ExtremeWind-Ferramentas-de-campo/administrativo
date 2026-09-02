@@ -21,12 +21,17 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbyIT6qWi8CXQog8eQ6EHg65
      'admin' -> apenas quem tem perfil ADMIN
      'nunca' -> ninguém pela tela (só direto na planilha)
 
+   preenchivel: true  -> campo de admin que a PRÓPRIA pessoa pode preencher uma
+                         vez, enquanto estiver em branco. Depois de preenchido,
+                         trava e só o administrativo altera. É o que permite
+                         cadastrar alguém só com matrícula, CPF e email.
+
    O backend confere isso de novo. Se mudar aqui, ajuste também as listas
    EDITAVEL_DONO / EDITAVEL_ADMIN no Codigo.gs — senão a alteração é ignorada.
    ---------------------------------------------------------------------------- */
 const CAMPOS_PERFIL = [
   { grupo:'Identificação' },
-  { chave:'nome',       rotulo:'Nome completo',       edita:'admin', obrigatorio:true },
+  { chave:'nome',       rotulo:'Nome completo',       edita:'admin', obrigatorio:true, preenchivel:true },
   { chave:'matricula',  rotulo:'Matrícula',           edita:'nunca', obrigatorio:true, mono:true },
   { chave:'cpf',        rotulo:'CPF',                 edita:'nunca', obrigatorio:true, mono:true },
   { chave:'nascimento', rotulo:'Data de nascimento',  edita:'dono',  obrigatorio:true, tipo:'date' },
@@ -37,7 +42,7 @@ const CAMPOS_PERFIL = [
   { chave:'emergencia', rotulo:'Contato de emergência', edita:'dono', obrigatorio:true, placeholder:'Nome e telefone' },
 
   { grupo:'Vínculo' },
-  { chave:'setor',      rotulo:'Setor',               edita:'admin', obrigatorio:true },
-  { chave:'cargo',      rotulo:'Cargo',               edita:'admin', obrigatorio:false },
+  { chave:'setor',      rotulo:'Setor',               edita:'admin', obrigatorio:true, preenchivel:true },
+  { chave:'cargo',      rotulo:'Cargo',               edita:'admin', obrigatorio:false, preenchivel:true },
   { chave:'admissao',   rotulo:'Data de admissão',    edita:'admin', obrigatorio:false, tipo:'date' }
 ];

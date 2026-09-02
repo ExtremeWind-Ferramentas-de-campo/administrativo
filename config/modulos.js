@@ -16,8 +16,9 @@
                   'modulos/nome-do-arquivo.html'
                 Também aceita endereço completo (https://...).
      perfis     Quem enxerga o card: ['ADMIN'], ['SUPERVISOR'] ou os dois.
-     novaAba    true  = abre em outra aba (padrão, mantém o portal aberto)
-                false = abre na mesma aba
+     novaAba    false = abre na mesma aba (padrão daqui; o módulo tem botão de
+                        voltar para o portal)
+                true  = abre em outra aba
      icone      Ícone do Font Awesome 6 (grátis). Escolha em fontawesome.com/icons
                 e copie a classe, ex.: 'fas fa-boxes-stacked'. Se omitir, vem um cubo.
      cor        Cor do card em hexadecimal. Pinta a borda de cima, o ícone e o "Abrir".
@@ -32,7 +33,7 @@ const MODULOS = [
     desc:     'Solicitar, separar, enviar e confirmar entrega',
     url:      'modulos/solicitacao-materiais.html',
     perfis:   ['ADMIN','SUPERVISOR'],
-    novaAba:  true,
+    novaAba:  false,
     icone:    'fas fa-boxes-stacked',
     cor:      '#c26a12'
   }

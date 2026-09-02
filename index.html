@@ -861,8 +861,9 @@ $('#form-codigo').addEventListener('submit', async e => {
    8. APLICAÇÃO
    ============================================================================ */
 function iniciais(nome){
-  const p = nome.trim().split(/\s+/);
-  return ((p[0]?.[0] || '') + (p.length > 1 ? p[p.length-1][0] : '')).toUpperCase();
+  const p = String(nome || '').trim().split(/\s+/).filter(Boolean);
+  if(!p.length) return '?';   // cadastro recém-criado, nome ainda em branco
+  return ((p[0][0] || '') + (p.length > 1 ? p[p.length-1][0] : '')).toUpperCase();
 }
 
 function camposPendentes(){
@@ -874,14 +875,14 @@ function abrirApp(){
   $('#portao').hidden = true;
   $('#app').hidden = false;
 
-  const primeiro = usuario.nome.split(' ')[0];
+  const primeiro = (usuario.nome || '').trim().split(' ')[0] || 'colega';
   const h = new Date().getHours();
   $('#saudacao').textContent = (h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite') + ', ' + primeiro;
   $('#ano').textContent = new Date().getFullYear();
 
-  $('#bar-nome').textContent  = usuario.nome;
-  $('#bar-setor').textContent = usuario.setor + ' · ' + usuario.perfil;
-  $('#menu-nome').textContent = usuario.nome;
+  $('#bar-nome').textContent  = usuario.nome || 'Matrícula ' + usuario.matricula;
+  $('#bar-setor').textContent = (usuario.setor || 'Setor não informado') + ' · ' + usuario.perfil;
+  $('#menu-nome').textContent = usuario.nome || 'Complete seu cadastro';
   $('#menu-mat').textContent  = 'Matrícula ' + usuario.matricula;
   $('#avatar-iniciais').textContent = iniciais(usuario.nome);
 
@@ -974,7 +975,9 @@ $('#veu-perfil').addEventListener('click', e => { if(e.target.id === 'veu-perfil
 function podeEditar(campo){
   if(campo.edita === 'nunca') return false;
   if(campo.edita === 'dono')  return true;
-  return usuario.perfil === 'ADMIN';
+  if(usuario.perfil === 'ADMIN') return true;
+  // campo do administrativo ainda em branco: a própria pessoa preenche uma vez
+  return campo.preenchivel === true && !String(usuario[campo.chave] || '').trim();
 }
 
 function abrirPerfil(){
@@ -1014,7 +1017,11 @@ function abrirPerfil(){
           (c.placeholder ? 'placeholder="' + c.placeholder + '" ' : '') +
           (editavel ? '' : 'readonly ') + '>' +
       '</div>' +
-      (editavel ? '' : '<span class="campo__dica">Alteração só pelo setor administrativo.</span>');
+      (editavel
+        ? (c.preenchivel && usuario.perfil !== 'ADMIN'
+            ? '<span class="campo__dica">Você preenche uma vez. Depois, só o setor administrativo altera.</span>'
+            : '')
+        : '<span class="campo__dica">Alteração só pelo setor administrativo.</span>');
     alvo.appendChild(div);
   });
 
@@ -1067,7 +1074,7 @@ $('#form-perfil').addEventListener('submit', async e => {
   $('#selo-pend').hidden     = pend === 0;
   if(pend) $('#selo-pend').textContent = pend + ' PENDENTE' + (pend > 1 ? 'S' : '');
   $('#bar-nome').textContent = usuario.nome;
-  $('#bar-setor').textContent = usuario.setor + ' · ' + usuario.perfil;
+  $('#bar-setor').textContent = (usuario.setor || 'Setor não informado') + ' · ' + usuario.perfil;
   $('#avatar-iniciais').textContent = iniciais(usuario.nome);
 
   setTimeout(fecharPerfil, 900);

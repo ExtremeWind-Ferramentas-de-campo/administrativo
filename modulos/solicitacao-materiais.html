@@ -88,6 +88,14 @@
   .mark-sub{ font-size:0.76rem; color:var(--ink-soft); letter-spacing:0.4px; text-transform:uppercase; }
 
   .topbar-spacer{ flex:1 1 auto; }
+  .voltar-portal{
+    display:inline-flex; align-items:center; gap:7px; text-decoration:none;
+    color:var(--ink-soft); border:1px solid var(--border-soft); border-radius:10px;
+    padding:8px 13px; font-size:0.84rem; font-weight:600; flex:none;
+  }
+  .voltar-portal:hover{ color:var(--ink); border-color:var(--brand); }
+  .voltar-portal:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+  @media(max-width:560px){ .voltar-portal span{ display:none; } .voltar-portal{ padding:8px 10px; } }
 
   .readonly-pill{
     display:none;
@@ -404,6 +412,66 @@
     background:#4a3a12; color:#f3d99b; border-bottom:1px solid #6b5320;
     padding:9px 22px; font-size:0.8rem; text-align:center;
   }
+
+  /* ---------- galeria no card ---------- */
+  .card-fotos{
+    position:relative; margin:10px 0 2px; border-radius:10px; overflow:hidden;
+    background:var(--surface-3); aspect-ratio:16/9;
+  }
+  .card-fotos img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .card-fotos .vazia{
+    width:100%; height:100%; display:grid; place-items:center; color:var(--ink-faint); font-size:0.72rem;
+  }
+  .foto-seta{
+    position:absolute; top:50%; transform:translateY(-50%);
+    width:26px; height:26px; border-radius:50%; border:none; cursor:pointer;
+    background:rgba(6,20,36,.62); color:#fff; font-size:1rem; line-height:1;
+    display:grid; place-items:center; opacity:0; transition:opacity .15s;
+  }
+  .card-fotos:hover .foto-seta, .card-fotos:focus-within .foto-seta{ opacity:1; }
+  .foto-ant{ left:6px; } .foto-prox{ right:6px; }
+  .foto-contador{
+    position:absolute; right:7px; bottom:7px; background:rgba(6,20,36,.68); color:#fff;
+    font-size:0.66rem; font-weight:600; padding:2px 7px; border-radius:20px;
+  }
+  @media (hover:none){ .foto-seta{ opacity:1; } }
+
+  /* ---------- visualizador ---------- */
+  .visor{ position:fixed; inset:0; z-index:120; background:rgba(4,14,26,.94); display:flex; flex-direction:column; }
+  .visor-bar{
+    display:flex; align-items:center; gap:12px; padding:12px 16px;
+    border-bottom:1px solid rgba(255,255,255,.10); color:var(--ink);
+  }
+  .visor-nome{ flex:1; font-size:0.9rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .visor-acoes{ display:flex; gap:8px; flex:none; }
+  .visor-btn{
+    display:inline-flex; align-items:center; gap:7px; background:rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.16); color:var(--ink); border-radius:9px;
+    padding:8px 13px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit;
+  }
+  .visor-btn:hover{ background:rgba(255,255,255,.18); }
+  .visor-palco{ flex:1; display:grid; place-items:center; padding:16px; overflow:auto; }
+  .visor-palco img{ max-width:100%; max-height:100%; object-fit:contain; border-radius:6px; }
+  .visor-palco iframe{ width:100%; height:100%; border:0; border-radius:6px; background:#fff; }
+  .visor-palco .carregando{ color:var(--ink-soft); font-size:0.9rem; }
+  .visor-seta{
+    position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px;
+    border-radius:50%; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.12);
+    color:#fff; font-size:1.7rem; line-height:1; cursor:pointer; display:grid; place-items:center;
+  }
+  .visor-seta:hover{ background:rgba(255,255,255,.24); }
+  .visor-ant{ left:14px; } .visor-prox{ right:14px; }
+
+  /* ---------- miniaturas dentro do card aberto ---------- */
+  .anexo-fotos{ display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:8px; margin-bottom:12px; }
+  .anexo-foto{
+    position:relative; aspect-ratio:1; border-radius:9px; overflow:hidden; cursor:pointer;
+    border:1px solid var(--border-soft); background:var(--surface-3); padding:0;
+  }
+  .anexo-foto img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .anexo-foto:hover{ border-color:var(--brand); }
+  .attach-name.abrivel{ cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+  .attach-name.abrivel:hover{ color:var(--brand); }
 </style>
 </head>
 <body>
@@ -419,6 +487,10 @@
         </div>
       </div>
       <div class="topbar-spacer"></div>
+      <a class="voltar-portal" href="../index.html" title="Voltar ao portal">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <span>Portal</span>
+      </a>
       <span class="readonly-pill">Somente leitura</span>
       <span class="saving-pill"><span class="dot"></span>Salvando…</span>
     </header>
@@ -535,6 +607,28 @@
       <p class="bloqueio-msg" id="bloqueioMsg"></p>
       <button class="btn primary" id="bloqueioAcao" type="button">Ir para o portal</button>
     </div>
+  </div>
+
+  <div class="visor" id="visor" hidden>
+    <div class="visor-bar">
+      <span class="visor-nome" id="visorNome"></span>
+      <div class="visor-acoes">
+        <button type="button" class="visor-btn" id="visorNovaAba" hidden>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+          Abrir em nova aba
+        </button>
+        <button type="button" class="visor-btn" id="visorBaixar">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14"/></svg>
+          Baixar
+        </button>
+        <button type="button" class="visor-btn" id="visorFechar" aria-label="Fechar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="visor-palco" id="visorPalco"></div>
+    <button type="button" class="visor-seta visor-ant" id="visorAnt" aria-label="Anterior">&#8249;</button>
+    <button type="button" class="visor-seta visor-prox" id="visorProx" aria-label="Próxima">&#8250;</button>
   </div>
 
   <div class="toast" id="toast" hidden></div>
@@ -782,6 +876,7 @@
       });
       boardState = estado;
       render();
+      carregarMiniaturas();
     }
 
     function carregar(primeira){
@@ -883,6 +978,7 @@
             if(card) snapshot[a.id] = JSON.stringify(card);
           });
           pacote.removidos.forEach(function(id){ delete snapshot[id]; delete revCard[id]; });
+          carregarMiniaturas();
 
           if(res.conflitos && res.conflitos.length){
             res.conflitos.forEach(function(c){
@@ -1054,6 +1150,17 @@
       return closest.element;
     }
 
+    var posFoto = {};   // cardId -> índice da foto mostrada no quadro
+
+    function passarFoto(cardId, passo){
+      var card = findCard(boardState, cardId);
+      if(!card) return;
+      var fotos = imagensDo(card);
+      if(fotos.length < 2) return;
+      posFoto[cardId] = ((posFoto[cardId] || 0) + passo + fotos.length) % fotos.length;
+      render();
+    }
+
     function renderCardEl(card){
       var el = document.createElement('div');
       el.className = 'card';
@@ -1076,9 +1183,31 @@
           (card.finalStatus === 'entregue' ? 'Entregue' : 'Pendente de assinatura') + '</span>';
       }
 
+      // Fotos do card: usa a miniatura, nunca o arquivo original.
+      var fotos = imagensDo(card);
+      var fotosHtml = '';
+      if(fotos.length){
+        var pos = posFoto[card.id] || 0;
+        if(pos >= fotos.length) pos = posFoto[card.id] = 0;
+        var atual = fotos[pos];
+        var mini = miniaturas[atual.thumbId];
+        fotosHtml =
+          '<div class="card-fotos">' +
+            (mini
+              ? '<img src="' + mini + '" alt="' + escapeHtml(atual.name) + '" loading="lazy">'
+              : '<div class="vazia">carregando foto…</div>') +
+            (fotos.length > 1
+              ? '<button type="button" class="foto-seta foto-ant" aria-label="Foto anterior">&#8249;</button>' +
+                '<button type="button" class="foto-seta foto-prox" aria-label="Próxima foto">&#8250;</button>' +
+                '<span class="foto-contador">' + (pos+1) + '/' + fotos.length + '</span>'
+              : '') +
+          '</div>';
+      }
+
       el.innerHTML =
         '<div class="card-top"><div><div class="card-code mono">' + escapeHtml(card.code) + '</div>' +
         '<div class="card-title">' + escapeHtml(cardTitle(card)) + '</div></div></div>' +
+        fotosHtml +
         '<div class="card-meta">' + pillsHtml + '</div>' +
         '<div class="card-bottom">' +
           '<div class="card-people">' +
@@ -1090,6 +1219,22 @@
             '<div class="progress" title="' + prog.done + ' de ' + prog.total + ' itens"><span style="width:' + pct + '%"></span></div>' +
           '</div>' +
         '</div>';
+
+      var ant = el.querySelector('.foto-ant');
+      var prox = el.querySelector('.foto-prox');
+      if(ant){
+        ant.addEventListener('click', function(e){ e.stopPropagation(); passarFoto(card.id, -1); });
+        prox.addEventListener('click', function(e){ e.stopPropagation(); passarFoto(card.id, 1); });
+      }
+      var img = el.querySelector('.card-fotos img');
+      if(img){
+        // clicar na foto abre a foto, não o card
+        img.parentNode.addEventListener('click', function(e){
+          if(e.target.closest('.foto-seta')) return;
+          e.stopPropagation();
+          abrirVisor(imagensDo(card), posFoto[card.id] || 0);
+        });
+      }
 
       el.addEventListener('click', function(){ openCardModal(card.id); });
       el.addEventListener('keydown', function(e){
@@ -1265,19 +1410,33 @@
       var demoBloqueado = false;
       var afterRead = accepted.length
         ? Promise.all(accepted.map(function(f){
+            var dadosArquivo = null;
+            var miniGerada = null;
             return readFileAsDataURL(f)
               .then(function(dataUrl){
-                var virgula = dataUrl.indexOf(',');
+                dadosArquivo = dataUrl;
+                // Imagem ganha uma miniatura gerada aqui no navegador. É ela que
+                // aparece no card, para o quadro não ter que baixar o original.
+                return ehImagem(f.type) ? gerarMiniatura(dataUrl) : null;
+              })
+              .then(function(thumb){
+                miniGerada = thumb;
+                var virgula = dadosArquivo.indexOf(',');
                 return chamar('materiaisAnexar', {
                   nome: f.name,
                   tipo: f.type || 'application/octet-stream',
-                  base64: dataUrl.slice(virgula + 1)
+                  base64: dadosArquivo.slice(virgula + 1),
+                  thumbBase64: thumb
                 });
               })
               .then(function(res){
                 if(!res || !res.ok) throw new Error('falha');
+                if(res.thumbId && miniGerada){
+                  miniaturas[res.thumbId] = 'data:image/jpeg;base64,' + miniGerada;
+                }
                 return { id: uid('att'), name: f.name, size: f.size,
-                         type: f.type || '', driveId: res.driveId };
+                         type: f.type || '', driveId: res.driveId,
+                         thumbId: res.thumbId || null };
               })
               .catch(function(err){
                 if(err && err.motivo === 'DEMO'){ demoBloqueado = true; }
@@ -1300,6 +1459,8 @@
             var card = findCard(newState, cardId);
             if(!card) return;
             newAttachments.forEach(function(a){ card.attachments.push(a); });
+            // miniaturas das que acabaram de subir
+            setTimeout(carregarMiniaturas, 200);
             card.updatedAt = nowISO();
             saveState(newState);
           } else {
@@ -1341,26 +1502,190 @@
       setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
     }
 
+    var MINI_LADO = 340;          // maior lado da miniatura, em pixels
+    var miniaturas = {};          // thumbId -> dataURL já carregada
+    var miniaturasPedidas = {};   // evita pedir a mesma duas vezes
+    var arquivosAbertos = {};     // driveId -> blob URL, para não rebaixar ao reabrir
+
+    function ehImagem(tipo){ return /^image\//.test(tipo || ''); }
+    function ehPdf(tipo, nome){
+      return (tipo || '') === 'application/pdf' || /\.pdf$/i.test(nome || '');
+    }
+    function imagensDo(card){
+      return (card.attachments || []).filter(function(a){ return ehImagem(a.type) && a.thumbId; });
+    }
+
+    // Reduz a imagem no navegador antes de subir. Sem isso a miniatura teria o
+    // tamanho do original e o card ficaria pesado do mesmo jeito.
+    function gerarMiniatura(dataUrl){
+      return new Promise(function(resolve){
+        var img = new Image();
+        img.onload = function(){
+          var escala = Math.min(1, MINI_LADO / Math.max(img.width, img.height));
+          var c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * escala));
+          c.height = Math.max(1, Math.round(img.height * escala));
+          var ctx = c.getContext('2d');
+          ctx.fillStyle = '#ffffff';                 // PNG transparente vira branco no JPEG
+          ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          try{
+            var jpg = c.toDataURL('image/jpeg', 0.72);
+            resolve(jpg.slice(jpg.indexOf(',') + 1));
+          }catch(e){ resolve(null); }
+        };
+        img.onerror = function(){ resolve(null); };  // sem miniatura o card mostra ícone
+        img.src = dataUrl;
+      });
+    }
+
+    // Pede em UMA chamada todas as miniaturas que ainda não estão em memória.
+    function carregarMiniaturas(){
+      var faltando = [];
+      boardState.cards.forEach(function(card){
+        imagensDo(card).forEach(function(a){
+          if(!miniaturas[a.thumbId] && !miniaturasPedidas[a.thumbId]) faltando.push(a.thumbId);
+        });
+      });
+      if(!faltando.length) return;
+      faltando.forEach(function(id){ miniaturasPedidas[id] = true; });
+
+      chamar('materiaisMiniaturas', { ids: faltando })
+        .then(function(res){
+          if(!res || !res.ok) return;
+          var achou = false;
+          Object.keys(res.mapa || {}).forEach(function(id){
+            miniaturas[id] = 'data:image/jpeg;base64,' + res.mapa[id];
+            achou = true;
+          });
+          if(achou) render();
+        })
+        .catch(function(){
+          // libera para tentar de novo na próxima carga
+          faltando.forEach(function(id){ delete miniaturasPedidas[id]; });
+        });
+    }
+
+    // Baixa o arquivo original uma vez e guarda como blob, para abrir e baixar
+    // sem repetir a viagem até o Drive.
+    function obterArquivo(a){
+      if(arquivosAbertos[a.driveId]) return Promise.resolve(arquivosAbertos[a.driveId]);
+      return chamar('materiaisBaixarAnexo', { driveId: a.driveId })
+        .then(function(res){
+          if(!res || !res.ok) throw new Error('falha');
+          var bytes = dataURLToBytes('data:;base64,' + res.base64);
+          var url = URL.createObjectURL(new Blob([bytes], { type: a.type || res.tipo || 'application/octet-stream' }));
+          arquivosAbertos[a.driveId] = url;
+          return url;
+        });
+    }
+
+    function erroAnexo(err){
+      var motivo = err && err.motivo;
+      if(motivo === 'SESSAO') return;
+      showToast(motivo === 'DEMO'
+        ? 'Modo demonstração: anexos precisam do servidor configurado.'
+        : 'Não foi possível abrir o arquivo.', 'error');
+    }
+
+    /* ================= visualizador =================
+       Abre imagem e PDF sem salvar arquivo no computador. O conteúdo vem do
+       Drive em memória e vira um blob; o PDF usa o leitor do próprio navegador. */
+    var visorLista = [];   // anexos navegáveis com as setas
+    var visorPos = 0;
+
+    function abrirVisor(lista, indice){
+      visorLista = lista;
+      visorPos = indice;
+      document.getElementById('visor').hidden = false;
+      document.body.style.overflow = 'hidden';
+      mostrarNoVisor();
+    }
+
+    function fecharVisor(){
+      document.getElementById('visor').hidden = true;
+      document.getElementById('visorPalco').innerHTML = '';
+      document.body.style.overflow = '';
+      visorLista = [];
+    }
+
+    function mostrarNoVisor(){
+      var a = visorLista[visorPos];
+      if(!a) return fecharVisor();
+
+      var palco = document.getElementById('visorPalco');
+      document.getElementById('visorNome').textContent =
+        a.name + (visorLista.length > 1 ? '  (' + (visorPos+1) + ' de ' + visorLista.length + ')' : '');
+      var varias = visorLista.length > 1;
+      document.getElementById('visorAnt').hidden = !varias;
+      document.getElementById('visorProx').hidden = !varias;
+      // No celular (principalmente iPhone) o PDF dentro de quadro embutido às
+      // vezes vem em branco. Este botão é a saída, sem precisar baixar.
+      document.getElementById('visorNovaAba').hidden = !ehPdf(a.type, a.name);
+
+      // miniatura primeiro, para não ficar tela preta enquanto o original carrega
+      if(ehImagem(a.type) && a.thumbId && miniaturas[a.thumbId]){
+        palco.innerHTML = '<img src="' + miniaturas[a.thumbId] + '" alt="' + escapeHtml(a.name) + '">';
+      }else{
+        palco.innerHTML = '<div class="carregando">Abrindo ' + escapeHtml(a.name) + '…</div>';
+      }
+
+      var desteTurno = visorPos;
+      obterArquivo(a)
+        .then(function(url){
+          if(desteTurno !== visorPos) return;         // já passou para a próxima
+          palco.innerHTML = ehPdf(a.type, a.name)
+            ? '<iframe src="' + url + '" title="' + escapeHtml(a.name) + '"></iframe>'
+            : '<img src="' + url + '" alt="' + escapeHtml(a.name) + '">';
+        })
+        .catch(function(err){
+          if(desteTurno !== visorPos) return;
+          palco.innerHTML = '<div class="carregando">Não foi possível abrir este arquivo.</div>';
+          erroAnexo(err);
+        });
+    }
+
+    function passarVisor(passo){
+      if(visorLista.length < 2) return;
+      visorPos = (visorPos + passo + visorLista.length) % visorLista.length;
+      mostrarNoVisor();
+    }
+
+    document.getElementById('visorFechar').addEventListener('click', fecharVisor);
+    document.getElementById('visorAnt').addEventListener('click', function(){ passarVisor(-1); });
+    document.getElementById('visorProx').addEventListener('click', function(){ passarVisor(1); });
+    document.getElementById('visorBaixar').addEventListener('click', function(){
+      var a = visorLista[visorPos];
+      if(a) downloadAttachment(a);
+    });
+    document.getElementById('visorNovaAba').addEventListener('click', function(){
+      var a = visorLista[visorPos];
+      if(!a) return;
+      obterArquivo(a).then(function(url){ window.open(url, '_blank', 'noopener'); }).catch(erroAnexo);
+    });
+    document.getElementById('visor').addEventListener('click', function(e){
+      if(e.target.id === 'visor' || e.target.id === 'visorPalco') fecharVisor();
+    });
+    document.addEventListener('keydown', function(e){
+      if(document.getElementById('visor').hidden) return;
+      if(e.key === 'Escape'){ e.stopPropagation(); fecharVisor(); }
+      if(e.key === 'ArrowLeft')  passarVisor(-1);
+      if(e.key === 'ArrowRight') passarVisor(1);
+    }, true);
+
     function downloadAttachment(attachment){
       if(!attachment.driveId){
         showToast('Este anexo é de uma versão antiga do quadro e não pode ser baixado.', 'error');
         return;
       }
       showToast('Preparando ' + attachment.name + '…');
-      chamar('materiaisBaixarAnexo', { driveId: attachment.driveId })
-        .then(function(res){
-          if(!res || !res.ok) throw new Error('falha');
-          baixarBytes(dataURLToBytes('data:;base64,' + res.base64), attachment.name, attachment.type);
+      obterArquivo(attachment)
+        .then(function(url){
+          var a = document.createElement('a');
+          a.href = url; a.download = attachment.name;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
         })
-        .catch(function(err){
-          var motivo = err && err.motivo;
-          if(motivo === 'SESSAO') return;
-          if(motivo === 'DEMO'){
-            showToast('Modo demonstração: baixar anexo precisa do servidor configurado.', 'error');
-            return;
-          }
-          showToast('Não foi possível baixar o arquivo.', 'error');
-        });
+        .catch(erroAnexo);
     }
 
     // Escapes one CSV field per RFC 4180: wraps in quotes and doubles any quote inside
@@ -1419,7 +1744,7 @@
       // O arquivo vai para a lixeira do Drive. Se falhar, o card já foi salvo sem ele —
       // sobra um órfão na pasta, que não aparece para ninguém no quadro.
       if(alvo && alvo.driveId){
-        chamar('materiaisRemoverAnexo', { driveId: alvo.driveId }).catch(function(){});
+        chamar('materiaisRemoverAnexo', { driveId: alvo.driveId, thumbId: alvo.thumbId }).catch(function(){});
       }
     }
 
@@ -1544,6 +1869,11 @@
     // Renders whichever attachment list is relevant for the open modal: a saved card's
     // `attachments` (onRemove persists immediately) or the in-memory `pendingAttachments`
     // held while creating a new card (onRemove just splices the local array).
+    // Só abre no navegador o que ele sabe exibir; o resto continua sendo download.
+    function podeVisualizar(a){
+      return !!a.driveId && (ehImagem(a.type) || ehPdf(a.type, a.name));
+    }
+
     function renderAttachments(list, onRemove){
       var container = document.getElementById('attachmentsContainer');
       container.innerHTML = '';
@@ -1560,17 +1890,47 @@
         container.appendChild(empty);
         return;
       }
+      // Fotos primeiro, em grade. Clicar abre no visualizador.
+      var fotos = atts.filter(function(a){ return ehImagem(a.type) && a.thumbId; });
+      if(fotos.length){
+        var grade = document.createElement('div');
+        grade.className = 'anexo-fotos';
+        fotos.forEach(function(a, i){
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'anexo-foto';
+          b.title = a.name;
+          b.innerHTML = miniaturas[a.thumbId]
+            ? '<img src="' + miniaturas[a.thumbId] + '" alt="' + escapeHtml(a.name) + '">'
+            : '';
+          b.addEventListener('click', function(){ abrirVisor(fotos, i); });
+          grade.appendChild(b);
+        });
+        container.appendChild(grade);
+      }
+
       atts.forEach(function(a){
         var row = document.createElement('div');
         row.className = 'attach-item';
         row.innerHTML =
           '<span class="attach-badge">' + escapeHtml(fileExtBadge(a.name)) + '</span>' +
-          '<div class="attach-info"><div class="attach-name">' + escapeHtml(a.name) + '</div>' +
+          '<div class="attach-info"><div class="attach-name' +
+            (podeVisualizar(a) ? ' abrivel" title="Abrir sem baixar"' : '"') + '>' +
+            escapeHtml(a.name) + '</div>' +
           '<div class="attach-meta">' + formatBytes(a.size) + ' · ' + escapeHtml(a.addedBy || 'Anônimo') + ' · ' + formatDateTimeBR(a.addedAt) + '</div></div>' +
           '<div class="attach-actions">' +
             '<button type="button" class="attach-download" title="Baixar" aria-label="Baixar ' + escapeHtml(a.name) + '"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14"/></svg></button>' +
             (readOnly ? '' : '<button type="button" class="attach-remove" ' + (saveInFlight ? 'disabled' : '') + ' title="Remover" aria-label="Remover ' + escapeHtml(a.name) + '"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>') +
           '</div>';
+        if(podeVisualizar(a)){
+          row.querySelector('.attach-name').addEventListener('click', function(){
+            // PDF abre sozinho; imagem entra na sequência das outras imagens
+            abrirVisor(ehImagem(a.type) ? atts.filter(function(x){ return ehImagem(x.type); }) : [a],
+                       ehImagem(a.type)
+                         ? atts.filter(function(x){ return ehImagem(x.type); }).indexOf(a)
+                         : 0);
+          });
+        }
         row.querySelector('.attach-download').addEventListener('click', function(){ downloadAttachment(a); });
         if(!readOnly){
           row.querySelector('.attach-remove').addEventListener('click', function(){ onRemove(a.id); });

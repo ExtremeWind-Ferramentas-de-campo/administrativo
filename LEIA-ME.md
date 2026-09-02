@@ -30,6 +30,11 @@ na barra de cima.
 - **Portal > Ver usuários cadastrados** — lista quem existe e quem ainda não
   trocou a senha.
 
+O cadastro pede só **matrícula, CPF e email**. Nome, setor e cargo a própria
+pessoa preenche no primeiro acesso — o portal abre "Meus dados" sozinho e não
+deixa passar sem completar. Depois de preenchidos, esses campos travam: só o
+setor administrativo altera. Assim ninguém troca o próprio setor depois.
+
 **A senha do primeiro acesso é sempre o CPF, só os números**, sem ponto e sem
 traço. No primeiro login o sistema obriga a criar uma senha pessoal.
 
@@ -143,7 +148,9 @@ Pages — o que exige plano pago do GitHub.
 
 ## Quadro de Solicitação de Materiais
 
-O quadro não tem login próprio: usa a sessão aberta no portal. Se alguém abrir
+O quadro abre **na mesma aba** do portal e tem um botão "Portal" no canto
+superior direito para voltar. Não tem login próprio: usa a sessão aberta no
+portal. Se alguém abrir
 `modulos/solicitacao-materiais.html` direto, aparece uma tela pedindo para entrar
 pelo portal.
 
@@ -166,6 +173,20 @@ sobrescrito em silêncio.
 Enquanto alguém está com uma solicitação aberta, atualizações que chegam ficam
 esperando e entram quando a janela fecha — para o formulário não ser trocado
 debaixo de quem está digitando.
+
+### Fotos e PDFs
+
+- **Fotos aparecem no card**, sem precisar abrir. Se houver mais de uma, setas
+  passam de uma para a outra ali mesmo. Clicar na foto abre em tela cheia.
+- **PDF abre clicando no nome do arquivo**, dentro do próprio quadro, sem baixar.
+  No celular, se a página vier em branco, use "Abrir em nova aba" na barra de cima.
+- Dentro da solicitação, as fotos aparecem em grade e cada arquivo tem o botão
+  de baixar do lado.
+
+O que o card mostra é uma **miniatura** de 340 px gerada no navegador na hora do
+envio, guardada como arquivo separado no Drive. O original só é baixado quando
+alguém abre ou baixa de fato. Sem isso, um quadro com trinta fotos de 4 MB
+levaria mais de 100 MB a cada abertura.
 
 ### Instalação do módulo
 
