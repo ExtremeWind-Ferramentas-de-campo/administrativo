@@ -626,15 +626,30 @@ const traduzir = m => MENSAGENS[m] || 'Não foi possível concluir. Tente novame
    O try/catch é para o portal continuar funcionando onde o armazenamento
    está bloqueado (janela anônima restrita, pré-visualização em sandbox). */
 const CHAVE_SESSAO = 'ew_sessao';
+const SESSAO_HORAS = 8;   // igual ao backend
+
 function gravarSessao(){
   try{
     localStorage.setItem(CHAVE_SESSAO, JSON.stringify({
       token: sessao,
+      // os módulos leem estes três direto da raiz
       nome: usuario.nome,
       matricula: usuario.matricula,
-      perfil: usuario.perfil
+      perfil: usuario.perfil,
+      // o cadastro inteiro, para o portal voltar direto ao menu ao recarregar
+      usuario: usuario,
+      expira: Date.now() + SESSAO_HORAS * 3600 * 1000
     }));
   }catch(e){ /* módulos vão pedir login de novo; o portal segue normal */ }
+}
+
+function lerSessaoGuardada(){
+  try{
+    const s = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || 'null');
+    if(!s || !s.token || !s.usuario) return null;
+    if(s.expira && Date.now() > s.expira) return null;   // passou das 8 horas
+    return s;
+  }catch(e){ return null; }
 }
 function limparSessao(){
   try{ localStorage.removeItem(CHAVE_SESSAO); }catch(e){}
@@ -748,7 +763,7 @@ $('#form-login').addEventListener('submit', async e => {
 
     sessao  = r.token;
     usuario = r.usuario;
-    abrirApp();
+    abrirApp(true);
 
   }catch(err){
     ocupado(btn, false, 'Entrar');
@@ -784,7 +799,7 @@ $('#form-primeiro').addEventListener('submit', async e => {
   usuario = r.usuario;
   aguardandoPrimeiro = null;
   $('#i-nova1').value = $('#i-nova2').value = '';
-  abrirApp();
+  abrirApp(true);
 });
 
 /* ============================================================================
@@ -870,7 +885,7 @@ function camposPendentes(){
   return CAMPOS_PERFIL.filter(c => c.chave && c.obrigatorio && !String(usuario[c.chave] || '').trim());
 }
 
-function abrirApp(){
+function abrirApp(recemLogado){
   gravarSessao();
   $('#portao').hidden = true;
   $('#app').hidden = false;
@@ -928,7 +943,9 @@ function abrirApp(){
     grade.appendChild(a);
   });
 
-  if(pend) setTimeout(abrirPerfil, 500);
+  // O empurrão para completar o cadastro é para quem acabou de entrar.
+  // Ao voltar de um módulo, seria um pop-up a cada retorno.
+  if(pend && recemLogado) setTimeout(abrirPerfil, 500);
 }
 
 /* Menu da conta */
@@ -1115,6 +1132,48 @@ $('#theme-btn').addEventListener('click', () => {
   aplicarTema(salvo);
 })();
 
+/* ============================================================================
+   RETOMAR A SESSÃO
+   Sem isto, voltar de um módulo (que é uma navegação normal, na mesma aba)
+   recarregaria o portal na tela de login, mesmo com a sessão válida.
+   Mostra o menu na hora com o que está guardado e confere com o servidor em
+   seguida — assim não pisca login e não fica com dado velho.
+   ============================================================================ */
+function retomarSessao(){
+  const s = lerSessaoGuardada();
+  if(!s) return false;
+
+  sessao  = s.token;
+  usuario = s.usuario;
+  abrirApp(false);
+
+  API.chamar('sessao', {})
+    .then(r => {
+      if(r && r.ok && r.usuario){
+        usuario = r.usuario;      // cadastro pode ter mudado desde o último login
+        gravarSessao();
+        abrirApp(false);
+        return;
+      }
+      // Implantação antiga, sem a ação 'sessao': mantém o que está guardado.
+      // A primeira ação de verdade avisa se o token tiver caído.
+      if(r && r.motivo === 'ACAO_DESCONHECIDA') return;
+      encerrarPorSessao();
+    })
+    .catch(() => { /* sem rede agora: segue com o que está guardado */ });
+
+  return true;
+}
+
+function encerrarPorSessao(){
+  limparSessao();
+  usuario = null; sessao = null;
+  $('#app').hidden = true;
+  $('#portao').hidden = false;
+  irPara('tela-login');
+  avisar('aviso-login','Sua sessão expirou. Entre novamente.','info');
+}
+
 /* Início */
 if(MODO_DEMO && typeof DEMO === 'undefined'){
   avisar('aviso-login','MODO_DEMO está ligado, mas config/demo.js não foi carregado. ' +
@@ -1122,7 +1181,9 @@ if(MODO_DEMO && typeof DEMO === 'undefined'){
     'em config/config.js para usar o servidor.','erro');
   $('#b-entrar').disabled = true;
 }
-irPara('tela-login');
+
+// Se há sessão válida guardada, vai direto ao menu; senão, tela de login.
+if(!retomarSessao()) irPara('tela-login');
 
 </script>
 </body>

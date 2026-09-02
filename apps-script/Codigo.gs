@@ -326,6 +326,7 @@ function doPost(e) {
       case 'solicitarTroca': resposta = acaoSolicitarTroca_(corpo); break;
       case 'confirmarTroca': resposta = acaoConfirmarTroca_(corpo); break;
       case 'salvarPerfil':   resposta = acaoSalvarPerfil_(corpo);   break;
+      case 'sessao':         resposta = acaoSessao_(corpo);         break;
 
       // Módulo de materiais — implementado em Materiais.gs
       case 'materiaisCarregar':      resposta = acaoMateriaisCarregar_(corpo);      break;
@@ -533,6 +534,25 @@ function acaoConfirmarTroca_(p) {
   } finally {
     trava.releaseLock();
   }
+}
+
+
+/**
+ * { token } -> { ok, usuario }
+ *
+ * Chamada quando o portal recarrega (por exemplo, ao voltar de um módulo).
+ * Confirma que o token ainda vale e devolve o cadastro atualizado, para a tela
+ * não continuar mostrando dados antigos guardados no navegador.
+ */
+function acaoSessao_(p) {
+  const matricula = validarSessao_(p.token);
+  if (!matricula) return { ok: false, motivo: 'SESSAO' };
+
+  const achado = acharPorMatricula_(abaUsuarios_(), matricula);
+  if (!achado) return { ok: false, motivo: 'SESSAO' };
+  if (String(achado.dados.status).toUpperCase() !== 'ATIVO') return { ok: false, motivo: 'INATIVO' };
+
+  return { ok: true, usuario: publico_(achado.dados) };
 }
 
 

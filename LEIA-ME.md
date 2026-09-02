@@ -149,7 +149,9 @@ Pages — o que exige plano pago do GitHub.
 ## Quadro de Solicitação de Materiais
 
 O quadro abre **na mesma aba** do portal e tem um botão "Portal" no canto
-superior direito para voltar. Não tem login próprio: usa a sessão aberta no
+superior direito para voltar — que devolve ao menu, não ao login: o portal
+retoma a sessão guardada ao recarregar. A sessão vale 8 horas; passado isso, ou
+se o token cair antes, a tela de login volta com o aviso. Não tem login próprio: usa a sessão aberta no
 portal. Se alguém abrir
 `modulos/solicitacao-materiais.html` direto, aparece uma tela pedindo para entrar
 pelo portal.
