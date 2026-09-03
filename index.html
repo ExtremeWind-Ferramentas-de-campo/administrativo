@@ -626,7 +626,7 @@ const traduzir = m => MENSAGENS[m] || 'Não foi possível concluir. Tente novame
    O try/catch é para o portal continuar funcionando onde o armazenamento
    está bloqueado (janela anônima restrita, pré-visualização em sandbox). */
 const CHAVE_SESSAO = 'ew_sessao';
-const SESSAO_HORAS = 8;   // igual ao backend
+const SESSAO_HORAS = 12;   // igual ao backend
 
 function gravarSessao(){
   try{
@@ -966,6 +966,9 @@ document.addEventListener('keydown', e => {
 });
 
 $('#b-sair').addEventListener('click', () => {
+  // Derruba a sessão no servidor também. Sem isto o token continuaria valendo
+  // pelas próximas horas para quem tivesse cópia dele.
+  if(sessao) API.chamar('sair', {}).catch(function(){});
   limparSessao();
   usuario = null; sessao = null; aguardandoPrimeiro = null;
   alternarMenu(false);

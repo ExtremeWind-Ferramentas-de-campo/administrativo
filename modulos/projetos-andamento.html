@@ -117,8 +117,10 @@
       <div class="linha-campos">
         <div class="campo" id="c-parque">
           <label for="f-parque">Nome do parque</label>
-          <input id="f-parque" required placeholder="Ex.: Serra do Mel III">
-          <span class="dica" id="d-parque">Escreva igual está no RDO — é assim que o Status RDO encontra o relatório.</span>
+          <input id="f-parque" list="parquesRDO" required autocomplete="off"
+                 placeholder="Comece a digitar e escolha na lista">
+          <datalist id="parquesRDO"></datalist>
+          <span class="dica" id="d-parque">A lista vem da própria planilha do RDO. Escolher nela garante que o relatório será encontrado.</span>
         </div>
         <div class="campo" id="c-cliente">
           <label for="f-cliente">Cliente</label>
@@ -130,8 +132,8 @@
       <div class="linha-campos">
         <div class="campo" id="c-equipe">
           <label for="f-equipe">Número da equipe</label>
-          <input id="f-equipe" class="mono" required placeholder="Ex.: 07">
-          <span class="dica" id="d-equipe"></span>
+          <input id="f-equipe" class="mono" placeholder="preenche sozinho">
+          <span class="dica" id="d-equipe">Vem do próprio nome do parque. Só preencha se não estiver lá.</span>
         </div>
         <div class="campo" id="c-tipo">
           <label for="f-tipo">Tipo de reparo</label>
@@ -317,6 +319,61 @@ var TECNICOS = [];
 var listaAberta = null;
 var indiceAtivo = -1;
 
+/* A lista de parques sai da planilha do RDO. É a mesma grafia dos dois lados,
+   então o Status RDO acha o relatório sem depender de digitação. */
+function carregarParques(){
+  return chamar('rdoFiltros', {})
+    .then(function(res){
+      if(!res || !res.ok) return;
+      PARQUES_RDO = res.parques || [];
+      var dl = document.getElementById('parquesRDO');
+      dl.innerHTML = '';
+      PARQUES_RDO.forEach(function(nome){
+        var o = document.createElement('option');
+        o.value = nome;
+        dl.appendChild(o);
+      });
+    })
+    .catch(function(){ /* sem lista, o campo continua aceitando texto livre */ });
+}
+var PARQUES_RDO = [];
+
+function parqueExisteNoRDO(nome){
+  if(!PARQUES_RDO.length) return true;          // lista não carregou: não julga
+  var alvo = nome.trim().toLowerCase();
+  return PARQUES_RDO.some(function(x){ return x.toLowerCase() === alvo; });
+}
+
+/* O número no fim do parque é a equipe. Em vez de pedir para digitar de novo
+   (e correr o risco de divergir do que está no RDO), ele é copiado dali. */
+function preencherEquipeDoParque(nomeParque){
+  var campo = document.getElementById('f-equipe');
+  var m = String(nomeParque || '').trim().match(/(\d{1,3})$/);
+  campo.value = m ? m[1] : '';
+}
+
+/* Avisa enquanto digita. É aqui que a pessoa ainda pode corrigir sem esforço. */
+function ligarConfereParque(){
+  var campo = document.getElementById('f-parque');
+  var dica = document.getElementById('d-parque');
+  var padrao = 'A lista vem da própria planilha do RDO. Escolher nela garante que o relatório será encontrado.';
+
+  campo.addEventListener('input', function(){
+    var v = campo.value.trim();
+    if(!v || parqueExisteNoRDO(v)){
+      document.getElementById('c-parque').classList.remove('erro');
+      dica.textContent = padrao;
+      dica.style.color = '';
+    }else{
+      document.getElementById('c-parque').classList.add('erro');
+      dica.textContent = 'Este parque não aparece em nenhum RDO. Confira a grafia — ' +
+                         'ou siga, se for um parque novo.';
+      dica.style.color = 'var(--alerta)';
+    }
+    preencherEquipeDoParque(v);
+  });
+}
+
 function carregarTecnicos(){
   return chamar('tecnicosLista', {})
     .then(function(res){
@@ -416,8 +473,11 @@ function abrirJanela(id){
   avisoJanela('');
 
   document.getElementById('f-parque').value  = p ? (p.parque || '') : '';
+  document.getElementById('c-parque').classList.remove('erro');
+  document.getElementById('d-parque').style.color = '';
   document.getElementById('f-cliente').value = p ? (p.cliente || '') : '';
   document.getElementById('f-equipe').value  = p ? (p.equipe || '') : '';
+  if(!p) preencherEquipeDoParque('');
   document.getElementById('f-tipo').value    = p ? (p.tipoReparo || '') : '';
   document.getElementById('f-inicio').value  = p ? (p.inicio || '') : hojeISO();
   document.getElementById('f-status').value  = p ? (p.status || 'andamento') : 'andamento';
@@ -479,8 +539,12 @@ document.getElementById('form').addEventListener('submit', function(e){
 
   var parar = false;
   marcarErro('c-parque','d-parque', parque ? '' : 'Informe o nome do parque.'); parar = parar || !parque;
+
+  var parqueDesconhecido = parque && !parqueExisteNoRDO(parque);
   marcarErro('c-cliente','d-cliente', cliente ? '' : 'Informe o cliente.');     parar = parar || !cliente;
-  marcarErro('c-equipe','d-equipe', equipe ? '' : 'Informe o número da equipe.'); parar = parar || !equipe;
+  // Equipe deixou de ser obrigatória: ela já vem no nome do parque
+  // ("SANTO AGOSTINHO 1"), e exigir de novo só criava chance de divergir.
+  marcarErro('c-equipe','d-equipe', '');
   marcarErro('c-tipo','d-tipo', tipo ? '' : 'Informe o tipo de reparo.');       parar = parar || !tipo;
 
   var tecnicos = [];
@@ -526,6 +590,12 @@ document.getElementById('form').addEventListener('submit', function(e){
   enviar([alvo], []);
   fecharJanela();
   desenhar();
+
+  // Depois de fechar a janela, senão o aviso apareceria e sumiria junto com ela.
+  if(parqueDesconhecido){
+    recado('"' + parque + '" não aparece em nenhum RDO. Se o parque é novo, tudo bem — ' +
+           'senão, corrija a grafia, ou ele vai constar como sem relatório para sempre.', 'erro');
+  }
 });
 
 document.getElementById('btExcluir').addEventListener('click', function(){
@@ -589,7 +659,7 @@ if(iniciarModulo()){
   carregar(true)
     .then(function(){
       desbloquear();
-      if(podeEditar) carregarTecnicos();
+      if(podeEditar){ carregarTecnicos(); carregarParques(); ligarConfereParque(); }
       if(!podeEditar){
         avisoTopo('Seu perfil acompanha os projetos, mas não altera. Criar e editar é do supervisor.', 'info');
       }

@@ -41,12 +41,25 @@
   .cob-acao{flex:none}
 
   .rdo{
-    border-left:4px solid var(--azul);cursor:pointer;display:flex;flex-direction:column;gap:8px;
+    border-left:5px solid var(--c,var(--azul));cursor:pointer;display:flex;flex-direction:column;gap:9px;
     transition:transform .15s ease,box-shadow .15s ease;
   }
+  .rdo-cliente-tag{
+    display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--c,var(--azul));
+  }
+  .rdo-avanco{display:flex;align-items:center;gap:9px;margin-top:1px}
+  .rdo-barra{
+    flex:1;height:6px;border-radius:6px;background:var(--linha);overflow:hidden;
+  }
+  .rdo-barra span{display:block;height:100%;background:var(--c,var(--azul));border-radius:6px}
+  .rdo-pct{font-size:.76rem;font-weight:800;color:var(--c,var(--azul));min-width:38px;text-align:right}
+  .legenda{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;font-size:.78rem;color:var(--muted)}
+  .legenda span{display:inline-flex;align-items:center;gap:6px}
+  .legenda i{width:11px;height:11px;border-radius:3px;display:inline-block}
   .rdo:hover{transform:translateY(-3px);box-shadow:var(--sombra-alta)}
   .rdo:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
-  .rdo.sem-link{cursor:default;border-left-color:var(--faint);opacity:.75}
+  .rdo.sem-link{cursor:default;opacity:.72}
   .rdo.sem-link:hover{transform:none;box-shadow:var(--sombra)}
   .rdo-parque{font-size:1.02rem;font-weight:700;line-height:1.25}
   .rdo-cliente{font-size:.84rem;color:var(--muted)}
@@ -119,6 +132,44 @@
    Sábado e domingo entram como "não obrigatório": o relatório pode existir,
    mas a ausência não é cobrada.
    ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   COR POR CLIENTE
+   Os nomes conhecidos têm cor fixa. Cliente novo recebe uma cor da paleta de
+   forma estável — o mesmo nome cai sempre na mesma cor, sem precisar cadastrar.
+   Para fixar um cliente numa cor específica, acrescente em CORES_CLIENTE.
+   --------------------------------------------------------------------------- */
+var CORES_CLIENTE = {
+  'siemens':  '#00b0a0',
+  'ge':       '#6a5acd',
+  'nordex':   '#e0702a',
+  'vestas':   '#2b7fd0',
+  'wobben':   '#c0392b',
+  'enercon':  '#c0392b',
+  'goldwind': '#1f9d55',
+  'weg':      '#0f6fb5'
+};
+var PALETA = ['#2b7fd0','#00b0a0','#e0702a','#6a5acd','#c0392b','#1f9d55',
+              '#b5179e','#0f6fb5','#c26a12','#3f7d20'];
+
+function corDoCliente(nome){
+  var chave = String(nome || '').trim().toLowerCase();
+  if(!chave) return 'var(--faint)';
+  if(CORES_CLIENTE[chave]) return CORES_CLIENTE[chave];
+  for(var k in CORES_CLIENTE){
+    if(chave.indexOf(k) > -1) return CORES_CLIENTE[k];   // "SIEMENS GAMESA"
+  }
+  var soma = 0;
+  for(var i = 0; i < chave.length; i++) soma = (soma * 31 + chave.charCodeAt(i)) % 100000;
+  return PALETA[soma % PALETA.length];
+}
+
+/* Só o número, para desenhar a barra. "60%" -> 60 */
+function numeroDoAvanco(txt){
+  var m = String(txt || '').match(/(\d{1,3})/);
+  if(!m) return null;
+  return Math.max(0, Math.min(100, Number(m[1])));
+}
 
 function avisoTopo(txt, tipo){
   var el = document.getElementById('avisoTopo');
@@ -196,6 +247,7 @@ function desenhar(res){
     res.projetos.slice().sort(function(a,b){
       return (ordem[a.estado] - ordem[b.estado]) || String(a.parque).localeCompare(String(b.parque));
     }).forEach(function(p){
+      // a barra lateral segue o estado; a cor do cliente fica na etiqueta
       var cor = p.estado === 'ENVIADO' ? 'var(--ok)'
               : p.estado === 'FALTA'   ? 'var(--erro)' : 'var(--alerta)';
       var rot = p.estado === 'ENVIADO' ? 'Enviado'
@@ -208,7 +260,8 @@ function desenhar(res){
           '<div class="cob-parque">' + esc(p.parque) + '</div>' +
           '<div class="cob-meta">' +
             esc(p.cliente || 'sem cliente') + ' · Equipe ' + esc(p.equipe || '—') +
-            (p.autor ? ' · ' + esc(p.autor) : '') +
+            (p.autor ? ' · enviado por ' + esc(p.autor) : '') +
+            (p.avanco ? ' · avanço ' + esc(p.avanco) : '') +
           '</div>' +
         '</div>' +
         '<span class="etiqueta ' + cls + '">' + rot + '</span>' +
@@ -224,6 +277,18 @@ function desenhar(res){
 
   html += '<h2 class="secao-tit">Relatórios encontrados (' + res.total + ')</h2>';
   html += '<p class="secao-sub">Clique no card para abrir o PDF.</p>';
+  // legenda das cores fica FORA da grade: dentro dela ocupava uma célula
+  // e empurrava o primeiro card para a segunda coluna
+  var clientes = [];
+  res.relatorios.forEach(function(r){
+    if(r.cliente && clientes.indexOf(r.cliente) === -1) clientes.push(r.cliente);
+  });
+  if(clientes.length > 1){
+    html += '<div class="legenda">' + clientes.sort().map(function(c){
+      return '<span><i style="background:' + corDoCliente(c) + '"></i>' + esc(c) + '</span>';
+    }).join('') + '</div>';
+  }
+
   html += '<div class="grade" id="listaRdo">';
 
   if(!res.relatorios.length){
@@ -231,18 +296,31 @@ function desenhar(res){
   }else{
     res.relatorios.forEach(function(r){
       var temLink = !!r.link;
-      html += '<div class="cartao rdo' + (temLink ? '' : ' sem-link') + '"' +
+      var cor = corDoCliente(r.cliente);
+      var pct = numeroDoAvanco(r.avanco);
+      var finalizado = String(r.fim).toUpperCase().indexOf('SIM') === 0;
+
+      html += '<div class="cartao rdo' + (temLink ? '' : ' sem-link') + '" style="--c:' + cor + '"' +
               (temLink ? ' tabindex="0" role="button" data-link="' + esc(r.link) + '"' : '') + '>' +
         '<div>' +
           '<div class="rdo-parque">' + esc(r.parque || '(sem parque)') + '</div>' +
-          '<div class="rdo-cliente">' + esc(r.cliente || '') + '</div>' +
+          '<div class="rdo-cliente-tag">' + esc(r.cliente || 'sem cliente') + '</div>' +
         '</div>' +
         '<div class="rdo-linha">' +
           '<span class="etiqueta">' + esc(dataBonita(r.data)) + '</span>' +
-          (r.equipe ? '<span class="etiqueta">Equipe ' + esc(r.equipe) + '</span>' : '') +
           (r.turbina ? '<span class="etiqueta etiqueta--azul">' + esc(r.turbina) + '</span>' : '') +
+          (r.blade ? '<span class="etiqueta">Pá ' + esc(r.blade) + '</span>' : '') +
+          (finalizado ? '<span class="etiqueta etiqueta--ok">Finalizado</span>' : '') +
         '</div>' +
-        (r.autor ? '<div class="rdo-cliente">' + esc(r.autor) + '</div>' : '') +
+        (r.tipo ? '<div class="rdo-cliente">' + esc(r.tipo) + '</div>' : '') +
+        (r.avanco
+          ? '<div class="rdo-avanco">' +
+              (pct === null ? '' : '<span class="rdo-barra"><span style="width:' + pct + '%"></span></span>') +
+              '<span class="rdo-pct">' + esc(r.avanco) + '</span>' +
+            '</div>'
+          : '') +
+        ((r.autorNome || r.autor)
+          ? '<div class="rdo-cliente">Enviado por ' + esc(r.autorNome || r.autor) + '</div>' : '') +
         (temLink
           ? '<div class="rdo-abrir">Abrir PDF ' +
             '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></div>'

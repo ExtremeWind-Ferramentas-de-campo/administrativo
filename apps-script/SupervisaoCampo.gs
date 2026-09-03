@@ -72,8 +72,13 @@ const COLUNAS_RDO = {
   link:    ['link_pdf', 'linkpdf', 'link', 'pdf', 'url_pdf', 'arquivo', 'link_relatorio'],
   tipo:    ['tipo_reparo', 'tiporeparo', 'tipo_de_reparo', 'tipo'],
   equipe:  ['equipe', 'numero_equipe', 'n_equipe', 'num_equipe', 'time'],
-  autor:   ['responsavel', 'tecnico', 'supervisor', 'criado_por', 'usuario', 'nome'],
-  turbina: ['turbina', 'aerogerador', 'wtg', 'maquina', 'torre']
+  autor:   ['matricula_login', 'responsavel', 'tecnico', 'supervisor', 'criado_por', 'usuario'],
+  equipes: ['matriculas', 'equipe_matriculas'],
+  turbina: ['turbina', 'aerogerador', 'wtg', 'maquina', 'torre'],
+  blade:   ['blade', 'pa', 'pá'],
+  local:   ['local'],
+  avanco:  ['avanco_reparo', 'avanco', 'progresso'],
+  fim:     ['reparo_finalizado', 'finalizado']
 };
 
 const ABA_PROJ_CARDS = 'PROJ_CARDS';
@@ -116,12 +121,8 @@ function verConfiguracao() {
     });
     txt += '\n  Cabeçalho completo: ' + d.cabecalho.filter(String).join(' | ') + '\n';
 
-    const amostra = amostraParques_(10);
-    txt += '\n  Separação de parque e equipe (confira):\n';
-    amostra.forEach(function (a) {
-      txt += '    "' + a.bruto + '"  ->  parque "' + a.parque +
-             '" / equipe "' + (a.equipe || '(nenhuma)') + '"\n';
-    });
+    txt += '\n  Parques encontrados (usados como chave do casamento):\n';
+    amostraParques_(15).forEach(function (nome) { txt += '    ' + nome + '\n'; });
   } catch (e) {
     txt += 'RDO: ERRO — ' + e.message + '\n';
   }
@@ -239,69 +240,7 @@ function abaRDO_() {
   return aba;
 }
 
-/* ---------------------------------------------------------------------------
-   PARQUE E EQUIPE VÊM NA MESMA CÉLULA
-
-   Na planilha do RDO a coluna Parque traz o nome do parque e o número da
-   equipe juntos. Aqui eles são separados para a cobrança poder casar projeto
-   com relatório por parque E equipe — o que importa quando duas equipes
-   trabalham no mesmo parque e cada uma tem seu próprio RDO.
-
-   Confira como está separando em: Portal > Conferir colunas do RDO.
-   Se o formato for outro, acrescente o padrão em PADROES_EQUIPE.
-   --------------------------------------------------------------------------- */
-const PADROES_EQUIPE = [
-  /^(.*?)[\s\-–—\/|,]+(?:eq|equipe|time|turma)\s*[:.#º°]?\s*(\d{1,3})$/i,  // "Nome - Equipe 07"
-  /^(.*?)\s*[\(\[]\s*(?:eq|equipe|time)?\s*(\d{1,3})\s*[\)\]]$/i,        // "Nome (07)"
-  /^(.*?)[\s\-–—\/|,]+(?:eq|equipe|time)?\s*[:.#º°]?\s*(\d{1,3})$/i,       // "Nome - 07" / "Nome 07"
-  /^(?:eq|equipe|time)\s*[:.#º°]?\s*(\d{1,3})[\s\-–—\/|,]+(.*)$/i          // "Equipe 07 - Nome"
-];
-
-function separarParqueEquipe_(texto) {
-  const bruto = String(texto == null ? '' : texto).trim().replace(/\s+/g, ' ');
-  if (!bruto) return { parque: '', equipe: '', bruto: bruto };
-
-  for (let i = 0; i < PADROES_EQUIPE.length; i++) {
-    const m = bruto.match(PADROES_EQUIPE[i]);
-    if (!m) continue;
-    // o último padrão vem invertido: número primeiro, nome depois
-    const invertido = (i === PADROES_EQUIPE.length - 1);
-    const nome = (invertido ? m[2] : m[1]).trim().replace(/[\-–—\/|,]+$/, '').trim();
-    const num  = (invertido ? m[1] : m[2]).trim();
-    if (nome.length < 3) continue;
-
-    // Quando não há a palavra "equipe" nem parêntese, só o número solto no fim,
-    // a forma é a mesma de um nome que termina em número ("Parque 3"). O
-    // desempate é o tamanho: nome de parque costuma ter duas ou mais palavras.
-    const semPista = (i === 2) && !/(eq|equipe|time)/i.test(bruto);
-    if (semPista && nome.split(' ').length < 2) continue;
-
-    return { parque: nome, equipe: String(Number(num)), bruto: bruto };
-  }
-  return { parque: bruto, equipe: '', bruto: bruto };
-}
-
-/** Descobre em que coluna está cada campo. -1 quando não achou. */
-function detectarColunas_(cabecalho) {
-  const norm = cabecalho.map(normalizarCab_);
-  const mapa = {};
-  Object.keys(COLUNAS_RDO).forEach(function (campo) {
-    mapa[campo] = -1;
-    for (let i = 0; i < COLUNAS_RDO[campo].length; i++) {
-      const idx = norm.indexOf(COLUNAS_RDO[campo][i]);
-      if (idx > -1) { mapa[campo] = idx; return; }
-    }
-    // segunda tentativa: cabeçalho que contém o apelido (ex.: "data_exp_final")
-    for (let i = 0; i < COLUNAS_RDO[campo].length; i++) {
-      const alvo = COLUNAS_RDO[campo][i];
-      const idx = norm.findIndex(function (c) { return c.indexOf(alvo) > -1; });
-      if (idx > -1) { mapa[campo] = idx; return; }
-    }
-  });
-  return mapa;
-}
-
-/** Primeiros valores distintos da coluna Parque, já separados. */
+/** Primeiros valores distintos da coluna Parque. */
 function amostraParques_(quantos) {
   const aba = abaRDO_();
   const ultima = Math.min(aba.getLastRow(), 400);
@@ -312,10 +251,10 @@ function amostraParques_(quantos) {
   const col = aba.getRange(2, mapa.parque + 1, Math.max(0, ultima - 1), 1).getValues();
   const vistos = {}, saida = [];
   for (let i = 0; i < col.length && saida.length < quantos; i++) {
-    const bruto = String(col[i][0] || '').trim();
+    const bruto = String(col[i][0] || '').trim().replace(/\s+/g, ' ');
     if (!bruto || vistos[bruto]) continue;
     vistos[bruto] = true;
-    saida.push(separarParqueEquipe_(bruto));
+    saida.push(bruto);
   }
   return saida;
 }
@@ -362,13 +301,8 @@ function menuColunasRDO() {
   // Como a coluna Parque está sendo dividida em parque + equipe.
   // Confira estas linhas: é daqui que sai o casamento com os projetos.
   try {
-    const amostra = amostraParques_(12);
-    txt += '\n\nSEPARAÇÃO DE PARQUE E EQUIPE (confira):\n';
-    amostra.forEach(function (a) {
-      txt += '  "' + a.bruto + '"\n      parque: "' + a.parque + '"' +
-             '   equipe: "' + (a.equipe || '(nenhuma)') + '"\n';
-    });
-    txt += '\nSe algum estiver errado, ajuste PADROES_EQUIPE no SupervisaoCampo.gs.';
+    txt += '\n\nPARQUES ENCONTRADOS (chave do casamento com os projetos):\n';
+    amostraParques_(15).forEach(function (nome) { txt += '  ' + nome + '\n'; });
   } catch (e) { /* já avisou acima */ }
 
   try {
@@ -386,6 +320,19 @@ function menuColunasRDO() {
 /* ===========================================================================
    LEITURA DO RDO
    =========================================================================== */
+
+/* Avanço pode vir como "60%", como 60 ou como 0,6 (fração formatada em %).
+   Devolve sempre um texto com o símbolo, para o card não ter que adivinhar. */
+function percentual_(exibido, cru) {
+  const e = String(exibido == null ? '' : exibido).trim();
+  if (!e) return '';
+  if (e.indexOf('%') > -1) return e;                 // já vem formatado
+  const n = Number(String(cru).replace(',', '.'));
+  if (!isNaN(n) && String(cru) !== '') {
+    return (n > 0 && n <= 1 ? Math.round(n * 100) : Math.round(n)) + '%';
+  }
+  return e;
+}
 
 function soNumero_(t) {
   const d = String(t == null ? '' : t).replace(/\D/g, '');
@@ -425,31 +372,52 @@ function lerRDO_() {
   }
 
   const aba = abaRDO_();
-  const dados = aba.getDataRange().getValues();
+  const faixa = aba.getDataRange();
+  const dados = faixa.getValues();
   if (dados.length < 2) return [];
+
+  /* Lê também o que a planilha MOSTRA, não só o valor cru.
+     Motivo concreto: uma turbina digitada como "5/5" o Sheets converte em data,
+     e o valor cru volta como "Tue May 05 2026 00:00:00 GMT-0300", que era o que
+     aparecia no card. O texto exibido é o que a pessoa vê na planilha. */
+  const exibido = faixa.getDisplayValues();
+  const txt = function (l, c) {
+    if (c === -1) return '';
+    const v = exibido[l][c];
+    return String(v == null ? '' : v).trim();
+  };
 
   const mapa = detectarColunas_(dados[0]);
   const linhas = [];
   for (let l = 1; l < dados.length; l++) {
     const linha = dados[l];
-    const data = mapa.data > -1 ? dataISO_(linha[mapa.data]) : '';
-    const celulaParque = mapa.parque > -1 ? String(linha[mapa.parque]) : '';
-    if (!data && !celulaParque.trim()) continue;
+    // A data segue pelo valor cru, que é Date de verdade; o resto pelo exibido.
+    const data = mapa.data > -1 ? (dataISO_(linha[mapa.data]) || dataISO_(txt(l, mapa.data))) : '';
+    const celulaParque = txt(l, mapa.parque);
+    if (!data && !celulaParque) continue;
 
-    const pe = separarParqueEquipe_(celulaParque);
-    // coluna própria de equipe, quando existir, manda mais que o texto colado
-    const equipeCol = mapa.equipe > -1 ? String(linha[mapa.equipe]).trim() : '';
+    // A célula inteira é a chave, de propósito. O número no fim ("SANTO
+    // AGOSTINHO 1") é a equipe, mas parque e equipe são tratados juntos como um
+    // rótulo só: separar exigia adivinhar onde termina o nome, o que dava
+    // resultado inconsistente ("OITIS 1" ficava inteiro, "SÃO FERNANDO 1" era
+    // dividido). Mantendo junto, os dois lados usam exatamente o mesmo texto e
+    // cada dupla parque+equipe vira uma linha própria na cobrança — que é o
+    // comportamento desejado.
+    const parque = celulaParque.replace(/\s+/g, ' ');
 
     linhas.push({
       data: data,
-      parque: pe.parque,
-      parqueBruto: pe.bruto,
-      equipe: equipeCol ? String(equipeCol).replace(/\D/g, '') || equipeCol : pe.equipe,
-      cliente: mapa.cliente > -1 ? String(linha[mapa.cliente]).trim() : '',
-      link:    mapa.link    > -1 ? String(linha[mapa.link]).trim()    : '',
-      tipo:    mapa.tipo    > -1 ? String(linha[mapa.tipo]).trim()    : '',
-      autor:   mapa.autor   > -1 ? String(linha[mapa.autor]).trim()   : '',
-      turbina: mapa.turbina > -1 ? String(linha[mapa.turbina]).trim() : ''
+      parque: parque,
+      cliente: txt(l, mapa.cliente),
+      link:    txt(l, mapa.link),
+      tipo:    txt(l, mapa.tipo),
+      autor:   txt(l, mapa.autor),
+      equipes: txt(l, mapa.equipes),
+      turbina: txt(l, mapa.turbina),
+      blade:   txt(l, mapa.blade),
+      local:   txt(l, mapa.local),
+      avanco:  percentual_(txt(l, mapa.avanco), linha[mapa.avanco]),
+      fim:     txt(l, mapa.fim)
     });
   }
 
@@ -497,31 +465,38 @@ function acaoRdoStatus_(p) {
   // ---- cobrança: projetos em andamento x relatórios do dia
   const doDia = linhas.filter(function (r) { return r.data === data; });
 
-  // Duas chaves: com equipe e sem. Quando duas equipes atuam no mesmo parque,
-  // cada uma tem seu RDO — casar só pelo parque marcaria as duas como enviadas.
-  const porParqueEquipe = {}, porParque = {};
+  // O casamento é pelo nome do parque, exatamente como está na planilha do RDO.
+  // Por isso o projeto escolhe o parque de uma lista tirada da própria planilha,
+  // em vez de digitar: assim os dois lados usam a mesma grafia.
+  const porParque = {};
   doDia.forEach(function (r) {
-    porParqueEquipe[chaveTexto_(r.parque) + '#' + soNumero_(r.equipe)] = r;
     if (!porParque[chaveTexto_(r.parque)]) porParque[chaveTexto_(r.parque)] = r;
   });
+
+  // Matrícula do RDO vira nome, usando a MINI MASTER.
+  let nomePorMatricula = {};
+  try {
+    lerTecnicos_().forEach(function (t) { nomePorMatricula[soNumero_(t.matricula)] = t.nome; });
+  } catch (e) { /* sem MINI MASTER, mostra a matrícula mesmo */ }
+  const quemFez = function (r) {
+    if (!r) return '';
+    const n = nomePorMatricula[soNumero_(r.autor)];
+    return n || r.autor || '';
+  };
 
   const projetos = lerProjetos_()
     .filter(function (pr) { return String(pr.status || 'andamento') === 'andamento'; })
     .map(function (pr) {
-      const chaveComEquipe = chaveTexto_(pr.parque) + '#' + soNumero_(pr.equipe);
-      const achado = porParqueEquipe[chaveComEquipe] || porParque[chaveTexto_(pr.parque)] || null;
+      const achado = porParque[chaveTexto_(pr.parque)] || null;
       return {
         id: pr.id, codigo: pr.codigo, parque: pr.parque, cliente: pr.cliente,
         equipe: pr.equipe, tipoReparo: pr.tipoReparo,
         tecnicos: pr.tecnicos || [],
         estado: achado ? 'ENVIADO' : (fds ? 'NAO_OBRIGATORIO' : 'FALTA'),
         link: achado ? achado.link : '',
-        autor: achado ? achado.autor : '',
-        // avisa quando bateu o parque mas não a equipe, para não parecer certo
-        // um RDO que na verdade é de outra equipe no mesmo parque
-        equipeDiferente: !!(achado && soNumero_(pr.equipe) && soNumero_(achado.equipe) &&
-                            soNumero_(pr.equipe) !== soNumero_(achado.equipe)),
-        equipeRDO: achado ? achado.equipe : ''
+        autor: quemFez(achado),
+        avanco: achado ? achado.avanco : '',
+        finalizado: achado ? achado.fim : ''
       };
     });
 
@@ -535,6 +510,7 @@ function acaoRdoStatus_(p) {
     return true;
   }).slice(0, 400);
 
+  relatorios.forEach(function (r) { r.autorNome = quemFez(r); });
   relatorios.sort(function (a, b) { return a.parque.localeCompare(b.parque); });
 
   return {

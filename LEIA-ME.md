@@ -60,17 +60,25 @@ quais projetos em andamento já têm relatório e quais faltam. Filtra por
 Sábado e domingo aparecem como **"não obrigatório"**: o relatório pode existir,
 mas a falta não é cobrada.
 
-### O casamento é por parque e equipe
+### O casamento é pelo nome do parque
 
-A cobrança compara **parque + equipe** do projeto com **parque + equipe** da
-linha do RDO — importa quando duas equipes atuam no mesmo parque e cada uma tem
-seu relatório. A comparação ignora acento e maiúscula, mas não adivinha nome
-diferente: se no RDO está "Serra do Mel III" e no projeto "Serra do Mel 3", vai
-aparecer como falta mesmo tendo relatório. Cadastre o parque exatamente como
-aparece na planilha.
+A cobrança compara o parque do projeto com a coluna `Parque` do RDO, usando a
+célula inteira. No cadastro do projeto o parque **é escolhido de uma lista
+tirada da própria planilha do RDO** — os dois lados usam a mesma grafia, sem
+depender de digitação.
 
-Se bater o parque mas não a equipe, o sistema aceita como enviado e marca que a
-equipe do relatório é outra.
+Se o parque digitado não existir em nenhum RDO, o campo avisa na hora. Não
+bloqueia, porque parque novo ainda não tem relatório nenhum.
+
+**Parque e equipe andam juntos, de propósito.** O número no fim
+("SANTO AGOSTINHO 1") é a equipe, mas o casamento usa a célula inteira como um
+rótulo só. Separar exigia adivinhar onde termina o nome do parque, e o resultado
+saía inconsistente: "OITIS 1" ficava inteiro enquanto "SÃO FERNANDO 1" era
+dividido. Mantendo junto, os dois lados usam exatamente o mesmo texto e cada
+dupla parque+equipe vira uma linha própria na cobrança.
+
+O campo "número da equipe" do projeto **se preenche sozinho** a partir do nome
+do parque escolhido. Só digite se o parque não trouxer número.
 
 ### Endereço das planilhas
 
@@ -105,21 +113,31 @@ interface, a mensagem sai em **Registro de execução** e a função termina nor
 Se o menu **Portal** não aparecer na planilha, abra a planilha pelo Google
 Sheets e recarregue (F5) — o menu só é criado no momento em que ela abre.
 
+### Card do relatório
+
+Mostra: parque (a célula `Parque` inteira, com o número), cliente, `Data_exp`,
+`Turbina`, `Blade`, `Tipo_reparo` e `Avanco_reparo` com barra. "Finalizado"
+aparece quando `Reparo_finalizado` começa com SIM.
+
+A borda e a barra seguem a **cor do cliente**. SIEMENS, GE, NORDEX, VESTAS,
+WOBBEN/ENERCON, GOLDWIND e WEG têm cor fixa em `CORES_CLIENTE`, no topo do
+script de `status-rdo.html`. Cliente novo recebe uma cor estável da paleta
+sozinho — o mesmo nome cai sempre na mesma cor. Para fixar, acrescente a linha
+lá.
+
 ### Colunas da planilha do RDO
 
 Descobertas pelo cabeçalho, comparando com `COLUNAS_RDO` no topo de
 `SupervisaoCampo.gs`. Use **Portal > Conferir colunas do RDO** para ver o que
 foi reconhecido, o cabeçalho real e o que falta.
 
-**Parque e equipe vêm na mesma célula.** O sistema separa o nome do número
-("Serra do Mel III - 07" vira parque "Serra do Mel III" e equipe 7). O mesmo
-diagnóstico mostra como está separando os primeiros valores reais da sua
-planilha — **confira essa parte**, porque é dela que sai a cobrança. Se o
-formato for outro, ajuste `PADROES_EQUIPE`.
+A coluna `Parque` traz nome e equipe juntos ("SANTO AGOSTINHO 1"), e é usada
+inteira como chave.
 
-Um caso não tem como adivinhar: parque cujo nome termina em número, de uma
-palavra só ("Parque 3"). Aí o número é tratado como parte do nome. Com duas ou
-mais palavras antes ("Umburanas II 12"), é tratado como equipe.
+Colunas usadas hoje: `Data_exp`, `Parque`, `Cliente`, `Link_PDF`,
+`Tipo_reparo`, `Turbina`, `Blade`, `Avanco_reparo`, `Reparo_finalizado` e
+`Matricula_login` — esta última vira o nome de quem enviou, cruzando com a
+MINI MASTER.
 
 ### Técnicos
 
@@ -130,6 +148,20 @@ trocada. Nome sem escolha na lista não salva.
 
 A lista fica em cache por 10 minutos: técnico novo na MINI MASTER aparece nesse
 prazo.
+
+### Sessão
+
+Dura **12 horas** e se renova a cada uso. Fica gravada na aba `SESSOES`, com o
+token em hash — quem abrir a planilha não consegue se passar por ninguém.
+
+Antes ficava só no `CacheService`, e era isso que derrubava a sessão pouco depois
+de entrar: o Google descarta entradas de cache quando quer, e **toda nova
+implantação do App da Web limpa tudo**. O cache continua na frente como atalho,
+mas quem manda é a aba.
+
+"Sair" apaga a linha da aba, então o token deixa de valer na hora.
+
+Rode `limparExpirados()` de vez em quando para remover as sessões vencidas.
 
 ### Perfis
 

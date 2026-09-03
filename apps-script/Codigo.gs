@@ -40,11 +40,14 @@
 const ABA_USUARIOS    = 'USUARIOS';
 const ABA_RECUPERACAO = 'RECUPERACAO';
 const ABA_LOG         = 'LOG';
+const ABA_SESSOES     = 'SESSOES';
+const COLUNAS_SESSOES = ['token_hash', 'matricula', 'criado_em', 'expira_em', 'ultimo_uso'];
 
 const MAX_TENTATIVAS   = 5;
 const BLOQUEIO_MINUTOS = 15;
 const CODIGO_MINUTOS   = 30;   // validade do código de confirmação
-const SESSAO_HORAS     = 8;
+const SESSAO_HORAS     = 12;   // duração da sessão; renova a cada uso
+const CACHE_SESSAO_SEG = 21600; // 6 h — teto do CacheService, não adianta pedir mais
 
 const NOME_SISTEMA = 'Portal Administrativo — Extreme Wind';
 
@@ -226,6 +229,7 @@ function configurarPlanilha() {
   criarAba_(ss, ABA_USUARIOS,    COLUNAS_USUARIOS);
   criarAba_(ss, ABA_RECUPERACAO, COLUNAS_RECUPERACAO);
   criarAba_(ss, ABA_LOG,         COLUNAS_LOG);
+  criarAba_(ss, ABA_SESSOES,     COLUNAS_SESSOES);
 
   // Protege as colunas sensíveis contra edição manual acidental
   const aba = ss.getSheetByName(ABA_USUARIOS);
@@ -369,6 +373,7 @@ function doPost(e) {
       case 'confirmarTroca': resposta = acaoConfirmarTroca_(corpo); break;
       case 'salvarPerfil':   resposta = acaoSalvarPerfil_(corpo);   break;
       case 'sessao':         resposta = acaoSessao_(corpo);         break;
+      case 'sair':           resposta = acaoSair_(corpo);           break;
 
       // Módulo de materiais — implementado em Materiais.gs
       case 'materiaisCarregar':      resposta = acaoMateriaisCarregar_(corpo);      break;
@@ -644,15 +649,95 @@ function acaoSalvarPerfil_(p) {
    SESSÃO
    =========================================================================== */
 
+/* ---------------------------------------------------------------------------
+   ONDE A SESSÃO FICA GUARDADA
+
+   Numa aba da planilha, não só no cache.
+
+   O CacheService é volátil: o Google descarta entradas quando quiser, e toda
+   nova implantação do App da Web limpa tudo. Era isso que derrubava a sessão
+   pouco depois de entrar. Além disso o teto do cache é 6 horas — pedir 8 não
+   fazia diferença nenhuma.
+
+   O cache continua na frente, como atalho, para não ler a planilha a cada
+   requisição. Quem manda é a aba SESSOES.
+
+   Na aba fica o HASH do token, nunca o token em si: quem abrir a planilha não
+   consegue se passar por ninguém.
+   --------------------------------------------------------------------------- */
+
+function abaSessoes_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let aba = ss.getSheetByName(ABA_SESSOES);
+  if (!aba) {
+    aba = criarAba_(ss, ABA_SESSOES, COLUNAS_SESSOES);   // cria na primeira vez
+  }
+  return aba;
+}
+
 function abrirSessao_(matricula) {
   const token = Utilities.getUuid() + '.' + gerarAleatorio_(16);
-  CacheService.getScriptCache().put('sessao_' + token, matricula, SESSAO_HORAS * 3600);
+  const agora = new Date();
+  const expira = new Date(agora.getTime() + SESSAO_HORAS * 3600 * 1000);
+
+  abaSessoes_().appendRow([hash_(token, 'sessao'), String(matricula), agora, expira, agora]);
+  CacheService.getScriptCache().put('sessao_' + token, String(matricula), CACHE_SESSAO_SEG);
   return token;
 }
 
-/** Renova a validade da sessão a cada uso, para ninguém ser deslogado no meio do trabalho. */
-function renovarSessao_(token, matricula) {
-  CacheService.getScriptCache().put('sessao_' + String(token), matricula, SESSAO_HORAS * 3600);
+function validarSessao_(token) {
+  if (!token) return null;
+  const chave = 'sessao_' + String(token);
+
+  const doCache = CacheService.getScriptCache().get(chave);
+  if (doCache) return doCache;
+
+  // Cache vazio não quer dizer sessão morta: confere na planilha.
+  const alvo = hash_(String(token), 'sessao');
+  const aba = abaSessoes_();
+  const dados = aba.getDataRange().getValues();
+
+  for (let l = 1; l < dados.length; l++) {
+    if (String(dados[l][0]) !== alvo) continue;
+    const expira = dados[l][3] ? new Date(dados[l][3]) : null;
+    if (!expira || expira < new Date()) return null;      // venceu de verdade
+
+    const matricula = String(dados[l][1]);
+    renovarSessao_(aba, l + 1, token, matricula, expira);
+    return matricula;
+  }
+  return null;
+}
+
+/**
+ * Estende a sessão enquanto a pessoa está usando.
+ * Só grava na planilha quando falta menos de 2 h para vencer — sem isso seria
+ * uma escrita a cada clique, e o quadro consulta o servidor a cada 8 segundos.
+ */
+function renovarSessao_(aba, linha, token, matricula, expiraAtual) {
+  CacheService.getScriptCache().put('sessao_' + String(token), String(matricula), CACHE_SESSAO_SEG);
+
+  const agora = new Date();
+  const faltam = expiraAtual.getTime() - agora.getTime();
+  if (faltam > 2 * 3600 * 1000) return;
+
+  aba.getRange(linha, 4, 1, 2).setValues([[
+    new Date(agora.getTime() + SESSAO_HORAS * 3600 * 1000), agora
+  ]]);
+}
+
+/** Encerra a sessão de verdade, no clique em Sair. */
+function acaoSair_(p) {
+  if (!p.token) return { ok: true };
+  CacheService.getScriptCache().remove('sessao_' + String(p.token));
+
+  const alvo = hash_(String(p.token), 'sessao');
+  const aba = abaSessoes_();
+  const dados = aba.getDataRange().getValues();
+  for (let l = dados.length - 1; l >= 1; l--) {
+    if (String(dados[l][0]) === alvo) { aba.deleteRow(l + 1); break; }
+  }
+  return { ok: true };
 }
 
 function validarSessao_(token) {
@@ -875,6 +960,15 @@ function limparExpirados() {
   }
   apagarLinhas_(abaRec, linhasRec);
 
+  // Sessões vencidas
+  const abaSes = abaSessoes_();
+  const ses = abaSes.getDataRange().getValues();
+  const linhasSes = [];
+  for (let i = 1; i < ses.length; i++) {
+    if (ses[i][3] && new Date(ses[i][3]) < new Date()) linhasSes.push(i + 1);
+  }
+  apagarLinhas_(abaSes, linhasSes);
+
   // LOG: prazo diferente conforme o tipo do registro
   const abaLog = ss.getSheetByName(ABA_LOG);
   const log = abaLog.getDataRange().getValues();
@@ -891,7 +985,8 @@ function limparExpirados() {
   }
   apagarLinhas_(abaLog, linhasLog);
 
-  Logger.log('Removidas ' + linhasRec.length + ' recuperações e ' +
+  Logger.log('Removidas ' + linhasRec.length + ' recuperações, ' +
+             linhasSes.length + ' sessões vencidas e ' +
              linhasLog.length + ' linhas de log.');
 }
 
