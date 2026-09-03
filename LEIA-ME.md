@@ -5,6 +5,7 @@
 ```
 portal/
 ├── index.html                          tela de login + menu
+├── assets/base.css, base.js            estilo e funções comuns dos módulos
 ├── logo-ew.png / icon-192.png          marca
 ├── config/
 │   ├── config.js                       MODO_DEMO, API_URL e campos do perfil
@@ -14,7 +15,8 @@ portal/
 │   └── _MODELO.html                    modelo em branco para módulos novos
 └── apps-script/
     ├── Codigo.gs                       login, senha, perfil
-    └── Materiais.gs                    dados do quadro de materiais
+    ├── Materiais.gs                    dados do quadro de materiais
+    └── SupervisaoCampo.gs              projetos e leitura do RDO
 ```
 
 ---
@@ -40,6 +42,103 @@ traço. No primeiro login o sistema obriga a criar uma senha pessoal.
 
 As senhas do modo demonstração do site (`Torre2026`, por exemplo) só existiam no
 navegador. No servidor elas não valem.
+
+---
+
+## Supervisão de Campo
+
+Duas telas dentro do módulo:
+
+**Projetos em Andamento** — parque, cliente, número da equipe, tipo de reparo e
+a lista de técnicos. Cria e edita: **SUPERVISOR**. ADMIN e DIRETORIA apenas
+visualizam — e a recusa é feita no Apps Script, não só escondendo o botão.
+
+**Status RDO** — só leitura da planilha do RDO. Mostra, para a data escolhida,
+quais projetos em andamento já têm relatório e quais faltam. Filtra por
+`Data_exp`, cliente e parque. Clicar no card abre o `Link_PDF`.
+
+Sábado e domingo aparecem como **"não obrigatório"**: o relatório pode existir,
+mas a falta não é cobrada.
+
+### O casamento é por parque e equipe
+
+A cobrança compara **parque + equipe** do projeto com **parque + equipe** da
+linha do RDO — importa quando duas equipes atuam no mesmo parque e cada uma tem
+seu relatório. A comparação ignora acento e maiúscula, mas não adivinha nome
+diferente: se no RDO está "Serra do Mel III" e no projeto "Serra do Mel 3", vai
+aparecer como falta mesmo tendo relatório. Cadastre o parque exatamente como
+aparece na planilha.
+
+Se bater o parque mas não a equipe, o sistema aceita como enviado e marca que a
+equipe do relatório é outra.
+
+### Endereço das planilhas
+
+Os IDs do RDO e da MINI MASTER ficam nas **Propriedades do Script**, não no
+código. O código vai para o GitHub; as propriedades não.
+
+**No editor do Apps Script:** ícone de engrenagem (Configurações do projeto,
+na barra da esquerda) > Propriedades do script > Adicionar propriedade.
+
+| Propriedade | Valor |
+|---|---|
+| `ID_RDO` | link ou ID da planilha do banco de dados do RDO |
+| `ABA_RDO` | nome da aba dos relatórios (ex.: `Relatorios`) |
+| `ID_MINIMASTER` | link ou ID da planilha MINI MASTER |
+| `ABA_MINIMASTER` | nome da aba dos técnicos (deixe vazio para a primeira aba) |
+
+Pode colar o link inteiro do navegador — o ID é extraído sozinho.
+
+Quem prefere não mexer nas propriedades pode usar **Portal > Configurar
+planilhas**, no menu da planilha, que faz o mesmo por perguntas.
+
+Depois, rode **`verConfiguracao()`** pelo botão Executar: mostra o que está
+gravado, se consegue ler as duas planilhas, quantos técnicos achou e como
+parque e equipe estão sendo separados. O resultado sai em Registro de execução.
+
+### "Cannot call SpreadsheetApp.getUi() from this context"
+
+Esse erro aparece quando a função é executada com o editor aberto fora da
+planilha. As funções de instalação não dependem mais de tela: quando não há
+interface, a mensagem sai em **Registro de execução** e a função termina normal.
+
+Se o menu **Portal** não aparecer na planilha, abra a planilha pelo Google
+Sheets e recarregue (F5) — o menu só é criado no momento em que ela abre.
+
+### Colunas da planilha do RDO
+
+Descobertas pelo cabeçalho, comparando com `COLUNAS_RDO` no topo de
+`SupervisaoCampo.gs`. Use **Portal > Conferir colunas do RDO** para ver o que
+foi reconhecido, o cabeçalho real e o que falta.
+
+**Parque e equipe vêm na mesma célula.** O sistema separa o nome do número
+("Serra do Mel III - 07" vira parque "Serra do Mel III" e equipe 7). O mesmo
+diagnóstico mostra como está separando os primeiros valores reais da sua
+planilha — **confira essa parte**, porque é dela que sai a cobrança. Se o
+formato for outro, ajuste `PADROES_EQUIPE`.
+
+Um caso não tem como adivinhar: parque cujo nome termina em número, de uma
+palavra só ("Parque 3"). Aí o número é tratado como parte do nome. Com duas ou
+mais palavras antes ("Umburanas II 12"), é tratado como equipe.
+
+### Técnicos
+
+Os nomes vêm da planilha **MINI MASTER**: coluna A é a matrícula, coluna B é o
+nome. No projeto, o supervisor digita o nome, a lista filtra e ele escolhe — a
+matrícula vem junto e não é digitada. Assim não nasce técnico com matrícula
+trocada. Nome sem escolha na lista não salva.
+
+A lista fica em cache por 10 minutos: técnico novo na MINI MASTER aparece nesse
+prazo.
+
+### Perfis
+
+- **ADMIN** — setor administrativo. Cadastra pessoas e usa os módulos. Em
+  Projetos em Andamento, **só visualiza**.
+- **SUPERVISOR** — cria e edita os projetos em andamento.
+- **DIRETORIA** — acompanha tudo, sem alterar projetos.
+
+Quem enxerga cada módulo é definido por `perfis` em `config/modulos.js`.
 
 ---
 
@@ -211,3 +310,30 @@ Script, que começa a estourar acima disso.
 
 Rode `limparAnexosOrfaos()` de vez em quando: ela manda para a lixeira arquivos
 que nenhum card referencia mais.
+
+---
+
+## Manutenção da planilha
+
+Duas funções, nenhuma urgente. O ideal é criar um acionador mensal para cada
+(no editor do Apps Script: ícone do relógio > Adicionar acionador > Timer mensal).
+
+- **`limparExpirados()`** — no `Codigo.gs`. Apaga códigos de recuperação com mais
+  de 7 dias e faz a faxina da aba `LOG`.
+- **`limparAnexosOrfaos()`** — no `Materiais.gs`. Manda para a lixeira do Drive
+  arquivos que nenhum card usa mais.
+
+### Prazos do LOG
+
+São dois, definidos no topo do `Codigo.gs`:
+
+- `DIAS_LOG_SEGURANCA = 180` — login, troca de senha, reset, cadastro, erro.
+  Volume baixíssimo (umas 40 linhas por dia numa equipe de 20). É o que você
+  consulta se precisar entender um acesso indevido, e esse tipo de coisa
+  aparece semanas depois.
+- `DIAS_LOG_OPERACAO = 15` — anexos enviados e baixados. Volume alto, utilidade
+  curta.
+
+Salvar no quadro **não** gera linha de log: a própria aba `MAT_CARDS` já guarda
+`atualizado_por` e `atualizado_em` de cada solicitação. Só conflito e exclusão
+são registrados.

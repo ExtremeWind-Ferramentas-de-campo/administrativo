@@ -48,6 +48,26 @@ const SESSAO_HORAS     = 8;
 
 const NOME_SISTEMA = 'Portal Administrativo — Extreme Wind';
 
+/* Quanto tempo cada tipo de registro fica na aba LOG.
+
+   São dois prazos porque as duas coisas têm valor bem diferente:
+
+   - SEGURANÇA (quem entrou, quem errou a senha, quem trocou, quem foi
+     cadastrado). Volume minúsculo — umas 40 linhas por dia numa equipe de 20.
+     É o que você vai querer olhar se um dia precisar entender um acesso
+     indevido, e esse tipo de coisa costuma aparecer semanas depois.
+
+   - OPERAÇÃO (anexos baixados, arquivos enviados). Volume alto e utilidade
+     curta: serve para investigar um problema desta semana, não do semestre
+     passado. */
+const DIAS_LOG_SEGURANCA = 180;
+const DIAS_LOG_OPERACAO  = 15;
+
+const ACOES_SEGURANCA = [
+  'LOGIN', 'DEFINIR_SENHA', 'SOLICITAR_TROCA', 'CONFIRMAR_TROCA',
+  'RESET_ADMIN', 'CADASTRO', 'SALVAR_PERFIL', 'ERRO'
+];
+
 const COLUNAS_USUARIOS = [
   'matricula','nome','cpf','email','setor','cargo','perfil',
   'admissao','nascimento','telefone','emergencia',
@@ -75,6 +95,23 @@ const EDITAVEL_ADMIN = ['nome','setor','cargo','admissao','email','telefone','na
 const PREENCHIVEL_UMA_VEZ = ['nome','setor','cargo'];
 
 
+/**
+ * Mostra um aviso na tela quando há tela, e no registro de execução quando não há.
+ *
+ * O Apps Script só oferece interface quando o script roda a partir da planilha
+ * aberta. Rodando pelo editor em outra aba, ou por acionador, getUi() estoura
+ * "Cannot call SpreadsheetApp.getUi() from this context" — e uma função de
+ * instalação não pode falhar por causa da mensagem final.
+ */
+function avisar_(texto) {
+  try {
+    SpreadsheetApp.getUi().alert(texto);
+  } catch (e) {
+    Logger.log('\n' + texto + '\n');
+  }
+}
+
+
 /* ===========================================================================
    MENU NA PLANILHA
    Aparece como "Portal" na barra de menus ao abrir a planilha. É o caminho
@@ -88,6 +125,9 @@ function onOpen() {
     .addItem('Resetar senha de alguém', 'menuResetar')
     .addSeparator()
     .addItem('Ver usuários cadastrados', 'menuListar')
+    .addSeparator()
+    .addItem('Configurar planilhas (RDO e MINI MASTER)', 'menuConfigurarPlanilhas')
+    .addItem('Conferir colunas do RDO', 'menuColunasRDO')
     .addToUi();
 }
 
@@ -112,12 +152,17 @@ function menuCadastrar() {
 
   // O perfil não vai no mesmo campo para ninguém marcar ADMIN por engano
   // ao cadastrar dez pessoas seguidas.
-  const q = ui.alert('Perfil de acesso',
-    'Esta pessoa é do setor ADMINISTRATIVO?\n\n' +
-    'Sim = ADMIN (vê todos os módulos e edita o cadastro dos outros)\n' +
-    'Não = SUPERVISOR (acesso normal)',
-    ui.ButtonSet.YES_NO);
-  const perfil = (q === ui.Button.YES) ? 'ADMIN' : 'SUPERVISOR';
+  const rp = ui.prompt('Perfil de acesso',
+    'Digite o número do perfil desta pessoa:\n\n' +
+    '1 = ADMIN — setor administrativo. Cadastra pessoas e usa os módulos.\n' +
+    '       Em Projetos em Andamento, só visualiza.\n' +
+    '2 = SUPERVISOR — cria e edita os projetos em andamento.\n' +
+    '3 = DIRETORIA — acompanha tudo, sem alterar projetos.',
+    ui.ButtonSet.OK_CANCEL);
+  if (rp.getSelectedButton() !== ui.Button.OK) return;
+
+  const perfil = { '1': 'ADMIN', '2': 'SUPERVISOR', '3': 'DIRETORIA' }[rp.getResponseText().trim()];
+  if (!perfil) { ui.alert('Perfil inválido. Digite 1, 2 ou 3.'); return; }
 
   try {
     criarUsuario({ matricula: p[0], cpf: p[1], email: p[2], perfil: perfil });
@@ -147,7 +192,6 @@ function menuResetar() {
 }
 
 function menuListar() {
-  const ui = SpreadsheetApp.getUi();
   const aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_USUARIOS);
   const dados = aba.getDataRange().getValues();
   const cab = dados[0];
@@ -156,7 +200,7 @@ function menuListar() {
   const iA = cab.indexOf('primeiro_acesso');
 
   if (dados.length < 2) {
-    ui.alert('Nenhuma pessoa cadastrada ainda.\n\nUse Portal > Cadastrar pessoa.');
+    avisar_('Nenhuma pessoa cadastrada ainda.\n\nUse Portal > Cadastrar pessoa.');
     return;
   }
 
@@ -167,7 +211,7 @@ function menuListar() {
            ' (' + dados[l][iP] + ', ' + dados[l][iS] + ')' +
            (primeiro ? ' — ainda não trocou a senha, entra com o CPF' : '') + '\n';
   }
-  ui.alert('Usuários cadastrados (' + (dados.length - 1) + ')\n\n' + txt);
+  avisar_('Usuários cadastrados (' + (dados.length - 1) + ')\n\n' + txt);
 }
 
 
@@ -189,9 +233,7 @@ function configurarPlanilha() {
   aba.getRange('L:M').setBackground('#f3f3f3').setFontColor('#999999');
   aba.getRange('L1:M1').setNote('Gerado pelo sistema. Não edite à mão.');
 
-  SpreadsheetApp.getUi().alert(
-    'Abas criadas.\n\nPróximo passo: rode definirPepper() uma vez.'
-  );
+  avisar_('Abas criadas.\n\nPróximo passo: rode definirPepper() uma vez.');
 }
 
 /** Passo 4 — gera a chave secreta do hash. Rode UMA vez e nunca mais. */
@@ -255,7 +297,7 @@ function criarUsuario(dados) {
       case 'salt':            return salt;
       case 'primeiro_acesso': return true;
       case 'status':          return 'ATIVO';
-      case 'perfil':          return (dados.perfil || 'SUPERVISOR').toUpperCase();
+      case 'perfil':          return (dados.perfil || 'DIRETORIA').toUpperCase();
       case 'tentativas':      return 0;
       case 'bloqueado_ate':   return '';
       case 'ultimo_acesso':   return '';
@@ -335,6 +377,13 @@ function doPost(e) {
       case 'materiaisBaixarAnexo':   resposta = acaoMateriaisBaixarAnexo_(corpo);   break;
       case 'materiaisRemoverAnexo':  resposta = acaoMateriaisRemoverAnexo_(corpo);  break;
       case 'materiaisMiniaturas':    resposta = acaoMateriaisMiniaturas_(corpo);    break;
+
+      // Supervisão de campo — implementado em SupervisaoCampo.gs
+      case 'projetosCarregar':       resposta = acaoProjetosCarregar_(corpo);      break;
+      case 'projetosSalvar':         resposta = acaoProjetosSalvar_(corpo);        break;
+      case 'rdoStatus':              resposta = acaoRdoStatus_(corpo);             break;
+      case 'rdoFiltros':             resposta = acaoRdoFiltros_(corpo);            break;
+      case 'tecnicosLista':          resposta = acaoTecnicosLista_(corpo);         break;
 
       default:               resposta = { ok: false, motivo: 'ACAO_DESCONHECIDA' };
     }
@@ -813,20 +862,53 @@ function formatarData_(v) {
    =========================================================================== */
 
 function limparExpirados() {
-  const abaRec = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_RECUPERACAO);
-  const dados = abaRec.getDataRange().getValues();
-  const iExp = dados[0].indexOf('expira_em');
-  const limite = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  for (let i = dados.length - 1; i >= 1; i--) {
-    if (dados[i][iExp] && new Date(dados[i][iExp]) < limite) abaRec.deleteRow(i + 1);
+  // Códigos de recuperação com mais de 7 dias
+  const abaRec = ss.getSheetByName(ABA_RECUPERACAO);
+  const rec = abaRec.getDataRange().getValues();
+  const iExp = rec[0].indexOf('expira_em');
+  const limiteRec = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+  const linhasRec = [];
+  for (let i = 1; i < rec.length; i++) {
+    if (rec[i][iExp] && new Date(rec[i][iExp]) < limiteRec) linhasRec.push(i + 1);
   }
+  apagarLinhas_(abaRec, linhasRec);
 
-  // Mantém o log dos últimos 180 dias
-  const abaLog = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_LOG);
+  // LOG: prazo diferente conforme o tipo do registro
+  const abaLog = ss.getSheetByName(ABA_LOG);
   const log = abaLog.getDataRange().getValues();
-  const corte = new Date(Date.now() - 180 * 24 * 3600 * 1000);
-  for (let i = log.length - 1; i >= 1; i--) {
-    if (log[i][0] && new Date(log[i][0]) < corte) abaLog.deleteRow(i + 1);
+  const corteSeg = new Date(Date.now() - DIAS_LOG_SEGURANCA * 24 * 3600 * 1000);
+  const corteOpe = new Date(Date.now() - DIAS_LOG_OPERACAO  * 24 * 3600 * 1000);
+
+  const linhasLog = [];
+  for (let i = 1; i < log.length; i++) {
+    const quando = log[i][0];
+    if (!quando) continue;
+    const seguranca = ACOES_SEGURANCA.indexOf(String(log[i][2])) > -1;
+    const corte = seguranca ? corteSeg : corteOpe;
+    if (new Date(quando) < corte) linhasLog.push(i + 1);
+  }
+  apagarLinhas_(abaLog, linhasLog);
+
+  Logger.log('Removidas ' + linhasRec.length + ' recuperações e ' +
+             linhasLog.length + ' linhas de log.');
+}
+
+/**
+ * Apaga várias linhas de uma vez, agrupando as que são vizinhas.
+ * Apagar uma a uma é o que estoura o limite de 6 minutos do Apps Script quando
+ * há dezenas de milhares de linhas acumuladas.
+ */
+function apagarLinhas_(aba, linhas) {
+  if (!linhas.length) return;
+  linhas.sort(function (a, b) { return b - a; });   // de baixo para cima
+
+  let fim = linhas[0];
+  let ini = fim;
+  for (let i = 1; i <= linhas.length; i++) {
+    if (i < linhas.length && linhas[i] === ini - 1) { ini = linhas[i]; continue; }
+    aba.deleteRows(ini, fim - ini + 1);
+    if (i < linhas.length) { fim = linhas[i]; ini = fim; }
   }
 }

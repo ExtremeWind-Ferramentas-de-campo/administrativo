@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Projetos em Andamento — Extreme Wind</title>
+<link rel="stylesheet" href="../assets/base.css">
+<style>
+  .barra-acoes{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+  .busca{flex:1;min-width:200px;position:relative}
+  .busca input{
+    width:100%;background:var(--card);border:1px solid var(--linha);border-radius:11px;
+    padding:11px 12px 11px 38px;min-height:44px;font-family:inherit;font-size:.92rem;color:var(--ink);
+  }
+  .busca svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--faint)}
+  .busca input:focus{outline:2px solid var(--azul);outline-offset:1px}
+
+  .projeto{border-top:4px solid var(--azul);display:flex;flex-direction:column;gap:10px}
+  .projeto.concluido{border-top-color:var(--faint);opacity:.72}
+  .projeto-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .projeto-cod{font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .projeto-parque{font-size:1.08rem;font-weight:700;line-height:1.25;margin-top:2px}
+  .projeto-cliente{font-size:.85rem;color:var(--muted)}
+  .projeto-linha{display:flex;gap:8px;flex-wrap:wrap}
+  .tecnicos{border-top:1px solid var(--linha);padding-top:10px;margin-top:2px}
+  .tecnicos-tit{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:7px}
+  .tecnico{display:flex;justify-content:space-between;gap:10px;font-size:.85rem;padding:3px 0}
+  .tecnico .mat{font-family:var(--mono);color:var(--muted);font-size:.8rem}
+  .projeto-rodape{display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--linha);padding-top:10px}
+
+  .lista-tec{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+  .lin-tec{display:grid;grid-template-columns:1fr 130px 42px;gap:8px;align-items:center}
+  .lin-tec input{
+    background:var(--card-2);border:1px solid var(--linha);border-radius:10px;
+    padding:10px 11px;min-height:42px;font-family:inherit;font-size:.9rem;color:var(--ink);width:100%;
+  }
+  .lin-tec input:focus{outline:2px solid var(--azul);outline-offset:1px}
+  .lin-tec .mat{font-family:var(--mono)}
+  .tirar{
+    border:1px solid var(--linha);background:none;color:var(--erro);border-radius:10px;
+    height:42px;cursor:pointer;font-size:1.1rem;line-height:1;font-family:inherit;
+  }
+  .tirar:hover{border-color:var(--erro)}
+  @media(max-width:520px){ .lin-tec{grid-template-columns:1fr 100px 42px} }
+
+  /* busca de técnico com lista que filtra enquanto digita */
+  .lin-tec{position:relative}
+  .tec-mat{background:var(--linha) !important;color:var(--muted) !important;cursor:not-allowed;text-align:center}
+  .sugestoes{
+    position:absolute;top:46px;left:0;width:min(420px,100%);z-index:20;
+    background:var(--card);border:1px solid var(--linha);border-radius:11px;
+    box-shadow:var(--sombra-alta);max-height:240px;overflow:auto;padding:4px;
+  }
+  .sug{
+    display:flex;justify-content:space-between;gap:12px;align-items:center;
+    padding:9px 10px;border-radius:8px;cursor:pointer;font-size:.9rem;
+  }
+  .sug:hover,.sug.ativa{background:var(--azul-fraco)}
+  .sug .mat{font-family:var(--mono);font-size:.8rem;color:var(--muted);flex:none}
+  .sug-vazio{padding:11px;font-size:.85rem;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-marca">
+    <span class="topo-titulo">Projetos em Andamento</span>
+    <span class="topo-sub">Supervisão de Campo</span>
+  </div>
+  <div class="topo-espaco"></div>
+  <span class="topo-sub" id="quemSou"></span>
+  <button class="topo-btn topo-btn--forte" id="btNovo" type="button" hidden>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    <span class="rotulo">Novo projeto</span>
+  </button>
+  <a class="topo-btn" href="supervisao-campo.html">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <span class="rotulo">Voltar</span>
+  </a>
+</header>
+
+<main class="conteudo">
+  <div class="aviso" id="avisoTopo"></div>
+
+  <div class="barra-acoes">
+    <div class="busca">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="busca" type="search" placeholder="Buscar por parque, cliente, equipe ou técnico…">
+    </div>
+    <div class="campo" style="margin:0;min-width:170px">
+      <select id="filtroStatus" style="min-height:44px">
+        <option value="andamento">Em andamento</option>
+        <option value="concluido">Concluídos</option>
+        <option value="">Todos</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grade" id="grade"></div>
+</main>
+
+<!-- ---------- janela do projeto ---------- -->
+<div class="veu" id="veu" hidden>
+  <div class="janela" role="dialog" aria-modal="true" aria-labelledby="janelaTit">
+    <div class="janela-cab">
+      <div>
+        <span class="topo-sub" id="janelaCod"></span>
+        <h2 class="janela-tit" id="janelaTit">Novo projeto</h2>
+      </div>
+      <button class="fechar" id="btFechar" type="button" aria-label="Fechar">&times;</button>
+    </div>
+
+    <div class="aviso" id="avisoJanela"></div>
+
+    <form id="form" novalidate>
+      <div class="linha-campos">
+        <div class="campo" id="c-parque">
+          <label for="f-parque">Nome do parque</label>
+          <input id="f-parque" required placeholder="Ex.: Serra do Mel III">
+          <span class="dica" id="d-parque">Escreva igual está no RDO — é assim que o Status RDO encontra o relatório.</span>
+        </div>
+        <div class="campo" id="c-cliente">
+          <label for="f-cliente">Cliente</label>
+          <input id="f-cliente" required placeholder="Ex.: Casa dos Ventos">
+          <span class="dica" id="d-cliente"></span>
+        </div>
+      </div>
+
+      <div class="linha-campos">
+        <div class="campo" id="c-equipe">
+          <label for="f-equipe">Número da equipe</label>
+          <input id="f-equipe" class="mono" required placeholder="Ex.: 07">
+          <span class="dica" id="d-equipe"></span>
+        </div>
+        <div class="campo" id="c-tipo">
+          <label for="f-tipo">Tipo de reparo</label>
+          <input id="f-tipo" list="tiposReparo" required placeholder="Ex.: Reparo estrutural">
+          <datalist id="tiposReparo">
+            <option value="Reparo estrutural"></option>
+            <option value="Reparo de bordo de ataque"></option>
+            <option value="Reparo de bordo de fuga"></option>
+            <option value="Reparo de ponta"></option>
+            <option value="Reparo de casca"></option>
+            <option value="Aplicação de proteção (LEP)"></option>
+            <option value="Inspeção"></option>
+            <option value="Pintura"></option>
+            <option value="Instalação de acessórios"></option>
+          </datalist>
+          <span class="dica" id="d-tipo"></span>
+        </div>
+      </div>
+
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="f-inicio">Início</label>
+          <input id="f-inicio" type="date">
+        </div>
+        <div class="campo">
+          <label for="f-status">Situação</label>
+          <select id="f-status">
+            <option value="andamento">Em andamento</option>
+            <option value="concluido">Concluído</option>
+          </select>
+          <span class="dica">Só projetos em andamento são cobrados no Status RDO.</span>
+        </div>
+      </div>
+
+      <div class="campo" id="c-tec">
+        <label>Técnicos da equipe</label>
+        <div class="lista-tec" id="listaTec"></div>
+        <button class="btn btn--vazado btn--pequeno" id="btAddTec" type="button">+ Adicionar técnico</button>
+        <span class="dica" id="d-tec">Digite o nome e escolha na lista. A matrícula vem junto.</span>
+      </div>
+
+      <div class="janela-rodape">
+        <button class="btn btn--perigo esquerda" id="btExcluir" type="button" hidden>Excluir projeto</button>
+        <button class="btn btn--vazado" id="btCancelar" type="button">Cancelar</button>
+        <button class="btn" type="submit" id="btSalvar">Salvar projeto</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="bloqueio" id="bloqueio" hidden>
+  <div class="bloqueio-cx">
+    <p class="bloqueio-msg" id="bloqueioMsg"></p>
+    <button class="btn" id="bloqueioAcao" type="button">Ir para o portal</button>
+  </div>
+</div>
+<div class="recado" id="recado" hidden></div>
+
+<script src="../config/config.js"></script>
+<script src="../assets/base.js"></script>
+<script>
+/* ============================================================================
+   PROJETOS EM ANDAMENTO
+   Quem cria e edita: ADMIN e SUPERVISOR. Técnico só visualiza.
+   A tela esconde os botões, mas quem decide de verdade é o Apps Script —
+   esconder botão não é controle de acesso.
+   ============================================================================ */
+
+var projetos = [];
+var rev = 0;
+var nextSeq = 1;
+var podeEditar = false;
+var editandoId = null;
+var snapshot = {};   // id -> json conhecido pelo servidor
+var revProj = {};    // id -> revisão no servidor
+
+/* ---------- carga ---------- */
+function carregar(primeira){
+  return chamar('projetosCarregar', { rev: primeira ? -1 : rev })
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
+      rev = res.rev;
+      podeEditar = !!res.podeEditar;
+      document.getElementById('btNovo').hidden = !podeEditar;
+      if(res.mudou === false) return;
+
+      nextSeq = res.nextSeq || 1;
+      snapshot = {}; revProj = {};
+      projetos = (res.projetos || []).map(function(p){
+        revProj[p.id] = p._rev || 0;
+        var limpo = JSON.parse(JSON.stringify(p)); delete limpo._rev;
+        snapshot[p.id] = JSON.stringify(limpo);
+        delete p._rev;
+        if(!Array.isArray(p.tecnicos)) p.tecnicos = [];
+        return p;
+      });
+      desenhar();
+    });
+}
+
+/* ---------- desenho ---------- */
+function desenhar(){
+  var grade = document.getElementById('grade');
+  var termo = (document.getElementById('busca').value || '').toLowerCase().trim();
+  var st = document.getElementById('filtroStatus').value;
+
+  var lista = projetos.filter(function(p){
+    if(st && (p.status || 'andamento') !== st) return false;
+    if(!termo) return true;
+    var alvo = [p.parque, p.cliente, p.equipe, p.tipoReparo, p.codigo]
+      .concat((p.tecnicos||[]).map(function(t){ return t.nome + ' ' + t.matricula; }))
+      .join(' ').toLowerCase();
+    return alvo.indexOf(termo) > -1;
+  });
+
+  lista.sort(function(a,b){ return String(a.parque||'').localeCompare(String(b.parque||'')); });
+  grade.innerHTML = '';
+
+  if(!lista.length){
+    grade.innerHTML = '<div class="vazio">' +
+      (projetos.length ? 'Nenhum projeto com esse filtro.'
+        : (podeEditar ? 'Nenhum projeto ainda. Use "Novo projeto" para criar o primeiro.'
+                      : 'Nenhum projeto cadastrado ainda.')) + '</div>';
+    return;
+  }
+
+  lista.forEach(function(p){
+    var el = document.createElement('div');
+    el.className = 'cartao projeto' + ((p.status||'andamento') === 'concluido' ? ' concluido' : '');
+    el.innerHTML =
+      '<div class="projeto-topo">' +
+        '<div>' +
+          '<div class="projeto-cod">' + esc(p.codigo || '') + '</div>' +
+          '<div class="projeto-parque">' + esc(p.parque || '(sem parque)') + '</div>' +
+          '<div class="projeto-cliente">' + esc(p.cliente || '') + '</div>' +
+        '</div>' +
+        '<span class="etiqueta ' + ((p.status||'andamento')==='concluido' ? '' : 'etiqueta--ok') + '">' +
+          ((p.status||'andamento')==='concluido' ? 'Concluído' : 'Em andamento') + '</span>' +
+      '</div>' +
+      '<div class="projeto-linha">' +
+        '<span class="etiqueta">Equipe ' + esc(p.equipe || '—') + '</span>' +
+        (p.tipoReparo ? '<span class="etiqueta etiqueta--azul">' + esc(p.tipoReparo) + '</span>' : '') +
+        (p.inicio ? '<span class="etiqueta">Início ' + esc(dataBonita(p.inicio)) + '</span>' : '') +
+      '</div>' +
+      (p.tecnicos && p.tecnicos.length
+        ? '<div class="tecnicos"><div class="tecnicos-tit">Técnicos (' + p.tecnicos.length + ')</div>' +
+          p.tecnicos.map(function(t){
+            return '<div class="tecnico"><span>' + esc(t.nome) + '</span>' +
+                   '<span class="mat">' + esc(t.matricula) + '</span></div>';
+          }).join('') + '</div>'
+        : '') +
+      (podeEditar ? '<div class="projeto-rodape">' +
+        '<button class="btn btn--vazado btn--pequeno" type="button">Editar</button></div>' : '');
+
+    if(podeEditar){
+      el.querySelector('button').addEventListener('click', function(){ abrirJanela(p.id); });
+    }
+    grade.appendChild(el);
+  });
+}
+
+document.getElementById('busca').addEventListener('input', desenhar);
+document.getElementById('filtroStatus').addEventListener('change', desenhar);
+
+/* ---------- janela ---------- */
+/* A matrícula não é digitada: ela vem da MINI MASTER junto com o nome
+   escolhido. Digitar as duas à mão é como nasce técnico com matrícula trocada. */
+function linhaTecnico(nome, matricula){
+  var div = document.createElement('div');
+  div.className = 'lin-tec';
+  div.innerHTML =
+    '<input class="tec-nome" placeholder="Digite o nome e escolha na lista" autocomplete="off" value="' + esc(nome || '') + '">' +
+    '<input class="tec-mat mono" placeholder="matrícula" readonly tabindex="-1" value="' + esc(matricula || '') + '">' +
+    '<button class="tirar" type="button" aria-label="Remover técnico">&times;</button>';
+
+  div.querySelector('.tirar').addEventListener('click', function(){ fecharSugestoes(); div.remove(); });
+  ligarBusca(div);
+  return div;
+}
+
+/* ---------- lista de técnicos (MINI MASTER) ---------- */
+var TECNICOS = [];
+var listaAberta = null;
+var indiceAtivo = -1;
+
+function carregarTecnicos(){
+  return chamar('tecnicosLista', {})
+    .then(function(res){
+      if(res && res.ok) TECNICOS = res.tecnicos || [];
+      else recado('Não consegui carregar a lista de técnicos.', 'erro');
+    })
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      recado('Lista de técnicos indisponível. Você ainda pode digitar o nome.', 'erro');
+    });
+}
+
+function fecharSugestoes(){
+  if(listaAberta){ listaAberta.remove(); listaAberta = null; indiceAtivo = -1; }
+}
+
+function ligarBusca(linha){
+  var campoNome = linha.querySelector('.tec-nome');
+  var campoMat  = linha.querySelector('.tec-mat');
+
+  function filtrar(){
+    var termo = campoNome.value.trim().toLowerCase();
+    fecharSugestoes();
+    if(!TECNICOS.length) return;
+
+    var achados = TECNICOS.filter(function(t){
+      return !termo || t.nome.toLowerCase().indexOf(termo) > -1 || String(t.matricula).indexOf(termo) > -1;
+    }).slice(0, 40);
+
+    var cx = document.createElement('div');
+    cx.className = 'sugestoes';
+    if(!achados.length){
+      cx.innerHTML = '<div class="sug-vazio">Ninguém com esse nome na MINI MASTER.</div>';
+    }else{
+      achados.forEach(function(t, i){
+        var item = document.createElement('div');
+        item.className = 'sug';
+        item.setAttribute('role','option');
+        item.innerHTML = '<span>' + esc(t.nome) + '</span><span class="mat">' + esc(t.matricula) + '</span>';
+        item.addEventListener('mousedown', function(e){
+          e.preventDefault();                 // não perde o foco antes de escolher
+          campoNome.value = t.nome;
+          campoMat.value = t.matricula;
+          fecharSugestoes();
+        });
+        cx.appendChild(item);
+      });
+    }
+    linha.appendChild(cx);
+    listaAberta = cx;
+    indiceAtivo = -1;
+  }
+
+  campoNome.addEventListener('input', function(){
+    campoMat.value = '';                       // nome mexido: matrícula deixa de valer
+    filtrar();
+  });
+  campoNome.addEventListener('focus', filtrar);
+  campoNome.addEventListener('blur', function(){ setTimeout(fecharSugestoes, 120); });
+
+  campoNome.addEventListener('keydown', function(e){
+    if(!listaAberta) return;
+
+    // Escape antes de tudo: mesmo com a lista vazia ("ninguém com esse nome"),
+    // ele precisa fechar só a lista. Deixar passar fecharia a janela inteira
+    // e perderia o formulário.
+    if(e.key === 'Escape'){
+      e.stopPropagation();
+      fecharSugestoes();
+      return;
+    }
+
+    var itens = listaAberta.querySelectorAll('.sug');
+    if(!itens.length) return;
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      indiceAtivo += (e.key === 'ArrowDown' ? 1 : -1);
+      if(indiceAtivo < 0) indiceAtivo = itens.length - 1;
+      if(indiceAtivo >= itens.length) indiceAtivo = 0;
+      Array.prototype.forEach.call(itens, function(el, i){ el.classList.toggle('ativa', i === indiceAtivo); });
+      itens[indiceAtivo].scrollIntoView({ block:'nearest' });
+    }else if(e.key === 'Enter' && indiceAtivo > -1){
+      e.preventDefault();
+      itens[indiceAtivo].dispatchEvent(new MouseEvent('mousedown'));
+    }
+  });
+}
+
+function abrirJanela(id){
+  if(!podeEditar) return;
+  editandoId = id || null;
+  var p = id ? projetos.filter(function(x){ return x.id === id; })[0] : null;
+
+  document.getElementById('janelaTit').textContent = p ? 'Editar projeto' : 'Novo projeto';
+  document.getElementById('janelaCod').textContent = p ? (p.codigo || '') : 'Supervisão de campo';
+  document.getElementById('btExcluir').hidden = !p;
+  avisoJanela('');
+
+  document.getElementById('f-parque').value  = p ? (p.parque || '') : '';
+  document.getElementById('f-cliente').value = p ? (p.cliente || '') : '';
+  document.getElementById('f-equipe').value  = p ? (p.equipe || '') : '';
+  document.getElementById('f-tipo').value    = p ? (p.tipoReparo || '') : '';
+  document.getElementById('f-inicio').value  = p ? (p.inicio || '') : hojeISO();
+  document.getElementById('f-status').value  = p ? (p.status || 'andamento') : 'andamento';
+
+  var lista = document.getElementById('listaTec');
+  lista.innerHTML = '';
+  var tecs = (p && p.tecnicos && p.tecnicos.length) ? p.tecnicos : [{nome:'',matricula:''}];
+  tecs.forEach(function(t){ lista.appendChild(linhaTecnico(t.nome, t.matricula)); });
+
+  document.getElementById('veu').hidden = false;
+  document.body.style.overflow = 'hidden';
+  setTimeout(function(){ document.getElementById('f-parque').focus(); }, 40);
+}
+
+function fecharJanela(){
+  document.getElementById('veu').hidden = true;
+  document.body.style.overflow = '';
+  editandoId = null;
+}
+
+document.getElementById('btNovo').addEventListener('click', function(){ abrirJanela(null); });
+document.getElementById('btFechar').addEventListener('click', fecharJanela);
+document.getElementById('btCancelar').addEventListener('click', fecharJanela);
+document.getElementById('btAddTec').addEventListener('click', function(){
+  document.getElementById('listaTec').appendChild(linhaTecnico('',''));
+});
+document.getElementById('veu').addEventListener('click', function(e){
+  if(e.target.id === 'veu') fecharJanela();
+});
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape' && !document.getElementById('veu').hidden) fecharJanela();
+});
+
+function avisoJanela(txt, tipo){
+  var el = document.getElementById('avisoJanela');
+  if(!txt){ el.removeAttribute('data-tipo'); el.textContent = ''; return; }
+  el.textContent = txt; el.setAttribute('data-tipo', tipo || 'erro');
+}
+function avisoTopo(txt, tipo){
+  var el = document.getElementById('avisoTopo');
+  if(!txt){ el.removeAttribute('data-tipo'); el.textContent = ''; return; }
+  el.textContent = txt; el.setAttribute('data-tipo', tipo || 'erro');
+}
+function marcarErro(idCampo, idDica, msg){
+  document.getElementById(idCampo).classList.toggle('erro', !!msg);
+  var d = document.getElementById(idDica);
+  if(d && msg) d.textContent = msg;
+}
+
+/* ---------- salvar ---------- */
+document.getElementById('form').addEventListener('submit', function(e){
+  e.preventDefault();
+  avisoJanela('');
+
+  var parque  = document.getElementById('f-parque').value.trim();
+  var cliente = document.getElementById('f-cliente').value.trim();
+  var equipe  = document.getElementById('f-equipe').value.trim();
+  var tipo    = document.getElementById('f-tipo').value.trim();
+
+  var parar = false;
+  marcarErro('c-parque','d-parque', parque ? '' : 'Informe o nome do parque.'); parar = parar || !parque;
+  marcarErro('c-cliente','d-cliente', cliente ? '' : 'Informe o cliente.');     parar = parar || !cliente;
+  marcarErro('c-equipe','d-equipe', equipe ? '' : 'Informe o número da equipe.'); parar = parar || !equipe;
+  marcarErro('c-tipo','d-tipo', tipo ? '' : 'Informe o tipo de reparo.');       parar = parar || !tipo;
+
+  var tecnicos = [];
+  Array.prototype.forEach.call(document.querySelectorAll('#listaTec .lin-tec'), function(l){
+    var n = l.querySelector('.tec-nome').value.trim();
+    var m = l.querySelector('.tec-mat').value.trim();
+    if(n) tecnicos.push({ nome:n, matricula:m });
+  });
+  var semMatricula = tecnicos.filter(function(t){ return !t.matricula; });
+  marcarErro('c-tec','d-tec', semMatricula.length
+    ? 'Escolha o nome na lista para trazer a matrícula: ' +
+      semMatricula.map(function(t){ return t.nome || '(linha em branco)'; }).join(', ')
+    : 'Digite o nome e escolha na lista. A matrícula vem junto.');
+  parar = parar || semMatricula.length > 0;
+
+  if(parar) return;
+
+  var agora = new Date().toISOString();
+  var alvo;
+  if(editandoId){
+    alvo = projetos.filter(function(x){ return x.id === editandoId; })[0];
+  }else{
+    alvo = {
+      id: uid('prj'),
+      codigo: 'PRJ-' + ('000' + nextSeq).slice(-3) + '-' + new Date().getFullYear(),
+      criadoPor: SESSAO.nome || SESSAO.matricula,
+      criadoEm: agora
+    };
+    nextSeq++;
+    projetos.push(alvo);
+  }
+
+  alvo.parque = parque;
+  alvo.cliente = cliente;
+  alvo.equipe = equipe;
+  alvo.tipoReparo = tipo;
+  alvo.inicio = document.getElementById('f-inicio').value || '';
+  alvo.status = document.getElementById('f-status').value;
+  alvo.tecnicos = tecnicos;
+  alvo.atualizadoPor = SESSAO.nome || SESSAO.matricula;
+  alvo.atualizadoEm = agora;
+
+  enviar([alvo], []);
+  fecharJanela();
+  desenhar();
+});
+
+document.getElementById('btExcluir').addEventListener('click', function(){
+  if(!editandoId) return;
+  var p = projetos.filter(function(x){ return x.id === editandoId; })[0];
+  if(!p) return;
+  if(!confirm('Excluir o projeto ' + (p.parque || p.codigo) + '?\n\nEsta ação não pode ser desfeita.')) return;
+
+  var id = editandoId;
+  projetos = projetos.filter(function(x){ return x.id !== id; });
+  enviar([], [id]);
+  fecharJanela();
+  desenhar();
+});
+
+function enviar(alterados, removidos){
+  var pacote = {
+    projetos: alterados.map(function(p){
+      var c = JSON.parse(JSON.stringify(p));
+      c._rev = revProj[p.id] || 0;
+      return c;
+    }),
+    removidos: removidos,
+    nextSeq: nextSeq
+  };
+
+  chamar('projetosSalvar', pacote)
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
+      rev = res.rev;
+      (res.aceitos || []).forEach(function(a){
+        revProj[a.id] = a.rev;
+        var p = projetos.filter(function(x){ return x.id === a.id; })[0];
+        if(p) snapshot[a.id] = JSON.stringify(p);
+      });
+      removidos.forEach(function(id){ delete snapshot[id]; delete revProj[id]; });
+
+      if(res.conflitos && res.conflitos.length){
+        res.conflitos.forEach(function(cf){
+          var i = projetos.findIndex(function(x){ return x.id === cf.id; });
+          var s = cf.projeto; revProj[cf.id] = cf.rev; delete s._rev;
+          if(i > -1) projetos[i] = s; else projetos.push(s);
+        });
+        desenhar();
+        recado('Outra pessoa alterou este projeto antes de você. A versão dela foi mantida.', 'erro');
+        return;
+      }
+      recado(removidos.length ? 'Projeto excluído.' : 'Projeto salvo.');
+    })
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      avisoTopo(traduzirErro(err) + ' A alteração ainda não foi salva.', 'erro');
+      recado(traduzirErro(err), 'erro');
+      carregar(true).catch(function(){});   // volta ao que o servidor tem
+    });
+}
+
+/* ---------- início ---------- */
+if(iniciarModulo()){
+  bloquear('Carregando projetos…', false);
+  carregar(true)
+    .then(function(){
+      desbloquear();
+      if(podeEditar) carregarTecnicos();
+      if(!podeEditar){
+        avisoTopo('Seu perfil acompanha os projetos, mas não altera. Criar e editar é do supervisor.', 'info');
+      }
+      setInterval(function(){ carregar(false).catch(function(){}); }, 20000);
+    })
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      bloquear(traduzirErro(err) + ' Recarregue a página.');
+    });
+}
+</script>
+</body>
+</html>

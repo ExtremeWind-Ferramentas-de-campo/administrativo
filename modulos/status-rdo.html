@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Status RDO — Extreme Wind</title>
+<link rel="stylesheet" href="../assets/base.css">
+<style>
+  .filtros{
+    display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    background:var(--card);border:1px solid var(--linha);border-radius:var(--raio);
+    padding:16px;box-shadow:var(--sombra);margin-bottom:22px;align-items:end;
+  }
+  .filtros .campo{margin:0}
+  .filtros .acoes{display:flex;gap:8px}
+  .filtros .acoes .btn{flex:1}
+
+  .placar{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:22px}
+  .placar-item{
+    background:var(--card);border:1px solid var(--linha);border-left:4px solid var(--c);
+    border-radius:12px;padding:14px 16px;box-shadow:var(--sombra);
+  }
+  .placar-num{font-size:1.7rem;font-weight:800;line-height:1;color:var(--c)}
+  .placar-rot{font-size:.76rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+
+  .dia-info{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    font-size:.9rem;color:var(--muted);margin-bottom:16px;
+  }
+  .dia-info strong{color:var(--ink)}
+
+  .cobranca{display:flex;flex-direction:column;gap:10px;margin-bottom:30px}
+  .cob{
+    display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--linha);
+    border-left:4px solid var(--c);border-radius:12px;padding:13px 15px;box-shadow:var(--sombra);
+  }
+  .cob-txt{flex:1;min-width:0}
+  .cob-parque{font-weight:700;font-size:.97rem}
+  .cob-meta{font-size:.8rem;color:var(--muted);margin-top:2px}
+  .cob-acao{flex:none}
+
+  .rdo{
+    border-left:4px solid var(--azul);cursor:pointer;display:flex;flex-direction:column;gap:8px;
+    transition:transform .15s ease,box-shadow .15s ease;
+  }
+  .rdo:hover{transform:translateY(-3px);box-shadow:var(--sombra-alta)}
+  .rdo:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+  .rdo.sem-link{cursor:default;border-left-color:var(--faint);opacity:.75}
+  .rdo.sem-link:hover{transform:none;box-shadow:var(--sombra)}
+  .rdo-parque{font-size:1.02rem;font-weight:700;line-height:1.25}
+  .rdo-cliente{font-size:.84rem;color:var(--muted)}
+  .rdo-linha{display:flex;gap:7px;flex-wrap:wrap}
+  .rdo-abrir{font-size:.82rem;font-weight:700;color:var(--azul);display:flex;align-items:center;gap:6px;margin-top:2px}
+
+  .carregando{text-align:center;padding:40px;color:var(--muted);font-size:.9rem}
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-marca">
+    <span class="topo-titulo">Status RDO</span>
+    <span class="topo-sub">Supervisão de Campo</span>
+  </div>
+  <div class="topo-espaco"></div>
+  <span class="topo-sub" id="quemSou"></span>
+  <a class="topo-btn" href="supervisao-campo.html">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <span class="rotulo">Voltar</span>
+  </a>
+</header>
+
+<main class="conteudo">
+  <div class="aviso" id="avisoTopo"></div>
+
+  <div class="filtros">
+    <div class="campo">
+      <label for="f-data">Data (Data_exp)</label>
+      <input id="f-data" type="date">
+    </div>
+    <div class="campo">
+      <label for="f-cliente">Cliente</label>
+      <select id="f-cliente"><option value="">Todos</option></select>
+    </div>
+    <div class="campo">
+      <label for="f-parque">Parque</label>
+      <select id="f-parque"><option value="">Todos</option></select>
+    </div>
+    <div class="acoes">
+      <button class="btn" id="btBuscar" type="button">Buscar</button>
+      <button class="btn btn--vazado" id="btHoje" type="button">Hoje</button>
+    </div>
+  </div>
+
+  <div id="painel"><div class="carregando">Carregando…</div></div>
+</main>
+
+<div class="bloqueio" id="bloqueio" hidden>
+  <div class="bloqueio-cx">
+    <p class="bloqueio-msg" id="bloqueioMsg"></p>
+    <button class="btn" id="bloqueioAcao" type="button">Ir para o portal</button>
+  </div>
+</div>
+<div class="recado" id="recado" hidden></div>
+
+<script src="../config/config.js"></script>
+<script src="../assets/base.js"></script>
+<script>
+/* ============================================================================
+   STATUS RDO
+   Lê a planilha do RDO (só leitura) e cruza com os projetos em andamento.
+
+   A cobrança sai dos projetos: cada projeto em andamento deveria ter um
+   relatório na data escolhida, casado pelo NOME DO PARQUE. Por isso o parque
+   cadastrado no projeto precisa bater com o que vai na planilha do RDO —
+   a comparação ignora acento e maiúscula, mas não adivinha nome diferente.
+
+   Sábado e domingo entram como "não obrigatório": o relatório pode existir,
+   mas a ausência não é cobrada.
+   ============================================================================ */
+
+function avisoTopo(txt, tipo){
+  var el = document.getElementById('avisoTopo');
+  if(!txt){ el.removeAttribute('data-tipo'); el.textContent = ''; return; }
+  el.textContent = txt; el.setAttribute('data-tipo', tipo || 'erro');
+}
+
+function preencherFiltros(){
+  return chamar('rdoFiltros', {})
+    .then(function(res){
+      if(!res || !res.ok) return;
+      var sc = document.getElementById('f-cliente');
+      var sp = document.getElementById('f-parque');
+      (res.clientes || []).forEach(function(c){
+        var o = document.createElement('option'); o.value = c; o.textContent = c; sc.appendChild(o);
+      });
+      (res.parques || []).forEach(function(p){
+        var o = document.createElement('option'); o.value = p; o.textContent = p; sp.appendChild(o);
+      });
+    })
+    .catch(function(){ /* filtros vazios não impedem a consulta */ });
+}
+
+function buscar(){
+  var painel = document.getElementById('painel');
+  painel.innerHTML = '<div class="carregando">Consultando a planilha do RDO…</div>';
+  avisoTopo('');
+
+  return chamar('rdoStatus', {
+    data:    document.getElementById('f-data').value,
+    cliente: document.getElementById('f-cliente').value,
+    parque:  document.getElementById('f-parque').value
+  })
+  .then(function(res){
+    if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
+    desenhar(res);
+  })
+  .catch(function(err){
+    if(err && err.motivo === 'SESSAO') return;
+    painel.innerHTML = '';
+    avisoTopo(traduzirErro(err) + (err && err.detalhe ? ' (' + err.detalhe + ')' : ''), 'erro');
+  });
+}
+
+function desenhar(res){
+  var painel = document.getElementById('painel');
+  var enviados = res.projetos.filter(function(p){ return p.estado === 'ENVIADO'; }).length;
+  var faltam   = res.projetos.filter(function(p){ return p.estado === 'FALTA'; }).length;
+
+  var html = '';
+
+  html += '<div class="dia-info">' +
+    '<strong>' + esc(dataBonita(res.data)) + '</strong>' +
+    '<span>· ' + esc(diaDaSemana(res.data)) + '</span>' +
+    (res.fimDeSemana
+      ? '<span class="etiqueta etiqueta--neutra">Fim de semana — RDO não é obrigatório</span>'
+      : '') +
+  '</div>';
+
+  if(res.projetos.length){
+    html += '<div class="placar">' +
+      '<div class="placar-item" style="--c:var(--azul)"><div class="placar-num">' + res.projetos.length + '</div>' +
+        '<div class="placar-rot">Projetos ativos</div></div>' +
+      '<div class="placar-item" style="--c:var(--ok)"><div class="placar-num">' + enviados + '</div>' +
+        '<div class="placar-rot">RDO enviado</div></div>' +
+      '<div class="placar-item" style="--c:' + (res.fimDeSemana ? 'var(--alerta)' : 'var(--erro)') + '">' +
+        '<div class="placar-num">' + (res.fimDeSemana ? (res.projetos.length - enviados) : faltam) + '</div>' +
+        '<div class="placar-rot">' + (res.fimDeSemana ? 'Sem RDO (livre)' : 'Falta enviar') + '</div></div>' +
+    '</div>';
+
+    html += '<h2 class="secao-tit">Cobrança do dia</h2>';
+    html += '<div class="cobranca">';
+
+    var ordem = { FALTA:0, NAO_OBRIGATORIO:1, ENVIADO:2 };
+    res.projetos.slice().sort(function(a,b){
+      return (ordem[a.estado] - ordem[b.estado]) || String(a.parque).localeCompare(String(b.parque));
+    }).forEach(function(p){
+      var cor = p.estado === 'ENVIADO' ? 'var(--ok)'
+              : p.estado === 'FALTA'   ? 'var(--erro)' : 'var(--alerta)';
+      var rot = p.estado === 'ENVIADO' ? 'Enviado'
+              : p.estado === 'FALTA'   ? 'Falta enviar' : 'Não obrigatório';
+      var cls = p.estado === 'ENVIADO' ? 'etiqueta--ok'
+              : p.estado === 'FALTA'   ? 'etiqueta--falta' : 'etiqueta--neutra';
+
+      html += '<div class="cob" style="--c:' + cor + '">' +
+        '<div class="cob-txt">' +
+          '<div class="cob-parque">' + esc(p.parque) + '</div>' +
+          '<div class="cob-meta">' +
+            esc(p.cliente || 'sem cliente') + ' · Equipe ' + esc(p.equipe || '—') +
+            (p.autor ? ' · ' + esc(p.autor) : '') +
+          '</div>' +
+        '</div>' +
+        '<span class="etiqueta ' + cls + '">' + rot + '</span>' +
+        (p.link ? '<div class="cob-acao"><button class="btn btn--vazado btn--pequeno" type="button" ' +
+                  'data-link="' + esc(p.link) + '">Abrir PDF</button></div>' : '') +
+      '</div>';
+    });
+    html += '</div>';
+  }else{
+    html += '<div class="vazio">Nenhum projeto em andamento cadastrado. ' +
+            'Cadastre em <strong>Projetos em Andamento</strong> para o sistema saber de quem cobrar o RDO.</div>';
+  }
+
+  html += '<h2 class="secao-tit">Relatórios encontrados (' + res.total + ')</h2>';
+  html += '<p class="secao-sub">Clique no card para abrir o PDF.</p>';
+  html += '<div class="grade" id="listaRdo">';
+
+  if(!res.relatorios.length){
+    html += '<div class="vazio">Nenhum relatório com esses filtros.</div>';
+  }else{
+    res.relatorios.forEach(function(r){
+      var temLink = !!r.link;
+      html += '<div class="cartao rdo' + (temLink ? '' : ' sem-link') + '"' +
+              (temLink ? ' tabindex="0" role="button" data-link="' + esc(r.link) + '"' : '') + '>' +
+        '<div>' +
+          '<div class="rdo-parque">' + esc(r.parque || '(sem parque)') + '</div>' +
+          '<div class="rdo-cliente">' + esc(r.cliente || '') + '</div>' +
+        '</div>' +
+        '<div class="rdo-linha">' +
+          '<span class="etiqueta">' + esc(dataBonita(r.data)) + '</span>' +
+          (r.equipe ? '<span class="etiqueta">Equipe ' + esc(r.equipe) + '</span>' : '') +
+          (r.turbina ? '<span class="etiqueta etiqueta--azul">' + esc(r.turbina) + '</span>' : '') +
+        '</div>' +
+        (r.autor ? '<div class="rdo-cliente">' + esc(r.autor) + '</div>' : '') +
+        (temLink
+          ? '<div class="rdo-abrir">Abrir PDF ' +
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></div>'
+          : '<div class="rdo-cliente" style="color:var(--faint)">Sem link de PDF nesta linha</div>') +
+      '</div>';
+    });
+  }
+  html += '</div>';
+
+  painel.innerHTML = html;
+
+  // um só ouvinte para todos os "abrir PDF"
+  painel.addEventListener('click', function(e){
+    var alvo = e.target.closest('[data-link]');
+    if(alvo) abrirPdf(alvo.getAttribute('data-link'));
+  });
+  painel.addEventListener('keydown', function(e){
+    if(e.key !== 'Enter' && e.key !== ' ') return;
+    var alvo = e.target.closest('[data-link]');
+    if(alvo){ e.preventDefault(); abrirPdf(alvo.getAttribute('data-link')); }
+  });
+}
+
+function abrirPdf(link){
+  if(!link) return;
+  // Só abre endereço http(s): a célula da planilha é conteúdo de fora e não
+  // deveria virar javascript: por acidente ou por mão errada.
+  if(!/^https?:\/\//i.test(link)){
+    recado('O link deste relatório não é um endereço válido.', 'erro');
+    return;
+  }
+  window.open(link, '_blank', 'noopener');
+}
+
+document.getElementById('btBuscar').addEventListener('click', buscar);
+document.getElementById('btHoje').addEventListener('click', function(){
+  document.getElementById('f-data').value = hojeISO();
+  document.getElementById('f-cliente').value = '';
+  document.getElementById('f-parque').value = '';
+  buscar();
+});
+['f-cliente','f-parque'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', buscar);
+});
+document.getElementById('f-data').addEventListener('change', buscar);
+
+/* ---------- início ---------- */
+if(iniciarModulo()){
+  document.getElementById('f-data').value = hojeISO();
+  preencherFiltros().then(buscar);
+}
+</script>
+</body>
+</html>

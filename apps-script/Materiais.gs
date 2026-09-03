@@ -67,10 +67,8 @@ function configurarMateriais() {
 
   pastaAnexos_();  // cria a pasta do Drive na primeira execução
 
-  SpreadsheetApp.getUi().alert(
-    'Módulo de materiais pronto.\n\n' +
-    'Pasta de anexos criada no seu Drive: "Extreme Wind — Anexos de Materiais".'
-  );
+  avisar_('Módulo de materiais pronto.\n\n' +
+          'Pasta de anexos criada no seu Drive: "Extreme Wind — Anexos de Materiais".');
 }
 
 /** Devolve a pasta do Drive dos anexos, criando na primeira vez. */
@@ -202,8 +200,13 @@ function acaoMateriaisSalvar_(p) {
       columns: p.columns
     });
 
-    registrar_(matricula, 'MAT_SALVAR', 'OK',
-      aceitos.length + ' aceitos, ' + conflitos.length + ' conflitos, ' + remover.length + ' removidos');
+    // Só registra o que foge do normal. Cada linha de MAT_CARDS já guarda
+    // `atualizado_por` e `atualizado_em`, então gravar todo salvamento aqui
+    // seria repetir a mesma informação milhares de vezes por mês.
+    if (conflitos.length || remover.length) {
+      registrar_(matricula, 'MAT_SALVAR', conflitos.length ? 'CONFLITO' : 'OK',
+        aceitos.length + ' aceitos, ' + conflitos.length + ' conflitos, ' + remover.length + ' removidos');
+    }
 
     return { ok: true, rev: rev, aceitos: aceitos, conflitos: conflitos };
 

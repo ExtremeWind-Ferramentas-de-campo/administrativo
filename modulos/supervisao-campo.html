@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Supervisão de Campo — Extreme Wind</title>
+<link rel="stylesheet" href="../assets/base.css">
+<style>
+  .escolhas{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));max-width:760px;margin:0 auto}
+  .escolha{
+    display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;
+    background:var(--card);border:1px solid var(--linha);border-top:5px solid var(--c);
+    border-radius:18px;padding:30px 22px;text-decoration:none;color:var(--ink);
+    box-shadow:var(--sombra);transition:transform .18s ease,box-shadow .18s ease;
+  }
+  .escolha:hover{transform:translateY(-5px);box-shadow:var(--sombra-alta)}
+  .escolha:focus-visible{outline:2px solid var(--azul);outline-offset:3px}
+  .escolha .icone{
+    width:70px;height:70px;border-radius:20px;display:grid;place-items:center;color:#fff;
+    background:linear-gradient(135deg,var(--c),color-mix(in srgb,var(--c) 58%,#fff));
+  }
+  .escolha .nome{font-size:1.15rem;font-weight:700}
+  .escolha .desc{font-size:.87rem;color:var(--muted);line-height:1.4}
+  .escolha .abrir{font-size:.84rem;font-weight:700;color:var(--c)}
+  .abertura{text-align:center;margin-bottom:26px}
+  .abertura h1{font-size:1.5rem;font-weight:700;margin-bottom:4px}
+  .abertura p{font-size:.9rem;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-marca">
+    <span class="topo-titulo">Supervisão de Campo</span>
+    <span class="topo-sub">Extreme Wind</span>
+  </div>
+  <div class="topo-espaco"></div>
+  <span class="topo-sub" id="quemSou"></span>
+  <a class="topo-btn" href="../index.html">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <span class="rotulo">Portal</span>
+  </a>
+</header>
+
+<main class="conteudo">
+  <div class="abertura">
+    <h1>O que você quer acompanhar?</h1>
+    <p>Projetos em campo e a situação dos relatórios diários.</p>
+  </div>
+
+  <div class="escolhas">
+    <a class="escolha" href="status-rdo.html" style="--c:#2b7fd0">
+      <span class="icone">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
+          <path d="M9 15l2 2 4-4"/>
+        </svg>
+      </span>
+      <span class="nome">Status RDO</span>
+      <span class="desc">Quem já enviou o relatório do dia e quem está faltando. Consulta de dias anteriores por cliente e parque.</span>
+      <span class="abrir">Abrir →</span>
+    </a>
+
+    <a class="escolha" href="projetos-andamento.html" style="--c:#0e7c7b">
+      <span class="icone">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v9"/><circle cx="12" cy="12.6" r="1.6"/>
+          <path d="M11 13.6L3.5 18M13 13.6L20.5 18"/>
+          <path d="M4 21h16"/>
+        </svg>
+      </span>
+      <span class="nome">Projetos em Andamento</span>
+      <span class="desc">Parques ativos, equipe, cliente, técnicos e tipo de reparo. Supervisor cria e edita; os demais visualizam.</span>
+      <span class="abrir">Abrir →</span>
+    </a>
+  </div>
+</main>
+
+<div class="bloqueio" id="bloqueio" hidden>
+  <div class="bloqueio-cx">
+    <p class="bloqueio-msg" id="bloqueioMsg"></p>
+    <button class="btn" id="bloqueioAcao" type="button">Ir para o portal</button>
+  </div>
+</div>
+<div class="recado" id="recado" hidden></div>
+
+<script src="../config/config.js"></script>
+<script src="../assets/base.js"></script>
+<script>
+  iniciarModulo();
+</script>
+</body>
+</html>

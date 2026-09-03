@@ -15,7 +15,7 @@
      url        Caminho do arquivo. Relativo à pasta do portal:
                   'modulos/nome-do-arquivo.html'
                 Também aceita endereço completo (https://...).
-     perfis     Quem enxerga o card: ['ADMIN'], ['SUPERVISOR'] ou os dois.
+     perfis     Quem enxerga o card. Perfis: ADMIN, SUPERVISOR, DIRETORIA.
      novaAba    false = abre na mesma aba (padrão daqui; o módulo tem botão de
                         voltar para o portal)
                 true  = abre em outra aba
@@ -36,6 +36,17 @@ const MODULOS = [
     novaAba:  false,
     icone:    'fas fa-boxes-stacked',
     cor:      '#c26a12'
+  },
+
+  {
+    cod:      'SUP',
+    nome:     'Supervisão de Campo',
+    desc:     'Status dos RDOs e projetos em andamento',
+    url:      'modulos/supervisao-campo.html',
+    perfis:   ['ADMIN','SUPERVISOR','DIRETORIA'],
+    novaAba:  false,
+    icone:    'fas fa-helmet-safety',
+    cor:      '#0e7c7b'
   }
 
   /* ---------------------------------------------------------------------------
