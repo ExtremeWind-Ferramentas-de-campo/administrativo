@@ -49,7 +49,7 @@ navegador. No servidor elas não valem.
 
 Duas telas dentro do módulo:
 
-**Projetos em Andamento** — parque, cliente, número da equipe, tipo de reparo e
+**Projetos em Andamento** — parque, cliente, tipo de reparo, início, situação e
 a lista de técnicos. Cria e edita: **SUPERVISOR**. ADMIN e DIRETORIA apenas
 visualizam — e a recusa é feita no Apps Script, não só escondendo o botão.
 
@@ -63,12 +63,17 @@ mas a falta não é cobrada.
 ### O casamento é pelo nome do parque
 
 A cobrança compara o parque do projeto com a coluna `Parque` do RDO, usando a
-célula inteira. No cadastro do projeto o parque **é escolhido de uma lista
-tirada da própria planilha do RDO** — os dois lados usam a mesma grafia, sem
-depender de digitação.
+célula inteira.
 
-Se o parque digitado não existir em nenhum RDO, o campo avisa na hora. Não
-bloqueia, porque parque novo ainda não tem relatório nenhum.
+**O parque é digitado pelo supervisor, em texto livre.** O projeto nasce antes
+do primeiro RDO, então não dá para escolher de uma lista tirada do RDO: no dia
+do cadastro aquele parque ainda não existe lá.
+
+O preço disso é que a grafia passa a depender de quem digita. "SANTO AGOSTINHO
+1", "Santo Agostinho 01" e "STO AGOSTINHO 1" são três parques diferentes para o
+Status RDO — o projeto vai constar como **sem relatório para sempre**. Escreva
+exatamente como aparece na coluna `Parque` do RDO. Para ver a grafia real, use
+**Portal > Conferir colunas do RDO**.
 
 **Parque e equipe andam juntos, de propósito.** O número no fim
 ("SANTO AGOSTINHO 1") é a equipe, mas o casamento usa a célula inteira como um
@@ -77,8 +82,24 @@ saía inconsistente: "OITIS 1" ficava inteiro enquanto "SÃO FERNANDO 1" era
 dividido. Mantendo junto, os dois lados usam exatamente o mesmo texto e cada
 dupla parque+equipe vira uma linha própria na cobrança.
 
-O campo "número da equipe" do projeto **se preenche sozinho** a partir do nome
-do parque escolhido. Só digite se o parque não trouxer número.
+Por isso **não existe mais campo "número da equipe"** no cadastro: ele já estava
+dentro do nome do parque, e ter os dois só criava chance de divergir.
+
+### Tipo de reparo e data de finalização
+
+O **tipo de reparo** vem da planilha **Banco de inputs**, aba `ATV POR HR`. Só
+entram na lista as linhas em que a coluna `Atividade obrigatória` está como
+`Não` — atividade obrigatória é rotina de todo dia, não é o reparo que define o
+projeto. O campo filtra enquanto se digita, mas continua aceitando texto livre:
+se a planilha estiver fora do ar, o cadastro não trava.
+
+As colunas são achadas pelo cabeçalho, ignorando maiúsculas e acentos. Se o
+cabeçalho mudar, acrescente o nome novo em `COLUNAS_INPUTS`, no
+`SupervisaoCampo.gs`.
+
+A situação **Concluído** exige a **data de finalização**, e a data não pode ser
+anterior ao início. Enquanto o projeto está em andamento o campo fica escondido
+e a data é apagada — assim não sobra data de fim em projeto que ainda roda.
 
 ### Endereço das planilhas
 
@@ -94,6 +115,8 @@ na barra da esquerda) > Propriedades do script > Adicionar propriedade.
 | `ABA_RDO` | nome da aba dos relatórios (ex.: `Relatorios`) |
 | `ID_MINIMASTER` | link ou ID da planilha MINI MASTER |
 | `ABA_MINIMASTER` | nome da aba dos técnicos (deixe vazio para a primeira aba) |
+| `ID_INPUTS` | link ou ID da planilha **Banco de inputs** |
+| `ABA_INPUTS` | nome da aba dos tipos de reparo (padrão: `ATV POR HR`) |
 
 Pode colar o link inteiro do navegador — o ID é extraído sozinho.
 
@@ -101,8 +124,8 @@ Quem prefere não mexer nas propriedades pode usar **Portal > Configurar
 planilhas**, no menu da planilha, que faz o mesmo por perguntas.
 
 Depois, rode **`verConfiguracao()`** pelo botão Executar: mostra o que está
-gravado, se consegue ler as duas planilhas, quantos técnicos achou e como
-parque e equipe estão sendo separados. O resultado sai em Registro de execução.
+gravado, se consegue ler as três planilhas, quantos técnicos e quantos tipos de
+reparo achou, e como parque e equipe estão sendo separados. O resultado sai em Registro de execução.
 
 ### "Cannot call SpreadsheetApp.getUi() from this context"
 

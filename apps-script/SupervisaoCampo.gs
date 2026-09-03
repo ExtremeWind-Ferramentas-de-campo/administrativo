@@ -35,6 +35,8 @@
      ABA_RDO         nome da aba dos relatórios (padrão: Relatorios)
      ID_MINIMASTER   link ou ID da planilha MINI MASTER
      ABA_MINIMASTER  nome da aba dos técnicos (vazio = primeira aba)
+     ID_INPUTS       link ou ID da planilha "Banco de inputs"
+     ABA_INPUTS      nome da aba dos tipos de reparo (padrão: ATV POR HR)
 
    Pode colar o link inteiro do navegador: o ID é extraído sozinho.
    Depois, rode verConfiguracao() para conferir se está lendo as duas planilhas.
@@ -62,6 +64,22 @@ function idPlanilhaMiniMaster_() {
   return id;
 }
 function abaNomeMiniMaster_() { return prop_('ABA_MINIMASTER', ''); }
+
+function idPlanilhaInputs_() {
+  const id = extrairId_(prop_('ID_INPUTS'));
+  if (!id) throw new Error('A planilha "Banco de inputs" ainda não foi configurada. ' +
+                           'Crie a propriedade ID_INPUTS em Configurações do projeto > ' +
+                           'Propriedades do script.');
+  return id;
+}
+function abaNomeInputs_() { return prop_('ABA_INPUTS', 'ATV POR HR'); }
+
+/* Colunas da aba ATV POR HR, descobertas pelo cabeçalho (sem acento, minúsculo).
+   Acrescente apelidos aqui se o cabeçalho da planilha mudar. */
+const COLUNAS_INPUTS = {
+  tipo:        ['tipo_de_reparo', 'tipo_reparo', 'tiporeparo', 'tipo'],
+  obrigatoria: ['atividade_obrigatoria', 'atividade_obrig', 'obrigatoria', 'atv_obrigatoria']
+};
 
 /* Apelidos aceitos para cada coluna. Acrescente aqui se o cabeçalho mudar.
    A comparação ignora maiúsculas, acentos e espaços. */
@@ -110,7 +128,9 @@ function verConfiguracao() {
   txt += '  ID_RDO         : ' + (props.getProperty('ID_RDO') || '(não configurado)') + '\n';
   txt += '  ABA_RDO        : ' + abaNomeRDO_() + '\n';
   txt += '  ID_MINIMASTER  : ' + (props.getProperty('ID_MINIMASTER') || '(não configurado)') + '\n';
-  txt += '  ABA_MINIMASTER : ' + (abaNomeMiniMaster_() || '(primeira aba)') + '\n\n';
+  txt += '  ABA_MINIMASTER : ' + (abaNomeMiniMaster_() || '(primeira aba)') + '\n';
+  txt += '  ID_INPUTS      : ' + (props.getProperty('ID_INPUTS') || '(não configurado)') + '\n';
+  txt += '  ABA_INPUTS     : ' + abaNomeInputs_() + '\n\n';
 
   try {
     const d = diagnosticoColunasRDO_();
@@ -134,6 +154,16 @@ function verConfiguracao() {
     if (t.length > 1) txt += '\n  Último:   ' + t[t.length-1].nome + ' — ' + t[t.length-1].matricula;
   } catch (e) {
     txt += '\nMINI MASTER: ERRO — ' + e.message;
+  }
+
+  try {
+    const tr = lerTiposReparo_();
+    txt += '\n\nBANCO DE INPUTS: ' + tr.length + ' tipos de reparo ' +
+           '(linhas com Atividade obrigatória = Não).';
+    tr.slice(0, 10).forEach(function (n) { txt += '\n    ' + n; });
+    if (tr.length > 10) txt += '\n    ... e mais ' + (tr.length - 10) + '.';
+  } catch (e) {
+    txt += '\n\nBANCO DE INPUTS: ERRO — ' + e.message;
   }
 
   Logger.log('\n' + txt + '\n');
@@ -174,14 +204,28 @@ function menuConfigurarPlanilhas() {
     ui.ButtonSet.OK_CANCEL);
   if (r4.getSelectedButton() !== ui.Button.OK) return;
 
+  const r5 = ui.prompt('Planilha Banco de inputs',
+    'Cole o link (ou o ID) da planilha "Banco de inputs" — de onde saem os tipos de reparo.\n\n' +
+    'Atual: ' + (props.getProperty('ID_INPUTS') || '(não configurada)'),
+    ui.ButtonSet.OK_CANCEL);
+  if (r5.getSelectedButton() !== ui.Button.OK) return;
+  const idInputs = extrairId_(r5.getResponseText());
+
+  const r6 = ui.prompt('Aba do Banco de inputs',
+    'Nome da aba com as atividades.\n\nAtual: ' + abaNomeInputs_(),
+    ui.ButtonSet.OK_CANCEL);
+  if (r6.getSelectedButton() !== ui.Button.OK) return;
+
   props.setProperties({
     ID_RDO: idRdo,
     ABA_RDO: abaRdo,
     ID_MINIMASTER: idMini,
-    ABA_MINIMASTER: r4.getResponseText().trim()
+    ABA_MINIMASTER: r4.getResponseText().trim(),
+    ID_INPUTS: idInputs,
+    ABA_INPUTS: r6.getResponseText().trim() || abaNomeInputs_()
   }, false);
 
-  CacheService.getScriptCache().removeAll(['rdo_dados', 'minimaster_tecnicos']);
+  CacheService.getScriptCache().removeAll(['rdo_dados', 'minimaster_tecnicos', 'inputs_tipos_reparo']);
 
   let msg = 'Salvo nas Propriedades do Script.\n\n';
   try {
@@ -193,6 +237,9 @@ function menuConfigurarPlanilhas() {
   try {
     msg += 'MINI MASTER: ' + lerTecnicos_().length + ' técnicos.\n';
   } catch (e) { msg += 'MINI MASTER: ERRO — ' + e.message + '\n'; }
+  try {
+    msg += 'BANCO DE INPUTS: ' + lerTiposReparo_().length + ' tipos de reparo.\n';
+  } catch (e) { msg += 'BANCO DE INPUTS: ERRO — ' + e.message + '\n'; }
 
   msg += '\nConfira a separação de parque e equipe em Portal > Conferir colunas do RDO.';
   avisar_(msg);
@@ -214,7 +261,8 @@ function configurarSupervisao() {
   avisar_('Abas de projetos criadas.\n\n' +
           'Próximo passo: informe os endereços das planilhas em\n' +
           'Configurações do projeto > Propriedades do script:\n' +
-          '  ID_RDO, ABA_RDO, ID_MINIMASTER, ABA_MINIMASTER\n\n' +
+          '  ID_RDO, ABA_RDO, ID_MINIMASTER, ABA_MINIMASTER,\n' +
+          '  ID_INPUTS, ABA_INPUTS\n\n' +
           'Depois rode verConfiguracao() para conferir.');
 }
 
@@ -239,6 +287,31 @@ function abaRDO_() {
   if (!aba) throw new Error('A aba "' + nome + '" não existe na planilha do RDO.');
   return aba;
 }
+
+/**
+ * Descobre em que coluna está cada campo, comparando o cabeçalho com os
+ * apelidos de COLUNAS_RDO. Devolve -1 para o campo que não achou.
+ */
+function detectarColunas_(cabecalho) {
+  const norm = cabecalho.map(normalizarCab_);
+  const mapa = {};
+  Object.keys(COLUNAS_RDO).forEach(function (campo) {
+    mapa[campo] = -1;
+    // primeiro, nome exatamente igual
+    for (let i = 0; i < COLUNAS_RDO[campo].length; i++) {
+      const idx = norm.indexOf(COLUNAS_RDO[campo][i]);
+      if (idx > -1) { mapa[campo] = idx; return; }
+    }
+    // depois, cabeçalho que contém o apelido (ex.: "data_exp_final")
+    for (let i = 0; i < COLUNAS_RDO[campo].length; i++) {
+      const alvo = COLUNAS_RDO[campo][i];
+      const idx = norm.findIndex(function (c) { return c.indexOf(alvo) > -1; });
+      if (idx > -1) { mapa[campo] = idx; return; }
+    }
+  });
+  return mapa;
+}
+
 
 /** Primeiros valores distintos da coluna Parque. */
 function amostraParques_(quantos) {
@@ -490,7 +563,7 @@ function acaoRdoStatus_(p) {
       const achado = porParque[chaveTexto_(pr.parque)] || null;
       return {
         id: pr.id, codigo: pr.codigo, parque: pr.parque, cliente: pr.cliente,
-        equipe: pr.equipe, tipoReparo: pr.tipoReparo,
+        tipoReparo: pr.tipoReparo,
         tecnicos: pr.tecnicos || [],
         estado: achado ? 'ENVIADO' : (fds ? 'NAO_OBRIGATORIO' : 'FALTA'),
         link: achado ? achado.link : '',
@@ -604,6 +677,97 @@ function lerTecnicos_() {
   lista.sort(function (a, b) { return a.nome.localeCompare(b.nome); });
   try {
     cache.put('minimaster_tecnicos', JSON.stringify(lista), 600);
+  } catch (e) { /* lista grande demais para o cache: segue sem */ }
+  return lista;
+}
+
+
+/* ===========================================================================
+   TIPOS DE REPARO (planilha BANCO DE INPUTS, aba ATV POR HR)
+   Só leitura. Entram na lista as linhas em que "Atividade obrigatória" está
+   como "Não" — o resto é rotina fixa do dia, não define projeto.
+   =========================================================================== */
+
+function acaoTiposReparoLista_(p) {
+  const matricula = validarSessao_(p.token);
+  if (!matricula) return { ok: false, motivo: 'SESSAO' };
+  try {
+    return { ok: true, tipos: lerTiposReparo_() };
+  } catch (e) {
+    return { ok: false, motivo: 'INPUTS_INDISPONIVEL', detalhe: e.message };
+  }
+}
+
+function abaInputs_() {
+  const ss = SpreadsheetApp.openById(idPlanilhaInputs_());
+  const nome = abaNomeInputs_();
+  const aba = ss.getSheetByName(nome);
+  if (!aba) throw new Error('A aba "' + nome + '" não existe na planilha Banco de inputs.');
+  return aba;
+}
+
+/* "Não", "NÃO", "nao", "N" — tudo isso é não. Célula vazia NÃO conta como não:
+   linha sem preencher costuma ser linha em branco no fim da tabela, não uma
+   decisão de quem montou a planilha. */
+function ehNao_(valor) {
+  const v = String(valor == null ? '' : valor)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim();
+  return v === 'nao' || v === 'n' || v === 'false' || v === 'no';
+}
+
+function lerTiposReparo_() {
+  const cache = CacheService.getScriptCache();
+  const guardado = cache.get('inputs_tipos_reparo');
+  if (guardado) {
+    try { return JSON.parse(guardado); } catch (e) { /* cache ruim: relê */ }
+  }
+
+  const aba = abaInputs_();
+  const ultima = aba.getLastRow();
+  const larg = aba.getLastColumn();
+  if (ultima < 2 || larg < 1) return [];
+
+  const dados = aba.getRange(1, 1, ultima, larg).getValues();
+  const norm = dados[0].map(normalizarCab_);
+
+  const acharCol = function (apelidos) {
+    for (let i = 0; i < apelidos.length; i++) {
+      const idx = norm.indexOf(apelidos[i]);
+      if (idx > -1) return idx;
+    }
+    for (let i = 0; i < apelidos.length; i++) {
+      const idx = norm.findIndex(function (c) { return c && c.indexOf(apelidos[i]) > -1; });
+      if (idx > -1) return idx;
+    }
+    return -1;
+  };
+
+  const cTipo = acharCol(COLUNAS_INPUTS.tipo);
+  const cObr  = acharCol(COLUNAS_INPUTS.obrigatoria);
+  if (cTipo === -1) {
+    throw new Error('Não achei a coluna "Tipo de reparo" na aba "' + abaNomeInputs_() +
+                    '". Cabeçalho lido: ' + dados[0].filter(String).join(' | '));
+  }
+  if (cObr === -1) {
+    throw new Error('Não achei a coluna "Atividade obrigatória" na aba "' + abaNomeInputs_() +
+                    '". Cabeçalho lido: ' + dados[0].filter(String).join(' | '));
+  }
+
+  const vistos = {}, lista = [];
+  for (let l = 1; l < dados.length; l++) {
+    if (!ehNao_(dados[l][cObr])) continue;
+    const nome = String(dados[l][cTipo] == null ? '' : dados[l][cTipo]).trim();
+    if (!nome) continue;
+    const chave = chaveTexto_(nome);
+    if (vistos[chave]) continue;
+    vistos[chave] = true;
+    lista.push(nome);
+  }
+
+  lista.sort(function (a, b) { return a.localeCompare(b); });
+  try {
+    cache.put('inputs_tipos_reparo', JSON.stringify(lista), 600);
   } catch (e) { /* lista grande demais para o cache: segue sem */ }
   return lista;
 }

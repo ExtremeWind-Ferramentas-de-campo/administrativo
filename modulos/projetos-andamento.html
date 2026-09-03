@@ -44,6 +44,10 @@
   .tirar:hover{border-color:var(--erro)}
   @media(max-width:520px){ .lin-tec{grid-template-columns:1fr 100px 42px} }
 
+  /* caixa genérica de campo com lista que filtra enquanto digita (Tipo de reparo) */
+  .cx-sug{position:relative}
+  .cx-sug .sugestoes{top:calc(100% + 4px);width:100%}
+
   /* busca de técnico com lista que filtra enquanto digita */
   .lin-tec{position:relative}
   .tec-mat{background:var(--linha) !important;color:var(--muted) !important;cursor:not-allowed;text-align:center}
@@ -86,7 +90,7 @@
   <div class="barra-acoes">
     <div class="busca">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-      <input id="busca" type="search" placeholder="Buscar por parque, cliente, equipe ou técnico…">
+      <input id="busca" type="search" placeholder="Buscar por parque, cliente, tipo de reparo ou técnico…">
     </div>
     <div class="campo" style="margin:0;min-width:170px">
       <select id="filtroStatus" style="min-height:44px">
@@ -117,10 +121,9 @@
       <div class="linha-campos">
         <div class="campo" id="c-parque">
           <label for="f-parque">Nome do parque</label>
-          <input id="f-parque" list="parquesRDO" required autocomplete="off"
-                 placeholder="Comece a digitar e escolha na lista">
-          <datalist id="parquesRDO"></datalist>
-          <span class="dica" id="d-parque">A lista vem da própria planilha do RDO. Escolher nela garante que o relatório será encontrado.</span>
+          <input id="f-parque" required autocomplete="off"
+                 placeholder="Ex.: SANTO AGOSTINHO 1">
+          <span class="dica" id="d-parque">Escreva exatamente como o parque aparece no RDO — é por esse texto que o Status RDO encontra o relatório.</span>
         </div>
         <div class="campo" id="c-cliente">
           <label for="f-cliente">Cliente</label>
@@ -130,34 +133,20 @@
       </div>
 
       <div class="linha-campos">
-        <div class="campo" id="c-equipe">
-          <label for="f-equipe">Número da equipe</label>
-          <input id="f-equipe" class="mono" placeholder="preenche sozinho">
-          <span class="dica" id="d-equipe">Vem do próprio nome do parque. Só preencha se não estiver lá.</span>
-        </div>
         <div class="campo" id="c-tipo">
           <label for="f-tipo">Tipo de reparo</label>
-          <input id="f-tipo" list="tiposReparo" required placeholder="Ex.: Reparo estrutural">
-          <datalist id="tiposReparo">
-            <option value="Reparo estrutural"></option>
-            <option value="Reparo de bordo de ataque"></option>
-            <option value="Reparo de bordo de fuga"></option>
-            <option value="Reparo de ponta"></option>
-            <option value="Reparo de casca"></option>
-            <option value="Aplicação de proteção (LEP)"></option>
-            <option value="Inspeção"></option>
-            <option value="Pintura"></option>
-            <option value="Instalação de acessórios"></option>
-          </datalist>
-          <span class="dica" id="d-tipo"></span>
+          <div class="cx-sug" id="cx-tipo">
+            <input id="f-tipo" required autocomplete="off" placeholder="Digite para filtrar e escolha na lista">
+          </div>
+          <span class="dica" id="d-tipo">A lista vem da planilha Banco de inputs, aba ATV POR HR.</span>
         </div>
-      </div>
-
-      <div class="linha-campos">
         <div class="campo">
           <label for="f-inicio">Início</label>
           <input id="f-inicio" type="date">
         </div>
+      </div>
+
+      <div class="linha-campos">
         <div class="campo">
           <label for="f-status">Situação</label>
           <select id="f-status">
@@ -165,6 +154,11 @@
             <option value="concluido">Concluído</option>
           </select>
           <span class="dica">Só projetos em andamento são cobrados no Status RDO.</span>
+        </div>
+        <div class="campo" id="c-fim" hidden>
+          <label for="f-fim">Data de finalização</label>
+          <input id="f-fim" type="date" required>
+          <span class="dica" id="d-fim">Obrigatória para concluir o projeto.</span>
         </div>
       </div>
 
@@ -243,7 +237,7 @@ function desenhar(){
   var lista = projetos.filter(function(p){
     if(st && (p.status || 'andamento') !== st) return false;
     if(!termo) return true;
-    var alvo = [p.parque, p.cliente, p.equipe, p.tipoReparo, p.codigo]
+    var alvo = [p.parque, p.cliente, p.tipoReparo, p.codigo]
       .concat((p.tecnicos||[]).map(function(t){ return t.nome + ' ' + t.matricula; }))
       .join(' ').toLowerCase();
     return alvo.indexOf(termo) > -1;
@@ -274,9 +268,9 @@ function desenhar(){
           ((p.status||'andamento')==='concluido' ? 'Concluído' : 'Em andamento') + '</span>' +
       '</div>' +
       '<div class="projeto-linha">' +
-        '<span class="etiqueta">Equipe ' + esc(p.equipe || '—') + '</span>' +
         (p.tipoReparo ? '<span class="etiqueta etiqueta--azul">' + esc(p.tipoReparo) + '</span>' : '') +
         (p.inicio ? '<span class="etiqueta">Início ' + esc(dataBonita(p.inicio)) + '</span>' : '') +
+        (p.fim ? '<span class="etiqueta">Fim ' + esc(dataBonita(p.fim)) + '</span>' : '') +
       '</div>' +
       (p.tecnicos && p.tecnicos.length
         ? '<div class="tecnicos"><div class="tecnicos-tit">Técnicos (' + p.tecnicos.length + ')</div>' +
@@ -319,59 +313,118 @@ var TECNICOS = [];
 var listaAberta = null;
 var indiceAtivo = -1;
 
-/* A lista de parques sai da planilha do RDO. É a mesma grafia dos dois lados,
-   então o Status RDO acha o relatório sem depender de digitação. */
-function carregarParques(){
-  return chamar('rdoFiltros', {})
+/* ---------- tipos de reparo (planilha BANCO DE INPUTS, aba ATV POR HR) ----------
+   Só entram na lista as linhas em que "Atividade obrigatória" está como "Não":
+   atividade obrigatória é rotina de todo dia, não é o reparo que define o projeto.
+   O campo continua aceitando texto livre — a lista filtra, não prende. */
+var TIPOS_REPARO = [];
+
+function carregarTiposReparo(){
+  return chamar('tiposReparoLista', {})
     .then(function(res){
-      if(!res || !res.ok) return;
-      PARQUES_RDO = res.parques || [];
-      var dl = document.getElementById('parquesRDO');
-      dl.innerHTML = '';
-      PARQUES_RDO.forEach(function(nome){
-        var o = document.createElement('option');
-        o.value = nome;
-        dl.appendChild(o);
-      });
+      if(res && res.ok){
+        TIPOS_REPARO = res.tipos || [];
+        if(!TIPOS_REPARO.length){
+          document.getElementById('d-tipo').textContent =
+            'Nenhum tipo com "Atividade obrigatória = Não" na aba ATV POR HR. Você ainda pode digitar.';
+        }
+      }else{
+        document.getElementById('d-tipo').textContent =
+          'Lista de tipos indisponível. Você ainda pode digitar o tipo à mão.';
+      }
     })
-    .catch(function(){ /* sem lista, o campo continua aceitando texto livre */ });
-}
-var PARQUES_RDO = [];
-
-function parqueExisteNoRDO(nome){
-  if(!PARQUES_RDO.length) return true;          // lista não carregou: não julga
-  var alvo = nome.trim().toLowerCase();
-  return PARQUES_RDO.some(function(x){ return x.toLowerCase() === alvo; });
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      document.getElementById('d-tipo').textContent =
+        'Lista de tipos indisponível. Você ainda pode digitar o tipo à mão.';
+    });
 }
 
-/* O número no fim do parque é a equipe. Em vez de pedir para digitar de novo
-   (e correr o risco de divergir do que está no RDO), ele é copiado dali. */
-function preencherEquipeDoParque(nomeParque){
-  var campo = document.getElementById('f-equipe');
-  var m = String(nomeParque || '').trim().match(/(\d{1,3})$/);
-  campo.value = m ? m[1] : '';
-}
+/* Mesmo comportamento da busca de técnico, mas com uma lista de textos simples. */
+function ligarBuscaTipo(){
+  var caixa = document.getElementById('cx-tipo');
+  var campo = document.getElementById('f-tipo');
 
-/* Avisa enquanto digita. É aqui que a pessoa ainda pode corrigir sem esforço. */
-function ligarConfereParque(){
-  var campo = document.getElementById('f-parque');
-  var dica = document.getElementById('d-parque');
-  var padrao = 'A lista vem da própria planilha do RDO. Escolher nela garante que o relatório será encontrado.';
+  function filtrar(){
+    var termo = chaveBusca(campo.value);
+    fecharSugestoes();
+    if(!TIPOS_REPARO.length) return;
 
-  campo.addEventListener('input', function(){
-    var v = campo.value.trim();
-    if(!v || parqueExisteNoRDO(v)){
-      document.getElementById('c-parque').classList.remove('erro');
-      dica.textContent = padrao;
-      dica.style.color = '';
+    var achados = TIPOS_REPARO.filter(function(t){
+      return !termo || chaveBusca(t).indexOf(termo) > -1;
+    }).slice(0, 60);
+
+    var cx = document.createElement('div');
+    cx.className = 'sugestoes';
+    if(!achados.length){
+      cx.innerHTML = '<div class="sug-vazio">Nenhum tipo com esse texto. Pode digitar assim mesmo.</div>';
     }else{
-      document.getElementById('c-parque').classList.add('erro');
-      dica.textContent = 'Este parque não aparece em nenhum RDO. Confira a grafia — ' +
-                         'ou siga, se for um parque novo.';
-      dica.style.color = 'var(--alerta)';
+      achados.forEach(function(t){
+        var item = document.createElement('div');
+        item.className = 'sug';
+        item.setAttribute('role','option');
+        item.innerHTML = '<span>' + esc(t) + '</span>';
+        item.addEventListener('mousedown', function(e){
+          e.preventDefault();
+          campo.value = t;
+          fecharSugestoes();
+        });
+        cx.appendChild(item);
+      });
     }
-    preencherEquipeDoParque(v);
+    caixa.appendChild(cx);
+    listaAberta = cx;
+    indiceAtivo = -1;
+  }
+
+  campo.addEventListener('input', filtrar);
+  campo.addEventListener('focus', filtrar);
+  campo.addEventListener('blur', function(){ setTimeout(fecharSugestoes, 120); });
+  campo.addEventListener('keydown', function(e){
+    if(!listaAberta) return;
+    if(e.key === 'Escape'){ e.stopPropagation(); fecharSugestoes(); return; }
+    var itens = listaAberta.querySelectorAll('.sug');
+    if(!itens.length) return;
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      indiceAtivo += (e.key === 'ArrowDown' ? 1 : -1);
+      if(indiceAtivo < 0) indiceAtivo = itens.length - 1;
+      if(indiceAtivo >= itens.length) indiceAtivo = 0;
+      Array.prototype.forEach.call(itens, function(el, i){ el.classList.toggle('ativa', i === indiceAtivo); });
+      itens[indiceAtivo].scrollIntoView({ block:'nearest' });
+    }else if(e.key === 'Enter' && indiceAtivo > -1){
+      e.preventDefault();
+      itens[indiceAtivo].dispatchEvent(new MouseEvent('mousedown'));
+    }
   });
+}
+
+/* Acento e caixa não podem atrapalhar quem digita rápido. */
+function chaveBusca(t){
+  return String(t == null ? '' : t)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim();
+}
+
+/* ---------- data de finalização ----------
+   Só aparece quando a situação é "Concluído", e aí passa a ser obrigatória.
+   Deixar o campo sempre visível convidava a preencher data de fim em projeto
+   que ainda está rodando. */
+function ligarStatusFim(){
+  var status = document.getElementById('f-status');
+  status.addEventListener('change', function(){ aplicarStatusFim(); });
+}
+
+function aplicarStatusFim(){
+  var concluido = document.getElementById('f-status').value === 'concluido';
+  document.getElementById('c-fim').hidden = !concluido;
+  if(!concluido){
+    document.getElementById('f-fim').value = '';
+    marcarErro('c-fim','d-fim','');
+    document.getElementById('d-fim').textContent = 'Obrigatória para concluir o projeto.';
+  }else if(!document.getElementById('f-fim').value){
+    document.getElementById('f-fim').value = hojeISO();
+  }
 }
 
 function carregarTecnicos(){
@@ -474,13 +527,18 @@ function abrirJanela(id){
 
   document.getElementById('f-parque').value  = p ? (p.parque || '') : '';
   document.getElementById('c-parque').classList.remove('erro');
-  document.getElementById('d-parque').style.color = '';
   document.getElementById('f-cliente').value = p ? (p.cliente || '') : '';
-  document.getElementById('f-equipe').value  = p ? (p.equipe || '') : '';
-  if(!p) preencherEquipeDoParque('');
   document.getElementById('f-tipo').value    = p ? (p.tipoReparo || '') : '';
+  document.getElementById('c-tipo').classList.remove('erro');
   document.getElementById('f-inicio').value  = p ? (p.inicio || '') : hojeISO();
   document.getElementById('f-status').value  = p ? (p.status || 'andamento') : 'andamento';
+
+  // ordem importa: a data guardada entra depois de aplicarStatusFim, senão ela
+  // seria sobrescrita pelo "hoje" que o campo assume quando abre em branco.
+  document.getElementById('f-fim').value = '';
+  aplicarStatusFim();
+  if(p && p.fim){ document.getElementById('f-fim').value = p.fim; }
+  marcarErro('c-fim','d-fim','');
 
   var lista = document.getElementById('listaTec');
   lista.innerHTML = '';
@@ -534,18 +592,40 @@ document.getElementById('form').addEventListener('submit', function(e){
 
   var parque  = document.getElementById('f-parque').value.trim();
   var cliente = document.getElementById('f-cliente').value.trim();
-  var equipe  = document.getElementById('f-equipe').value.trim();
   var tipo    = document.getElementById('f-tipo').value.trim();
+  var status  = document.getElementById('f-status').value;
+  var inicio  = document.getElementById('f-inicio').value || '';
+  var fim     = document.getElementById('f-fim').value || '';
 
   var parar = false;
   marcarErro('c-parque','d-parque', parque ? '' : 'Informe o nome do parque.'); parar = parar || !parque;
-
-  var parqueDesconhecido = parque && !parqueExisteNoRDO(parque);
+  if(parque){
+    document.getElementById('d-parque').textContent =
+      'Escreva exatamente como o parque aparece no RDO — é por esse texto que o Status RDO encontra o relatório.';
+  }
   marcarErro('c-cliente','d-cliente', cliente ? '' : 'Informe o cliente.');     parar = parar || !cliente;
-  // Equipe deixou de ser obrigatória: ela já vem no nome do parque
-  // ("SANTO AGOSTINHO 1"), e exigir de novo só criava chance de divergir.
-  marcarErro('c-equipe','d-equipe', '');
   marcarErro('c-tipo','d-tipo', tipo ? '' : 'Informe o tipo de reparo.');       parar = parar || !tipo;
+  if(tipo){
+    document.getElementById('d-tipo').textContent =
+      'A lista vem da planilha Banco de inputs, aba ATV POR HR.';
+  }
+
+  // Concluído sem data de fim é projeto que "acabou" sem ninguém saber quando.
+  if(status === 'concluido'){
+    if(!fim){
+      marcarErro('c-fim','d-fim','Informe a data de finalização para concluir.');
+      parar = true;
+    }else if(inicio && fim < inicio){
+      marcarErro('c-fim','d-fim','A finalização não pode ser anterior ao início.');
+      parar = true;
+    }else{
+      marcarErro('c-fim','d-fim','');
+      document.getElementById('d-fim').textContent = 'Obrigatória para concluir o projeto.';
+    }
+  }else{
+    marcarErro('c-fim','d-fim','');
+    fim = '';
+  }
 
   var tecnicos = [];
   Array.prototype.forEach.call(document.querySelectorAll('#listaTec .lin-tec'), function(l){
@@ -579,23 +659,18 @@ document.getElementById('form').addEventListener('submit', function(e){
 
   alvo.parque = parque;
   alvo.cliente = cliente;
-  alvo.equipe = equipe;
   alvo.tipoReparo = tipo;
-  alvo.inicio = document.getElementById('f-inicio').value || '';
-  alvo.status = document.getElementById('f-status').value;
+  alvo.inicio = inicio;
+  alvo.status = status;
+  alvo.fim = fim;                       // vazio enquanto o projeto está em andamento
   alvo.tecnicos = tecnicos;
   alvo.atualizadoPor = SESSAO.nome || SESSAO.matricula;
   alvo.atualizadoEm = agora;
+  delete alvo.equipe;                   // campo aposentado: some também nos projetos antigos
 
   enviar([alvo], []);
   fecharJanela();
   desenhar();
-
-  // Depois de fechar a janela, senão o aviso apareceria e sumiria junto com ela.
-  if(parqueDesconhecido){
-    recado('"' + parque + '" não aparece em nenhum RDO. Se o parque é novo, tudo bem — ' +
-           'senão, corrija a grafia, ou ele vai constar como sem relatório para sempre.', 'erro');
-  }
 });
 
 document.getElementById('btExcluir').addEventListener('click', function(){
@@ -659,7 +734,7 @@ if(iniciarModulo()){
   carregar(true)
     .then(function(){
       desbloquear();
-      if(podeEditar){ carregarTecnicos(); carregarParques(); ligarConfereParque(); }
+      if(podeEditar){ carregarTecnicos(); carregarTiposReparo(); ligarBuscaTipo(); ligarStatusFim(); }
       if(!podeEditar){
         avisoTopo('Seu perfil acompanha os projetos, mas não altera. Criar e editar é do supervisor.', 'info');
       }

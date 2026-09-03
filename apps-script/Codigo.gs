@@ -389,6 +389,7 @@ function doPost(e) {
       case 'rdoStatus':              resposta = acaoRdoStatus_(corpo);             break;
       case 'rdoFiltros':             resposta = acaoRdoFiltros_(corpo);            break;
       case 'tecnicosLista':          resposta = acaoTecnicosLista_(corpo);         break;
+      case 'tiposReparoLista':       resposta = acaoTiposReparoLista_(corpo);      break;
 
       default:               resposta = { ok: false, motivo: 'ACAO_DESCONHECIDA' };
     }
@@ -738,14 +739,6 @@ function acaoSair_(p) {
     if (String(dados[l][0]) === alvo) { aba.deleteRow(l + 1); break; }
   }
   return { ok: true };
-}
-
-function validarSessao_(token) {
-  if (!token) return null;
-  const matricula = CacheService.getScriptCache().get('sessao_' + String(token));
-  if (!matricula) return null;
-  renovarSessao_(token, matricula);
-  return matricula;
 }
 
 

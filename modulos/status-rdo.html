@@ -259,7 +259,8 @@ function desenhar(res){
         '<div class="cob-txt">' +
           '<div class="cob-parque">' + esc(p.parque) + '</div>' +
           '<div class="cob-meta">' +
-            esc(p.cliente || 'sem cliente') + ' · Equipe ' + esc(p.equipe || '—') +
+            esc(p.cliente || 'sem cliente') +
+            (p.tipoReparo ? ' · ' + esc(p.tipoReparo) : '') +
             (p.autor ? ' · enviado por ' + esc(p.autor) : '') +
             (p.avanco ? ' · avanço ' + esc(p.avanco) : '') +
           '</div>' +
