@@ -839,10 +839,56 @@ function perfilDe_(matricula) {
   return achado ? String(achado.dados.perfil).toUpperCase() : 'DIRETORIA';
 }
 
-/* Quem cria e edita projeto é o SUPERVISOR, que é quem está em campo.
-   ADMIN e DIRETORIA acompanham, mas não alteram. */
+/* Quem cria e edita projeto: ADMIN (setor administrativo) e SUPERVISOR.
+   DIRETORIA e USUARIO acompanham, sem alterar. */
+const PERFIS_EDITAM_PROJETO = ['ADMIN', 'SUPERVISOR'];
 function podeEditarProjeto_(perfil) {
-  return perfil === 'SUPERVISOR';
+  return PERFIS_EDITAM_PROJETO.indexOf(String(perfil).toUpperCase()) > -1;
+}
+
+
+/* ===========================================================================
+   SUPERVISORES (aba USUARIOS desta mesma planilha)
+   Serve para o campo "Supervisor" do projeto. Devolve só matrícula e nome —
+   nada de CPF, email ou telefone: a tela não precisa e o payload é público
+   para quem estiver logado.
+   =========================================================================== */
+
+function acaoSupervisoresLista_(p) {
+  const matricula = validarSessao_(p.token);
+  if (!matricula) return { ok: false, motivo: 'SESSAO' };
+  try {
+    return { ok: true, supervisores: lerSupervisores_() };
+  } catch (e) {
+    return { ok: false, motivo: 'USUARIOS_INDISPONIVEL', detalhe: e.message };
+  }
+}
+
+function lerSupervisores_() {
+  const aba = abaUsuarios_();
+  const dados = aba.getDataRange().getValues();
+  if (dados.length < 2) return [];
+
+  const cab = dados[0].map(normalizarCab_);
+  const cMat    = cab.indexOf('matricula');
+  const cNome   = cab.indexOf('nome');
+  const cPerfil = cab.indexOf('perfil');
+  const cStatus = cab.indexOf('status');
+  if (cMat === -1 || cNome === -1 || cPerfil === -1) return [];
+
+  const lista = [];
+  for (let l = 1; l < dados.length; l++) {
+    if (String(dados[l][cPerfil]).toUpperCase().trim() !== 'SUPERVISOR') continue;
+    // Quem foi desligado continua na planilha, mas não deve aparecer para
+    // ser escolhido em projeto novo.
+    if (cStatus > -1 && String(dados[l][cStatus]).toUpperCase().trim() === 'INATIVO') continue;
+    const mat  = String(dados[l][cMat] == null ? '' : dados[l][cMat]).replace(/^'/, '').trim();
+    const nome = String(dados[l][cNome] == null ? '' : dados[l][cNome]).trim();
+    if (!mat) continue;
+    lista.push({ matricula: mat, nome: nome || ('matrícula ' + mat) });
+  }
+  lista.sort(function (a, b) { return a.nome.localeCompare(b.nome); });
+  return lista;
 }
 
 /** { projetos[], removidos[], nextSeq } -> { ok, rev, aceitos[], conflitos[] } */

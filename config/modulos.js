@@ -15,7 +15,10 @@
      url        Caminho do arquivo. Relativo à pasta do portal:
                   'modulos/nome-do-arquivo.html'
                 Também aceita endereço completo (https://...).
-     perfis     Quem enxerga o card. Perfis: ADMIN, SUPERVISOR, DIRETORIA.
+     perfis     Quem enxerga o card. Perfis: ADMIN, SUPERVISOR, DIRETORIA, USUARIO.
+                O perfil não separa telas, e sim o que se pode ALTERAR dentro
+                delas: em Projetos em Andamento, só ADMIN e SUPERVISOR criam
+                e editam. Todo mundo enxerga os módulos.
      novaAba    false = abre na mesma aba (padrão daqui; o módulo tem botão de
                         voltar para o portal)
                 true  = abre em outra aba
@@ -32,7 +35,7 @@ const MODULOS = [
     nome:     'Solicitação de Materiais',
     desc:     'Solicitar, separar, enviar e confirmar entrega',
     url:      'modulos/solicitacao-materiais.html',
-    perfis:   ['ADMIN','SUPERVISOR'],
+    perfis:   ['ADMIN','SUPERVISOR','DIRETORIA','USUARIO'],
     novaAba:  false,
     icone:    'fas fa-boxes-stacked',
     cor:      '#c26a12'
@@ -43,7 +46,7 @@ const MODULOS = [
     nome:     'Supervisão de Campo',
     desc:     'Status dos RDOs e projetos em andamento',
     url:      'modulos/supervisao-campo.html',
-    perfis:   ['ADMIN','SUPERVISOR','DIRETORIA'],
+    perfis:   ['ADMIN','SUPERVISOR','DIRETORIA','USUARIO'],
     novaAba:  false,
     icone:    'fas fa-helmet-safety',
     cor:      '#0e7c7b'

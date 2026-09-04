@@ -16,8 +16,16 @@
   .busca svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--faint)}
   .busca input:focus{outline:2px solid var(--azul);outline-offset:1px}
 
-  .projeto{border-top:4px solid var(--azul);display:flex;flex-direction:column;gap:10px}
-  .projeto.concluido{border-top-color:var(--faint);opacity:.72}
+  /* a cor de cima é a do cliente, a mesma do Status RDO */
+  .projeto{border-top:4px solid var(--c,var(--azul));display:flex;flex-direction:column;gap:10px}
+  .projeto.concluido{opacity:.66}
+  .projeto-cliente-tag{
+    display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--c,var(--azul));margin-top:3px;
+  }
+  .legenda{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;font-size:.78rem;color:var(--muted)}
+  .legenda span{display:inline-flex;align-items:center;gap:6px}
+  .legenda i{width:11px;height:11px;border-radius:3px;display:inline-block}
   .projeto-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
   .projeto-cod{font-family:var(--mono);font-size:.72rem;color:var(--faint)}
   .projeto-parque{font-size:1.08rem;font-weight:700;line-height:1.25;margin-top:2px}
@@ -28,6 +36,22 @@
   .tecnico{display:flex;justify-content:space-between;gap:10px;font-size:.85rem;padding:3px 0}
   .tecnico .mat{font-family:var(--mono);color:var(--muted);font-size:.8rem}
   .projeto-rodape{display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--linha);padding-top:10px}
+
+  /* barra de filtros */
+  .filtros{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;
+    background:var(--card);border:1px solid var(--linha);border-radius:12px;
+    padding:12px 14px;margin-bottom:16px;
+  }
+  .filtros .campo{margin:0}
+  .filtros label{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+  .filtros select,.filtros input{min-height:40px}
+  .filtros-rodape{
+    grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;
+    gap:12px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);
+  }
+
+  .supervisores{border-top:1px solid var(--linha);padding-top:10px;margin-top:2px}
 
   .lista-tec{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
   .lin-tec{display:grid;grid-template-columns:1fr 130px 42px;gap:8px;align-items:center}
@@ -92,15 +116,40 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="busca" type="search" placeholder="Buscar por parque, cliente, tipo de reparo ou técnico…">
     </div>
-    <div class="campo" style="margin:0;min-width:170px">
-      <select id="filtroStatus" style="min-height:44px">
+  </div>
+
+  <div class="filtros">
+    <div class="campo">
+      <label for="filtroCliente">Cliente</label>
+      <select id="filtroCliente"><option value="">Todos</option></select>
+    </div>
+    <div class="campo">
+      <label for="filtroSupervisor">Supervisor</label>
+      <select id="filtroSupervisor"><option value="">Todos</option></select>
+    </div>
+    <div class="campo">
+      <label for="filtroStatus">Situação</label>
+      <select id="filtroStatus">
         <option value="andamento">Em andamento</option>
         <option value="concluido">Concluídos</option>
-        <option value="">Todos</option>
+        <option value="">Todas</option>
       </select>
+    </div>
+    <div class="campo">
+      <label for="filtroDe">Período — de</label>
+      <input id="filtroDe" type="date">
+    </div>
+    <div class="campo">
+      <label for="filtroAte">Período — até</label>
+      <input id="filtroAte" type="date">
+    </div>
+    <div class="filtros-rodape">
+      <span id="contagem"></span>
+      <button class="btn btn--vazado btn--pequeno" id="btLimpar" type="button">Limpar filtros</button>
     </div>
   </div>
 
+  <div class="legenda" id="legenda" hidden></div>
   <div class="grade" id="grade"></div>
 </main>
 
@@ -162,6 +211,20 @@
         </div>
       </div>
 
+      <div class="linha-campos">
+        <div class="campo" id="c-sup">
+          <label for="f-sup">Supervisor do projeto</label>
+          <div class="cx-sug" id="cx-sup">
+            <input id="f-sup" autocomplete="off" placeholder="Digite o nome e escolha na lista">
+          </div>
+          <span class="dica" id="d-sup">Só aparecem contas com perfil SUPERVISOR. Um supervisor por projeto.</span>
+        </div>
+        <div class="campo">
+          <label for="f-sup-mat">Matrícula</label>
+          <input id="f-sup-mat" class="mono" readonly tabindex="-1" placeholder="vem junto com o nome">
+        </div>
+      </div>
+
       <div class="campo" id="c-tec">
         <label>Técnicos da equipe</label>
         <div class="lista-tec" id="listaTec"></div>
@@ -191,7 +254,7 @@
 <script>
 /* ============================================================================
    PROJETOS EM ANDAMENTO
-   Quem cria e edita: ADMIN e SUPERVISOR. Técnico só visualiza.
+   Quem cria e edita: ADMIN e SUPERVISOR. DIRETORIA e USUARIO só visualizam.
    A tela esconde os botões, mas quem decide de verdade é o Apps Script —
    esconder botão não é controle de acesso.
    ============================================================================ */
@@ -222,33 +285,119 @@ function carregar(primeira){
         snapshot[p.id] = JSON.stringify(limpo);
         delete p._rev;
         if(!Array.isArray(p.tecnicos)) p.tecnicos = [];
+        if(p.supervisor && !p.supervisor.nome) p.supervisor = null;
         return p;
       });
+      montarOpcoes();
       desenhar();
     });
+}
+
+/* ---------- filtros ----------
+   O filtro de período usa SOBREPOSIÇÃO, não a data de um campo só: o projeto
+   entra se o intervalo dele (início até fim, ou até hoje se ainda roda) tocar
+   o intervalo pedido. É o que responde às três perguntas de uma vez —
+   "começou depois de X", "terminou antes de Y" e "esteve ativo entre X e Y".
+   Filtrar só por p.inicio esconderia projeto que atravessa o período. */
+function filtrosAtuais(){
+  return {
+    termo:      chaveBusca(document.getElementById('busca').value),
+    cliente:    document.getElementById('filtroCliente').value,
+    supervisor: document.getElementById('filtroSupervisor').value,
+    status:     document.getElementById('filtroStatus').value,
+    de:         document.getElementById('filtroDe').value,
+    ate:        document.getElementById('filtroAte').value
+  };
+}
+
+function nomeSupervisor(p){
+  return (p.supervisor && p.supervisor.nome) ? p.supervisor.nome : '';
+}
+
+function dentroDoPeriodo(p, de, ate){
+  if(!de && !ate) return true;
+  var ini = p.inicio || '';
+  var fim = p.fim || (String(p.status || 'andamento') === 'andamento' ? '9999-12-31' : '');
+
+  // Projeto sem nenhuma data não dá para posicionar no tempo. Some quando
+  // existe filtro de período — melhor sumir do que aparecer por acidente.
+  if(!ini && !fim) return false;
+  if(!ini) ini = fim;
+  if(!fim) fim = ini;
+
+  if(de  && fim < de)  return false;
+  if(ate && ini > ate) return false;
+  return true;
+}
+
+function filtrar(){
+  var f = filtrosAtuais();
+  return projetos.filter(function(p){
+    if(f.status && (p.status || 'andamento') !== f.status) return false;
+    if(f.cliente && chaveBusca(p.cliente) !== chaveBusca(f.cliente)) return false;
+    if(f.supervisor && chaveBusca(nomeSupervisor(p)) !== chaveBusca(f.supervisor)) return false;
+    if(!dentroDoPeriodo(p, f.de, f.ate)) return false;
+    if(!f.termo) return true;
+    var alvo = [p.parque, p.cliente, p.tipoReparo, p.codigo, nomeSupervisor(p)]
+      .concat((p.tecnicos||[]).map(function(t){ return t.nome + ' ' + t.matricula; }))
+      .join(' ');
+    return chaveBusca(alvo).indexOf(f.termo) > -1;
+  });
+}
+
+/* As opções vêm dos projetos que existem, não de uma lista fixa: filtro que
+   oferece cliente sem nenhum projeto só gera resultado vazio. */
+function montarOpcoes(){
+  var clientes = [], sups = [];
+  projetos.forEach(function(p){
+    if(p.cliente && clientes.indexOf(p.cliente) === -1) clientes.push(p.cliente);
+    var n = nomeSupervisor(p);
+    if(n && sups.indexOf(n) === -1) sups.push(n);
+  });
+  encherSelect('filtroCliente', clientes.sort(), 'Todos');
+  encherSelect('filtroSupervisor', sups.sort(), 'Todos');
+}
+
+function encherSelect(id, valores, rotuloVazio){
+  var el = document.getElementById(id);
+  var antes = el.value;
+  el.innerHTML = '<option value="">' + rotuloVazio + '</option>';
+  valores.forEach(function(v){
+    var o = document.createElement('option');
+    o.value = v; o.textContent = v;
+    el.appendChild(o);
+  });
+  // se o valor escolhido sumiu (projeto excluído por outra pessoa), volta a Todos
+  el.value = valores.indexOf(antes) > -1 ? antes : '';
 }
 
 /* ---------- desenho ---------- */
 function desenhar(){
   var grade = document.getElementById('grade');
-  var termo = (document.getElementById('busca').value || '').toLowerCase().trim();
-  var st = document.getElementById('filtroStatus').value;
-
-  var lista = projetos.filter(function(p){
-    if(st && (p.status || 'andamento') !== st) return false;
-    if(!termo) return true;
-    var alvo = [p.parque, p.cliente, p.tipoReparo, p.codigo]
-      .concat((p.tecnicos||[]).map(function(t){ return t.nome + ' ' + t.matricula; }))
-      .join(' ').toLowerCase();
-    return alvo.indexOf(termo) > -1;
-  });
+  var lista = filtrar();
 
   lista.sort(function(a,b){ return String(a.parque||'').localeCompare(String(b.parque||'')); });
+
+  document.getElementById('contagem').textContent =
+    lista.length + (lista.length === 1 ? ' projeto' : ' projetos') +
+    (lista.length === projetos.length ? '' : ' de ' + projetos.length);
+
+  // legenda de cores: só faz sentido com mais de um cliente na tela
+  var clientes = [];
+  lista.forEach(function(p){
+    if(p.cliente && clientes.indexOf(p.cliente) === -1) clientes.push(p.cliente);
+  });
+  var leg = document.getElementById('legenda');
+  leg.hidden = clientes.length < 2;
+  leg.innerHTML = clientes.sort().map(function(c){
+    return '<span><i style="background:' + corDoCliente(c) + '"></i>' + esc(c) + '</span>';
+  }).join('');
+
   grade.innerHTML = '';
 
   if(!lista.length){
     grade.innerHTML = '<div class="vazio">' +
-      (projetos.length ? 'Nenhum projeto com esse filtro.'
+      (projetos.length ? 'Nenhum projeto com esses filtros.'
         : (podeEditar ? 'Nenhum projeto ainda. Use "Novo projeto" para criar o primeiro.'
                       : 'Nenhum projeto cadastrado ainda.')) + '</div>';
     return;
@@ -257,12 +406,14 @@ function desenhar(){
   lista.forEach(function(p){
     var el = document.createElement('div');
     el.className = 'cartao projeto' + ((p.status||'andamento') === 'concluido' ? ' concluido' : '');
+    el.style.setProperty('--c', corDoCliente(p.cliente));
+    var sup = p.supervisor && p.supervisor.nome ? p.supervisor : null;
     el.innerHTML =
       '<div class="projeto-topo">' +
         '<div>' +
           '<div class="projeto-cod">' + esc(p.codigo || '') + '</div>' +
           '<div class="projeto-parque">' + esc(p.parque || '(sem parque)') + '</div>' +
-          '<div class="projeto-cliente">' + esc(p.cliente || '') + '</div>' +
+          '<div class="projeto-cliente-tag">' + esc(p.cliente || 'sem cliente') + '</div>' +
         '</div>' +
         '<span class="etiqueta ' + ((p.status||'andamento')==='concluido' ? '' : 'etiqueta--ok') + '">' +
           ((p.status||'andamento')==='concluido' ? 'Concluído' : 'Em andamento') + '</span>' +
@@ -272,6 +423,11 @@ function desenhar(){
         (p.inicio ? '<span class="etiqueta">Início ' + esc(dataBonita(p.inicio)) + '</span>' : '') +
         (p.fim ? '<span class="etiqueta">Fim ' + esc(dataBonita(p.fim)) + '</span>' : '') +
       '</div>' +
+      (sup
+        ? '<div class="supervisores"><div class="tecnicos-tit">Supervisor</div>' +
+          '<div class="tecnico"><span>' + esc(sup.nome) + '</span>' +
+          '<span class="mat">' + esc(sup.matricula) + '</span></div></div>'
+        : '') +
       (p.tecnicos && p.tecnicos.length
         ? '<div class="tecnicos"><div class="tecnicos-tit">Técnicos (' + p.tecnicos.length + ')</div>' +
           p.tecnicos.map(function(t){
@@ -289,8 +445,21 @@ function desenhar(){
   });
 }
 
-document.getElementById('busca').addEventListener('input', desenhar);
-document.getElementById('filtroStatus').addEventListener('change', desenhar);
+['busca','filtroCliente','filtroSupervisor','filtroStatus','filtroDe','filtroAte']
+  .forEach(function(id){
+    var el = document.getElementById(id);
+    el.addEventListener(el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', desenhar);
+  });
+
+document.getElementById('btLimpar').addEventListener('click', function(){
+  document.getElementById('busca').value = '';
+  document.getElementById('filtroCliente').value = '';
+  document.getElementById('filtroSupervisor').value = '';
+  document.getElementById('filtroStatus').value = 'andamento';
+  document.getElementById('filtroDe').value = '';
+  document.getElementById('filtroAte').value = '';
+  desenhar();
+});
 
 /* ---------- janela ---------- */
 /* A matrícula não é digitada: ela vem da MINI MASTER junto com o nome
@@ -304,7 +473,7 @@ function linhaTecnico(nome, matricula){
     '<button class="tirar" type="button" aria-label="Remover técnico">&times;</button>';
 
   div.querySelector('.tirar').addEventListener('click', function(){ fecharSugestoes(); div.remove(); });
-  ligarBusca(div);
+  ligarBusca(div, function(){ return TECNICOS; }, 'Ninguém com esse nome na MINI MASTER.');
   return div;
 }
 
@@ -427,6 +596,92 @@ function aplicarStatusFim(){
   }
 }
 
+/* ---------- supervisores (contas com perfil SUPERVISOR) ---------- */
+var SUPERVISORES = [];
+
+function carregarSupervisores(){
+  return chamar('supervisoresLista', {})
+    .then(function(res){
+      if(res && res.ok){
+        SUPERVISORES = res.supervisores || [];
+        if(!SUPERVISORES.length){
+          document.getElementById('d-sup').textContent =
+            'Nenhuma conta com perfil SUPERVISOR cadastrada ainda.';
+        }
+      }else{
+        document.getElementById('d-sup').textContent =
+          'Lista de supervisores indisponível no momento.';
+      }
+    })
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      document.getElementById('d-sup').textContent =
+        'Lista de supervisores indisponível no momento.';
+    });
+}
+
+/* Mesma mecânica do técnico, mas num campo só: escolher preenche a matrícula
+   ao lado, e mexer no nome apaga a matrícula — nome sem matrícula não salva. */
+function ligarBuscaSupervisor(){
+  var caixa = document.getElementById('cx-sup');
+  var campo = document.getElementById('f-sup');
+  var mat   = document.getElementById('f-sup-mat');
+
+  function filtrar(){
+    var termo = chaveBusca(campo.value);
+    fecharSugestoes();
+    if(!SUPERVISORES.length) return;
+
+    var achados = SUPERVISORES.filter(function(t){
+      return !termo || chaveBusca(t.nome).indexOf(termo) > -1 || String(t.matricula).indexOf(termo) > -1;
+    }).slice(0, 40);
+
+    var cx = document.createElement('div');
+    cx.className = 'sugestoes';
+    if(!achados.length){
+      cx.innerHTML = '<div class="sug-vazio">Nenhuma conta SUPERVISOR com esse nome.</div>';
+    }else{
+      achados.forEach(function(t){
+        var item = document.createElement('div');
+        item.className = 'sug';
+        item.setAttribute('role','option');
+        item.innerHTML = '<span>' + esc(t.nome) + '</span><span class="mat">' + esc(t.matricula) + '</span>';
+        item.addEventListener('mousedown', function(e){
+          e.preventDefault();
+          campo.value = t.nome;
+          mat.value = t.matricula;
+          fecharSugestoes();
+        });
+        cx.appendChild(item);
+      });
+    }
+    caixa.appendChild(cx);
+    listaAberta = cx;
+    indiceAtivo = -1;
+  }
+
+  campo.addEventListener('input', function(){ mat.value = ''; filtrar(); });
+  campo.addEventListener('focus', filtrar);
+  campo.addEventListener('blur', function(){ setTimeout(fecharSugestoes, 120); });
+  campo.addEventListener('keydown', function(e){
+    if(!listaAberta) return;
+    if(e.key === 'Escape'){ e.stopPropagation(); fecharSugestoes(); return; }
+    var itens = listaAberta.querySelectorAll('.sug');
+    if(!itens.length) return;
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      indiceAtivo += (e.key === 'ArrowDown' ? 1 : -1);
+      if(indiceAtivo < 0) indiceAtivo = itens.length - 1;
+      if(indiceAtivo >= itens.length) indiceAtivo = 0;
+      Array.prototype.forEach.call(itens, function(el, i){ el.classList.toggle('ativa', i === indiceAtivo); });
+      itens[indiceAtivo].scrollIntoView({ block:'nearest' });
+    }else if(e.key === 'Enter' && indiceAtivo > -1){
+      e.preventDefault();
+      itens[indiceAtivo].dispatchEvent(new MouseEvent('mousedown'));
+    }
+  });
+}
+
 function carregarTecnicos(){
   return chamar('tecnicosLista', {})
     .then(function(res){
@@ -443,23 +698,24 @@ function fecharSugestoes(){
   if(listaAberta){ listaAberta.remove(); listaAberta = null; indiceAtivo = -1; }
 }
 
-function ligarBusca(linha){
+function ligarBusca(linha, fonte, msgVazio){
   var campoNome = linha.querySelector('.tec-nome');
   var campoMat  = linha.querySelector('.tec-mat');
 
   function filtrar(){
-    var termo = campoNome.value.trim().toLowerCase();
+    var termo = chaveBusca(campoNome.value);
     fecharSugestoes();
-    if(!TECNICOS.length) return;
+    var lista = fonte();
+    if(!lista.length) return;
 
-    var achados = TECNICOS.filter(function(t){
-      return !termo || t.nome.toLowerCase().indexOf(termo) > -1 || String(t.matricula).indexOf(termo) > -1;
+    var achados = lista.filter(function(t){
+      return !termo || chaveBusca(t.nome).indexOf(termo) > -1 || String(t.matricula).indexOf(termo) > -1;
     }).slice(0, 40);
 
     var cx = document.createElement('div');
     cx.className = 'sugestoes';
     if(!achados.length){
-      cx.innerHTML = '<div class="sug-vazio">Ninguém com esse nome na MINI MASTER.</div>';
+      cx.innerHTML = '<div class="sug-vazio">' + esc(msgVazio) + '</div>';
     }else{
       achados.forEach(function(t, i){
         var item = document.createElement('div');
@@ -539,6 +795,11 @@ function abrirJanela(id){
   aplicarStatusFim();
   if(p && p.fim){ document.getElementById('f-fim').value = p.fim; }
   marcarErro('c-fim','d-fim','');
+
+  var sup = (p && p.supervisor) ? p.supervisor : { nome:'', matricula:'' };
+  document.getElementById('f-sup').value     = sup.nome || '';
+  document.getElementById('f-sup-mat').value = sup.matricula || '';
+  marcarErro('c-sup','d-sup','');
 
   var lista = document.getElementById('listaTec');
   lista.innerHTML = '';
@@ -627,6 +888,21 @@ document.getElementById('form').addEventListener('submit', function(e){
     fim = '';
   }
 
+  var supNome = document.getElementById('f-sup').value.trim();
+  var supMat  = document.getElementById('f-sup-mat').value.trim();
+  // Nome digitado sem matrícula = nome que não existe como conta SUPERVISOR.
+  // Aceitar viraria filtro quebrado depois: o filtro por supervisor só acha
+  // quem foi escolhido na lista.
+  if(supNome && !supMat){
+    marcarErro('c-sup','d-sup','Escolha o supervisor na lista para trazer a matrícula.');
+    parar = true;
+  }else{
+    marcarErro('c-sup','d-sup','');
+    document.getElementById('d-sup').textContent =
+      'Só aparecem contas com perfil SUPERVISOR. Um supervisor por projeto.';
+  }
+  var supervisor = supNome ? { nome: supNome, matricula: supMat } : null;
+
   var tecnicos = [];
   Array.prototype.forEach.call(document.querySelectorAll('#listaTec .lin-tec'), function(l){
     var n = l.querySelector('.tec-nome').value.trim();
@@ -663,6 +939,7 @@ document.getElementById('form').addEventListener('submit', function(e){
   alvo.inicio = inicio;
   alvo.status = status;
   alvo.fim = fim;                       // vazio enquanto o projeto está em andamento
+  alvo.supervisor = supervisor;
   alvo.tecnicos = tecnicos;
   alvo.atualizadoPor = SESSAO.nome || SESSAO.matricula;
   alvo.atualizadoEm = agora;
@@ -670,6 +947,7 @@ document.getElementById('form').addEventListener('submit', function(e){
 
   enviar([alvo], []);
   fecharJanela();
+  montarOpcoes();
   desenhar();
 });
 
@@ -683,6 +961,7 @@ document.getElementById('btExcluir').addEventListener('click', function(){
   projetos = projetos.filter(function(x){ return x.id !== id; });
   enviar([], [id]);
   fecharJanela();
+  montarOpcoes();
   desenhar();
 });
 
@@ -714,6 +993,7 @@ function enviar(alterados, removidos){
           var s = cf.projeto; revProj[cf.id] = cf.rev; delete s._rev;
           if(i > -1) projetos[i] = s; else projetos.push(s);
         });
+        montarOpcoes();
         desenhar();
         recado('Outra pessoa alterou este projeto antes de você. A versão dela foi mantida.', 'erro');
         return;
@@ -734,7 +1014,10 @@ if(iniciarModulo()){
   carregar(true)
     .then(function(){
       desbloquear();
-      if(podeEditar){ carregarTecnicos(); carregarTiposReparo(); ligarBuscaTipo(); ligarStatusFim(); }
+      if(podeEditar){
+        carregarTecnicos(); carregarSupervisores(); carregarTiposReparo();
+        ligarBuscaTipo(); ligarBuscaSupervisor(); ligarStatusFim();
+      }
       if(!podeEditar){
         avisoTopo('Seu perfil acompanha os projetos, mas não altera. Criar e editar é do supervisor.', 'info');
       }

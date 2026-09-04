@@ -129,7 +129,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Ver usuários cadastrados', 'menuListar')
     .addSeparator()
-    .addItem('Configurar planilhas (RDO e MINI MASTER)', 'menuConfigurarPlanilhas')
+    .addItem('Configurar planilhas (RDO, MINI MASTER e Banco de inputs)', 'menuConfigurarPlanilhas')
     .addItem('Conferir colunas do RDO', 'menuColunasRDO')
     .addToUi();
 }
@@ -157,15 +157,17 @@ function menuCadastrar() {
   // ao cadastrar dez pessoas seguidas.
   const rp = ui.prompt('Perfil de acesso',
     'Digite o número do perfil desta pessoa:\n\n' +
-    '1 = ADMIN — setor administrativo. Cadastra pessoas e usa os módulos.\n' +
-    '       Em Projetos em Andamento, só visualiza.\n' +
-    '2 = SUPERVISOR — cria e edita os projetos em andamento.\n' +
-    '3 = DIRETORIA — acompanha tudo, sem alterar projetos.',
+    '1 = ADMIN — setor administrativo. Cadastra pessoas, usa os módulos e\n' +
+    '       cria e edita os projetos em andamento.\n' +
+    '2 = SUPERVISOR — cria e edita os projetos em andamento, e pode ser\n' +
+    '       escolhido como supervisor de um projeto.\n' +
+    '3 = DIRETORIA — acompanha tudo, sem alterar projetos.\n' +
+    '4 = USUARIO — só visualiza os cards de Projetos em Andamento.',
     ui.ButtonSet.OK_CANCEL);
   if (rp.getSelectedButton() !== ui.Button.OK) return;
 
-  const perfil = { '1': 'ADMIN', '2': 'SUPERVISOR', '3': 'DIRETORIA' }[rp.getResponseText().trim()];
-  if (!perfil) { ui.alert('Perfil inválido. Digite 1, 2 ou 3.'); return; }
+  const perfil = { '1': 'ADMIN', '2': 'SUPERVISOR', '3': 'DIRETORIA', '4': 'USUARIO' }[rp.getResponseText().trim()];
+  if (!perfil) { ui.alert('Perfil inválido. Digite 1, 2, 3 ou 4.'); return; }
 
   try {
     criarUsuario({ matricula: p[0], cpf: p[1], email: p[2], perfil: perfil });
@@ -390,6 +392,7 @@ function doPost(e) {
       case 'rdoFiltros':             resposta = acaoRdoFiltros_(corpo);            break;
       case 'tecnicosLista':          resposta = acaoTecnicosLista_(corpo);         break;
       case 'tiposReparoLista':       resposta = acaoTiposReparoLista_(corpo);      break;
+      case 'supervisoresLista':      resposta = acaoSupervisoresLista_(corpo);     break;
 
       default:               resposta = { ok: false, motivo: 'ACAO_DESCONHECIDA' };
     }

@@ -26,10 +26,43 @@ function perfilAtual(){
   return SESSAO ? String(SESSAO.perfil || '').toUpperCase() : '';
 }
 
-/* Quem cria e edita projeto é o SUPERVISOR. ADMIN e DIRETORIA acompanham.
+/* Todo perfil enxerga todos os módulos. O que o perfil separa é quem ALTERA:
+   projeto é criado e editado por ADMIN e SUPERVISOR; DIRETORIA e USUARIO veem.
    Quem decide de verdade é o Apps Script; isto aqui só monta a tela. */
+var PERFIS_EDITAM_PROJETO = ['ADMIN','SUPERVISOR'];
 function podeEditarProjetos(){
-  return perfilAtual() === 'SUPERVISOR';
+  return PERFIS_EDITAM_PROJETO.indexOf(perfilAtual()) > -1;
+}
+
+/* ---------------------------------------------------------------------------
+   COR POR CLIENTE
+   Fica aqui, e não em cada módulo, para Status RDO e Projetos em Andamento
+   pintarem o mesmo cliente da mesma cor. Nome conhecido tem cor fixa; nome
+   novo cai sempre na mesma cor da paleta, sem precisar cadastrar nada.
+   --------------------------------------------------------------------------- */
+var CORES_CLIENTE = {
+  'siemens':  '#00b0a0',
+  'ge':       '#6a5acd',
+  'nordex':   '#e0702a',
+  'vestas':   '#2b7fd0',
+  'wobben':   '#c0392b',
+  'enercon':  '#c0392b',
+  'goldwind': '#1f9d55',
+  'weg':      '#0f6fb5'
+};
+var PALETA_CLIENTE = ['#2b7fd0','#00b0a0','#e0702a','#6a5acd','#c0392b','#1f9d55',
+                      '#b5179e','#0f6fb5','#c26a12','#3f7d20'];
+
+function corDoCliente(nome){
+  var chave = String(nome || '').trim().toLowerCase();
+  if(!chave) return 'var(--faint)';
+  if(CORES_CLIENTE[chave]) return CORES_CLIENTE[chave];
+  for(var k in CORES_CLIENTE){
+    if(chave.indexOf(k) > -1) return CORES_CLIENTE[k];   // "SIEMENS GAMESA"
+  }
+  var soma = 0;
+  for(var i = 0; i < chave.length; i++) soma = (soma * 31 + chave.charCodeAt(i)) % 100000;
+  return PALETA_CLIENTE[soma % PALETA_CLIENTE.length];
 }
 
 /* ---------- chamada ao backend ---------- */
@@ -66,6 +99,9 @@ function chamar(acao, dados){
 var MENSAGENS_MODULO = {
   SESSAO:          'Sua sessão expirou. Entre de novo pelo portal.',
   SEM_PERMISSAO:   'Seu perfil não permite esta alteração.',
+  USUARIOS_INDISPONIVEL:'Não consegui ler a lista de supervisores.',
+  INPUTS_INDISPONIVEL:'Não consegui ler a planilha Banco de inputs.',
+  MINIMASTER_INDISPONIVEL:'Não consegui ler a planilha MINI MASTER.',
   RDO_INDISPONIVEL:'Não consegui ler a planilha do RDO.',
   OCUPADO:         'Outra pessoa está salvando agora. Tente de novo em instantes.',
   DEMO:            'Modo demonstração: esta tela precisa do servidor configurado.',

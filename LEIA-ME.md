@@ -49,9 +49,34 @@ navegador. No servidor elas não valem.
 
 Duas telas dentro do módulo:
 
-**Projetos em Andamento** — parque, cliente, tipo de reparo, início, situação e
-a lista de técnicos. Cria e edita: **SUPERVISOR**. ADMIN e DIRETORIA apenas
-visualizam — e a recusa é feita no Apps Script, não só escondendo o botão.
+**Projetos em Andamento** — parque, cliente, tipo de reparo, início, situação,
+supervisor responsável e a lista de técnicos. Cria e edita: **ADMIN e
+SUPERVISOR**. DIRETORIA e USUARIO apenas visualizam — e a recusa é feita no
+Apps Script, não só escondendo o botão.
+
+Os cards são pintados pela **cor do cliente**, a mesma do Status RDO
+(`corDoCliente`, em `assets/base.js`). A legenda aparece quando há mais de um
+cliente na tela.
+
+### Filtros da tela de projetos
+
+Cliente, supervisor, situação e período. Cliente e supervisor são montados a
+partir dos projetos que existem — filtro que oferece opção sem resultado só
+frustra.
+
+O **período** usa **sobreposição**, não a data de um campo só: o projeto entra
+se o intervalo dele tocar o intervalo pedido. Isso responde às três perguntas de
+uma vez — começou depois de X, terminou antes de Y, esteve ativo entre X e Y.
+Projeto em andamento conta como aberto até hoje; projeto sem nenhuma data some
+quando há filtro de período.
+
+### Supervisor do projeto
+
+**Um supervisor por projeto** — o campo designa o responsável, não monta equipe.
+A lista vem das **contas com perfil SUPERVISOR** na aba `USUARIOS`, com status
+diferente de `INATIVO`. Escolher na lista preenche a matrícula ao lado; nome
+digitado sem escolher é recusado, porque sem a matrícula o filtro por supervisor
+não encontraria o projeto depois.
 
 **Status RDO** — só leitura da planilha do RDO. Mostra, para a data escolhida,
 quais projetos em andamento já têm relatório e quais faltam. Filtra por
@@ -188,12 +213,25 @@ Rode `limparExpirados()` de vez em quando para remover as sessões vencidas.
 
 ### Perfis
 
-- **ADMIN** — setor administrativo. Cadastra pessoas e usa os módulos. Em
-  Projetos em Andamento, **só visualiza**.
-- **SUPERVISOR** — cria e edita os projetos em andamento.
+- **ADMIN** — setor administrativo. Cadastra pessoas, usa os módulos e
+  **cria e edita** os projetos em andamento.
+- **SUPERVISOR** — cria e edita os projetos em andamento, e é quem aparece na
+  lista do campo "Supervisor do projeto".
 - **DIRETORIA** — acompanha tudo, sem alterar projetos.
+- **USUARIO** — enxerga os mesmos módulos que os outros (Solicitação de
+  Materiais, Status RDO e Projetos em Andamento). A diferença é que **não cria
+  nem edita** projeto: só visualiza os cards.
+
+O perfil **não separa telas**, separa o que se pode alterar. Todos os quatro
+perfis abrem os três módulos.
+
+Quem edita projeto está em `PERFIS_EDITAM_PROJETO`, em **dois** lugares:
+`assets/base.js` (monta a tela) e `apps-script/SupervisaoCampo.gs` (decide de
+verdade). Mudar só o primeiro não muda permissão nenhuma.
 
 Quem enxerga cada módulo é definido por `perfis` em `config/modulos.js`.
+Perfil de uma pessoa já cadastrada se troca direto na coluna `perfil` da aba
+`USUARIOS`.
 
 ---
 

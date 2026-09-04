@@ -133,36 +133,8 @@
    mas a ausência não é cobrada.
    ============================================================================ */
 
-/* ---------------------------------------------------------------------------
-   COR POR CLIENTE
-   Os nomes conhecidos têm cor fixa. Cliente novo recebe uma cor da paleta de
-   forma estável — o mesmo nome cai sempre na mesma cor, sem precisar cadastrar.
-   Para fixar um cliente numa cor específica, acrescente em CORES_CLIENTE.
-   --------------------------------------------------------------------------- */
-var CORES_CLIENTE = {
-  'siemens':  '#00b0a0',
-  'ge':       '#6a5acd',
-  'nordex':   '#e0702a',
-  'vestas':   '#2b7fd0',
-  'wobben':   '#c0392b',
-  'enercon':  '#c0392b',
-  'goldwind': '#1f9d55',
-  'weg':      '#0f6fb5'
-};
-var PALETA = ['#2b7fd0','#00b0a0','#e0702a','#6a5acd','#c0392b','#1f9d55',
-              '#b5179e','#0f6fb5','#c26a12','#3f7d20'];
-
-function corDoCliente(nome){
-  var chave = String(nome || '').trim().toLowerCase();
-  if(!chave) return 'var(--faint)';
-  if(CORES_CLIENTE[chave]) return CORES_CLIENTE[chave];
-  for(var k in CORES_CLIENTE){
-    if(chave.indexOf(k) > -1) return CORES_CLIENTE[k];   // "SIEMENS GAMESA"
-  }
-  var soma = 0;
-  for(var i = 0; i < chave.length; i++) soma = (soma * 31 + chave.charCodeAt(i)) % 100000;
-  return PALETA[soma % PALETA.length];
-}
+/* A cor por cliente (corDoCliente) mora em assets/base.js: Projetos em
+   Andamento usa a mesma, e duas cópias iam divergir na primeira alteração. */
 
 /* Só o número, para desenhar a barra. "60%" -> 60 */
 function numeroDoAvanco(txt){
