@@ -50,7 +50,7 @@ navegador. No servidor elas não valem.
 Duas telas dentro do módulo:
 
 **Projetos em Andamento** — parque, cliente, tipo de reparo, início, situação,
-supervisor responsável e a lista de técnicos. Cria e edita: **ADMIN e
+supervisor responsável, turbinas com suas blades e a lista de técnicos. Cria e edita: **ADMIN e
 SUPERVISOR**. DIRETORIA e USUARIO apenas visualizam — e a recusa é feita no
 Apps Script, não só escondendo o botão.
 
@@ -125,6 +125,58 @@ cabeçalho mudar, acrescente o nome novo em `COLUNAS_INPUTS`, no
 A situação **Concluído** exige a **data de finalização**, e a data não pode ser
 anterior ao início. Enquanto o projeto está em andamento o campo fica escondido
 e a data é apagada — assim não sobra data de fim em projeto que ainda roda.
+
+### Turbinas e blades
+
+Cada turbina carrega as **próprias 3 blades**, e não uma lista solta: com duas
+turbinas no mesmo projeto, blade fora do bloco deixaria de dizer a qual turbina
+pertence. As 3 caixas são opcionais — preencha só as que interessam. Bloco de
+turbina aberto e deixado sem nome some sozinho ao salvar.
+
+O check **"Projeto sem turbina"** é obrigatório quando não há turbina nenhuma:
+sem ele, "ninguém preencheu" e "não tem turbina" ficariam indistinguíveis na
+aba SUPERVISORES. Marcar o check esconde os blocos mas **não apaga** o que já
+foi digitado — desmarcar traz de volta.
+
+**Sem turbina não quer dizer sem blade.** Serviço em solo é blade já desmontada,
+então marcar o check abre uma lista de blades soltas, com quantas linhas forem
+precisas. Não são 3 caixas fixas como no bloco de turbina, onde as 3 são as pás
+daquela máquina — aqui pode ser uma blade só, ou várias de turbinas diferentes
+que chegaram juntas. A lista é opcional: projeto sem turbina e sem blade salva.
+
+### Espelho na aba SUPERVISORES
+
+Os projetos **em andamento** são copiados para a aba `SUPERVISORES` da planilha
+**Banco de inputs**, **uma linha por projeto**: `SUPERVISOR`, `CLIENTE`,
+`PARQUE`, `TIPO DE REPARO`, `MATRICULA` (todas as matrículas dos técnicos numa
+célula só, separadas por vírgula), `TURBINA` e `BLADE`.
+
+`TURBINA` traz os nomes separados por vírgula, ou o texto `Sem turbina` quando o
+projeto está marcado assim.
+
+`BLADE` traz `nome da turbina: blade, blade, blade`, com ` | ` entre turbinas — o
+prefixo aparece sempre, mesmo com uma turbina só, para a coluna não ter dois
+formatos. Em projeto **sem turbina** a coluna traz as blades soltas em lista
+crua, sem prefixo: não há turbina para nomear, e `TURBINA` já diz `Sem turbina`.
+
+`TURBINA` e `BLADE` são **opcionais**: se esses cabeçalhos não existirem na aba,
+o espelho grava as outras cinco colunas normalmente em vez de falhar inteiro.
+
+Acontece sozinho **a cada gravação de projeto** no portal. Também dá para forçar
+em **Portal > Atualizar aba SUPERVISORES**.
+
+**É espelho, não base.** A aba é reescrita da linha 2 para baixo a cada
+gravação: o que for digitado ali à mão não volta para o portal e se perde na
+próxima gravação. A linha 1 (cabeçalho) nunca é tocada. Projeto concluído sai da
+aba — só andamento aparece.
+
+Se o espelho falhar (planilha fora do ar, sem permissão de edição, aba
+renomeada), **o projeto é salvo mesmo assim**: a base do portal é a `PROJ_CARDS`,
+não essa aba. A falha fica no `LOG` com a ação `ESPELHO_SUP`, e a próxima
+gravação bem-sucedida corrige tudo, porque reescreve inteiro.
+
+As colunas são achadas pelo cabeçalho, ignorando maiúsculas e acentos. Se o
+cabeçalho mudar, acrescente o nome novo em `COLUNAS_SUP_INPUTS`.
 
 ### Endereço das planilhas
 

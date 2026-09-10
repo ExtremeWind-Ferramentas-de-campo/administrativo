@@ -53,6 +53,29 @@
 
   .supervisores{border-top:1px solid var(--linha);padding-top:10px;margin-top:2px}
 
+  /* turbinas: cada bloco tem o nome e as 3 blades presas a ele */
+  .check-linha{display:flex;align-items:center;gap:9px;margin-bottom:10px;cursor:pointer;font-size:.9rem}
+  .check-linha input{width:17px;height:17px;min-height:0;accent-color:var(--azul);cursor:pointer;margin:0}
+  .lista-turb{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
+  .turb{border:1px solid var(--linha);border-radius:10px;padding:11px 12px;background:var(--fundo)}
+  .turb-topo{display:grid;grid-template-columns:1fr 42px;gap:8px;align-items:center}
+  .turb-blades{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px}
+  .turb-blades input{min-height:38px;font-size:.85rem}
+  .turb-rot{font-size:.66rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+            color:var(--faint);margin:9px 0 -3px}
+  @media(max-width:520px){ .turb-blades{grid-template-columns:1fr} }
+  .sem-turbina .lista-turb,.sem-turbina #btAddTurb{display:none}
+  /* blades soltas: serviço em solo, blade fora da turbina */
+  #bloco-soltas{display:none}
+  .sem-turbina #bloco-soltas{display:block}
+  .lin-blade{display:grid;grid-template-columns:1fr 42px;gap:8px;align-items:center;margin-bottom:8px}
+
+  /* turbinas no card */
+  .turbinas{border-top:1px solid var(--linha);padding-top:10px}
+  .turb-item{font-size:.85rem;padding:3px 0}
+  .turb-item b{font-weight:700}
+  .turb-item span{color:var(--muted)}
+
   .lista-tec{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
   .lin-tec{display:grid;grid-template-columns:1fr 130px 42px;gap:8px;align-items:center}
   .lin-tec input{
@@ -225,6 +248,24 @@
         </div>
       </div>
 
+      <div class="campo" id="c-turb">
+        <label>Turbinas e blades</label>
+        <label class="check-linha" for="f-sem-turbina">
+          <input type="checkbox" id="f-sem-turbina">
+          <span>Projeto sem turbina</span>
+        </label>
+        <div class="lista-turb" id="listaTurb"></div>
+        <button class="btn btn--vazado btn--pequeno" id="btAddTurb" type="button">+ Adicionar turbina</button>
+
+        <div id="bloco-soltas">
+          <div class="turb-rot">Blades</div>
+          <div id="listaSoltas"></div>
+          <button class="btn btn--vazado btn--pequeno" id="btAddBlade" type="button">+ Adicionar blade</button>
+        </div>
+
+        <span class="dica" id="d-turb">As 3 blades são opcionais — preencha só as que interessam.</span>
+      </div>
+
       <div class="campo" id="c-tec">
         <label>Técnicos da equipe</label>
         <div class="lista-tec" id="listaTec"></div>
@@ -286,6 +327,8 @@ function carregar(primeira){
         delete p._rev;
         if(!Array.isArray(p.tecnicos)) p.tecnicos = [];
         if(p.supervisor && !p.supervisor.nome) p.supervisor = null;
+        if(!Array.isArray(p.turbinas)) p.turbinas = [];
+        if(!Array.isArray(p.bladesSoltas)) p.bladesSoltas = [];
         return p;
       });
       montarOpcoes();
@@ -339,6 +382,10 @@ function filtrar(){
     if(!dentroDoPeriodo(p, f.de, f.ate)) return false;
     if(!f.termo) return true;
     var alvo = [p.parque, p.cliente, p.tipoReparo, p.codigo, nomeSupervisor(p)]
+      .concat((p.turbinas||[]).map(function(t){
+        return t.nome + ' ' + (t.blades||[]).join(' ');
+      }))
+      .concat(p.bladesSoltas || [])
       .concat((p.tecnicos||[]).map(function(t){ return t.nome + ' ' + t.matricula; }))
       .join(' ');
     return chaveBusca(alvo).indexOf(f.termo) > -1;
@@ -428,6 +475,23 @@ function desenhar(){
           '<div class="tecnico"><span>' + esc(sup.nome) + '</span>' +
           '<span class="mat">' + esc(sup.matricula) + '</span></div></div>'
         : '') +
+      (p.semTurbina
+        ? '<div class="turbinas"><div class="tecnicos-tit">Sem turbina</div>' +
+          ((p.bladesSoltas && p.bladesSoltas.length)
+            ? '<div class="turb-item"><b>Blades</b> <span>· ' +
+              esc(p.bladesSoltas.join(' / ')) + '</span></div>'
+            : '<div class="turb-item"><span>Nenhuma blade informada</span></div>') +
+          '</div>'
+        : (p.turbinas && p.turbinas.length
+          ? '<div class="turbinas"><div class="tecnicos-tit">Turbina' +
+            (p.turbinas.length > 1 ? 's (' + p.turbinas.length + ')' : '') + '</div>' +
+            p.turbinas.map(function(t){
+              var bl = (t.blades || []).filter(String);
+              return '<div class="turb-item"><b>' + esc(t.nome) + '</b>' +
+                     (bl.length ? ' <span>· ' + esc(bl.join(' / ')) + '</span>' : '') +
+                     '</div>';
+            }).join('') + '</div>'
+          : '')) +
       (p.tecnicos && p.tecnicos.length
         ? '<div class="tecnicos"><div class="tecnicos-tit">Técnicos (' + p.tecnicos.length + ')</div>' +
           p.tecnicos.map(function(t){
@@ -464,6 +528,77 @@ document.getElementById('btLimpar').addEventListener('click', function(){
 /* ---------- janela ---------- */
 /* A matrícula não é digitada: ela vem da MINI MASTER junto com o nome
    escolhido. Digitar as duas à mão é como nasce técnico com matrícula trocada. */
+/* ---------- turbinas ----------
+   Cada turbina carrega as próprias 3 blades. Guardar blade solta, fora da
+   turbina, deixaria de dizer de qual turbina ela é assim que houver duas. */
+function blocoTurbina(nome, blades){
+  blades = blades || [];
+  var div = document.createElement('div');
+  div.className = 'turb';
+  div.innerHTML =
+    '<div class="turb-topo">' +
+      '<input class="turb-nome" placeholder="Nome da turbina — ex.: WTG-014" autocomplete="off" value="' + esc(nome || '') + '">' +
+      '<button class="tirar" type="button" aria-label="Remover turbina">&times;</button>' +
+    '</div>' +
+    '<div class="turb-rot">Blades</div>' +
+    '<div class="turb-blades">' +
+      [0,1,2].map(function(i){
+        return '<input class="turb-blade" placeholder="Blade ' + (i+1) + '" autocomplete="off" value="' +
+               esc(blades[i] || '') + '">';
+      }).join('') +
+    '</div>';
+
+  div.querySelector('.tirar').addEventListener('click', function(){ div.remove(); });
+  return div;
+}
+
+function lerTurbinasDoFormulario(){
+  var out = [];
+  Array.prototype.forEach.call(document.querySelectorAll('#listaTurb .turb'), function(b){
+    var nome = b.querySelector('.turb-nome').value.trim();
+    var blades = Array.prototype.map.call(b.querySelectorAll('.turb-blade'), function(i){
+      return i.value.trim();
+    });
+    // Turbina sem nome é bloco que o supervisor abriu e não usou: some sozinha.
+    if(nome) out.push({ nome: nome, blades: blades });
+  });
+  return out;
+}
+
+/* Blade sem turbina existe: serviço em solo, com a blade já desmontada.
+   Por isso a lista é livre — pode ser uma blade só, ou cinco de turbinas
+   diferentes que chegaram juntas. Não são 3 caixas fixas como no bloco de
+   turbina, onde as 3 são as pás daquela máquina. */
+function linhaBladeSolta(nome){
+  var div = document.createElement('div');
+  div.className = 'lin-blade';
+  div.innerHTML =
+    '<input class="blade-solta" placeholder="Nome ou série da blade" autocomplete="off" value="' + esc(nome || '') + '">' +
+    '<button class="tirar" type="button" aria-label="Remover blade">&times;</button>';
+  div.querySelector('.tirar').addEventListener('click', function(){ div.remove(); });
+  return div;
+}
+
+function lerBladesSoltas(){
+  return Array.prototype.map.call(
+    document.querySelectorAll('#listaSoltas .blade-solta'),
+    function(i){ return i.value.trim(); }
+  ).filter(String);
+}
+
+function aplicarSemTurbina(){
+  var marcado = document.getElementById('f-sem-turbina').checked;
+  document.getElementById('c-turb').classList.toggle('sem-turbina', marcado);
+  // Abre uma caixa em branco se não houver nenhuma, para o campo não aparecer
+  // vazio e exigir um clique extra antes de digitar.
+  if(marcado && !document.querySelectorAll('#listaSoltas .lin-blade').length){
+    document.getElementById('listaSoltas').appendChild(linhaBladeSolta(''));
+  }
+  document.getElementById('d-turb').textContent = marcado
+    ? 'Sem turbina — informe as blades soltas, se houver. Serviço em solo entra aqui.'
+    : 'As 3 blades são opcionais — preencha só as que interessam.';
+}
+
 function linhaTecnico(nome, matricula){
   var div = document.createElement('div');
   div.className = 'lin-tec';
@@ -801,6 +936,20 @@ function abrirJanela(id){
   document.getElementById('f-sup-mat').value = sup.matricula || '';
   marcarErro('c-sup','d-sup','');
 
+  var listaT = document.getElementById('listaTurb');
+  listaT.innerHTML = '';
+  (p && p.turbinas ? p.turbinas : []).forEach(function(t){
+    listaT.appendChild(blocoTurbina(t.nome, t.blades));
+  });
+  var listaB = document.getElementById('listaSoltas');
+  listaB.innerHTML = '';
+  ((p && p.bladesSoltas) ? p.bladesSoltas : []).forEach(function(b){
+    listaB.appendChild(linhaBladeSolta(b));
+  });
+  document.getElementById('f-sem-turbina').checked = !!(p && p.semTurbina);
+  aplicarSemTurbina();
+  marcarErro('c-turb','d-turb','');
+
   var lista = document.getElementById('listaTec');
   lista.innerHTML = '';
   var tecs = (p && p.tecnicos && p.tecnicos.length) ? p.tecnicos : [{nome:'',matricula:''}];
@@ -820,6 +969,17 @@ function fecharJanela(){
 document.getElementById('btNovo').addEventListener('click', function(){ abrirJanela(null); });
 document.getElementById('btFechar').addEventListener('click', fecharJanela);
 document.getElementById('btCancelar').addEventListener('click', fecharJanela);
+document.getElementById('btAddTurb').addEventListener('click', function(){
+  document.getElementById('listaTurb').appendChild(blocoTurbina('', []));
+});
+document.getElementById('btAddBlade').addEventListener('click', function(){
+  document.getElementById('listaSoltas').appendChild(linhaBladeSolta(''));
+});
+document.getElementById('f-sem-turbina').addEventListener('change', function(){
+  // Não apaga o que já foi digitado: se desmarcar, as turbinas voltam.
+  aplicarSemTurbina();
+});
+
 document.getElementById('btAddTec').addEventListener('click', function(){
   document.getElementById('listaTec').appendChild(linhaTecnico('',''));
 });
@@ -903,6 +1063,20 @@ document.getElementById('form').addEventListener('submit', function(e){
   }
   var supervisor = supNome ? { nome: supNome, matricula: supMat } : null;
 
+  var semTurbina = document.getElementById('f-sem-turbina').checked;
+  var turbinas = semTurbina ? [] : lerTurbinasDoFormulario();
+  var bladesSoltas = semTurbina ? lerBladesSoltas() : [];
+  // O check existe para o supervisor DIZER que não tem turbina. Deixar salvar
+  // sem turbina e sem o check faria "não informou" virar indistinguível de
+  // "não tem" na aba SUPERVISORES.
+  if(!semTurbina && !turbinas.length){
+    marcarErro('c-turb','d-turb','Adicione uma turbina ou marque "Projeto sem turbina".');
+    parar = true;
+  }else{
+    marcarErro('c-turb','d-turb','');
+    aplicarSemTurbina();
+  }
+
   var tecnicos = [];
   Array.prototype.forEach.call(document.querySelectorAll('#listaTec .lin-tec'), function(l){
     var n = l.querySelector('.tec-nome').value.trim();
@@ -940,6 +1114,9 @@ document.getElementById('form').addEventListener('submit', function(e){
   alvo.status = status;
   alvo.fim = fim;                       // vazio enquanto o projeto está em andamento
   alvo.supervisor = supervisor;
+  alvo.semTurbina = semTurbina;
+  alvo.turbinas = turbinas;
+  alvo.bladesSoltas = bladesSoltas;
   alvo.tecnicos = tecnicos;
   alvo.atualizadoPor = SESSAO.nome || SESSAO.matricula;
   alvo.atualizadoEm = agora;

@@ -166,6 +166,24 @@ function verConfiguracao() {
     txt += '\n\nBANCO DE INPUTS: ERRO — ' + e.message;
   }
 
+  try {
+    const aba = abaSupervisoresInputs_();
+    const larg = Math.max(aba.getLastColumn(), 7);
+    const cab = aba.getRange(1, 1, 1, larg).getValues()[0];
+    const norm = cab.map(normalizarCab_);
+    txt += '\n\nABA SUPERVISORES (espelho):';
+    Object.keys(COLUNAS_SUP_INPUTS).forEach(function (campo) {
+      const i = acharColuna_(norm, COLUNAS_SUP_INPUTS[campo]);
+      const opcional = COLUNAS_SUP_OPCIONAIS.indexOf(campo) > -1;
+      txt += '\n  ' + campo + ': ' +
+             (i === -1 ? (opcional ? 'sem a coluna (não será gravada)' : 'NÃO ENCONTRADA')
+                       : '"' + cab[i] + '"');
+    });
+    txt += '\n  Linhas gravadas hoje: ' + Math.max(0, aba.getLastRow() - 1);
+  } catch (e) {
+    txt += '\n\nABA SUPERVISORES: ERRO — ' + e.message;
+  }
+
   Logger.log('\n' + txt + '\n');
   avisar_(txt);
   return txt;
@@ -270,6 +288,24 @@ function configurarSupervisao() {
 /* ===========================================================================
    DIAGNÓSTICO DAS COLUNAS
    =========================================================================== */
+
+/**
+ * Acha a coluna pelo cabeçalho já normalizado (passe o array por
+ * normalizarCab_ antes). Primeiro procura nome idêntico; se não achar, aceita
+ * cabeçalho que contenha o apelido — é o que faz "data_exp_final" casar com
+ * "data_exp". Devolve -1 quando nenhum apelido serve.
+ */
+function acharColuna_(norm, apelidos) {
+  for (let i = 0; i < apelidos.length; i++) {
+    const idx = norm.indexOf(apelidos[i]);
+    if (idx > -1) return idx;
+  }
+  for (let i = 0; i < apelidos.length; i++) {
+    const idx = norm.findIndex(function (c) { return c && c.indexOf(apelidos[i]) > -1; });
+    if (idx > -1) return idx;
+  }
+  return -1;
+}
 
 /** Normaliza um cabeçalho: sem acento, minúsculo, separadores virando "_". */
 function normalizarCab_(t) {
@@ -731,20 +767,8 @@ function lerTiposReparo_() {
   const dados = aba.getRange(1, 1, ultima, larg).getValues();
   const norm = dados[0].map(normalizarCab_);
 
-  const acharCol = function (apelidos) {
-    for (let i = 0; i < apelidos.length; i++) {
-      const idx = norm.indexOf(apelidos[i]);
-      if (idx > -1) return idx;
-    }
-    for (let i = 0; i < apelidos.length; i++) {
-      const idx = norm.findIndex(function (c) { return c && c.indexOf(apelidos[i]) > -1; });
-      if (idx > -1) return idx;
-    }
-    return -1;
-  };
-
-  const cTipo = acharCol(COLUNAS_INPUTS.tipo);
-  const cObr  = acharCol(COLUNAS_INPUTS.obrigatoria);
+  const cTipo = acharColuna_(norm, COLUNAS_INPUTS.tipo);
+  const cObr  = acharColuna_(norm, COLUNAS_INPUTS.obrigatoria);
   if (cTipo === -1) {
     throw new Error('Não achei a coluna "Tipo de reparo" na aba "' + abaNomeInputs_() +
                     '". Cabeçalho lido: ' + dados[0].filter(String).join(' | '));
@@ -770,6 +794,148 @@ function lerTiposReparo_() {
     cache.put('inputs_tipos_reparo', JSON.stringify(lista), 600);
   } catch (e) { /* lista grande demais para o cache: segue sem */ }
   return lista;
+}
+
+
+/* ===========================================================================
+   ESPELHO NA ABA SUPERVISORES (planilha Banco de inputs)
+
+   Cada projeto EM ANDAMENTO vira uma linha, para quem trabalha dentro do Banco
+   de inputs enxergar quem está com o quê sem abrir o portal.
+
+   É um ESPELHO, não uma segunda base: a aba é reescrita inteira a cada
+   gravação de projeto. Editar essas células à mão não volta para o portal e
+   se perde na próxima gravação. A linha 1 (cabeçalho) nunca é tocada.
+   =========================================================================== */
+
+const ABA_SUP_INPUTS = 'SUPERVISORES';
+
+const COLUNAS_SUP_INPUTS = {
+  supervisor: ['supervisor'],
+  cliente:    ['cliente'],
+  parque:     ['parque'],
+  tipo:       ['tipo_de_reparo', 'tipo_reparo', 'tiporeparo', 'tipo'],
+  matricula:  ['matricula', 'matriculas', 'matricula_tecnicos'],
+  turbina:    ['turbina', 'turbinas'],
+  blade:      ['blade', 'blades', 'pa', 'pas']
+};
+
+/* Estas o espelho grava SE a coluna existir. Ficam de fora da conferência
+   obrigatória para quem ainda não criou os cabeçalhos continuar com o espelho
+   funcionando, em vez de perder as cinco colunas antigas por causa das novas. */
+const COLUNAS_SUP_OPCIONAIS = ['turbina', 'blade'];
+
+function abaSupervisoresInputs_() {
+  const ss = SpreadsheetApp.openById(idPlanilhaInputs_());
+  const aba = ss.getSheetByName(ABA_SUP_INPUTS);
+  if (!aba) throw new Error('A aba "' + ABA_SUP_INPUTS + '" não existe na planilha Banco de inputs.');
+  return aba;
+}
+
+/**
+ * Reescreve a aba SUPERVISORES com os projetos em andamento.
+ * Devolve quantas linhas gravou.
+ */
+function espelharSupervisores_() {
+  const aba = abaSupervisoresInputs_();
+  const larg = Math.max(aba.getLastColumn(), 7);
+  const cab = aba.getRange(1, 1, 1, larg).getValues()[0];
+  const norm = cab.map(normalizarCab_);
+
+  const col = {};
+  Object.keys(COLUNAS_SUP_INPUTS).forEach(function (campo) {
+    col[campo] = acharColuna_(norm, COLUNAS_SUP_INPUTS[campo]);
+  });
+  const faltando = Object.keys(col).filter(function (c) {
+    return col[c] === -1 && COLUNAS_SUP_OPCIONAIS.indexOf(c) === -1;
+  });
+  if (faltando.length) {
+    throw new Error('Colunas não encontradas na aba "' + ABA_SUP_INPUTS + '": ' +
+                    faltando.join(', ') + '. Cabeçalho lido: ' + cab.filter(String).join(' | '));
+  }
+
+  const emAndamento = lerProjetos_().filter(function (pr) {
+    return String(pr.status || 'andamento') === 'andamento';
+  });
+  emAndamento.sort(function (a, b) {
+    return String(a.parque || '').localeCompare(String(b.parque || ''));
+  });
+
+  const linhas = emAndamento.map(function (pr) {
+    const linha = new Array(larg).fill('');
+    linha[col.supervisor] = (pr.supervisor && pr.supervisor.nome) ? pr.supervisor.nome : '';
+    linha[col.cliente]    = pr.cliente || '';
+    linha[col.parque]     = pr.parque || '';
+    linha[col.tipo]       = pr.tipoReparo || '';
+    // Todas as matrículas numa célula só. O apóstrofo à frente força texto:
+    // sem ele o Sheets come o zero à esquerda quando sobra uma matrícula só.
+    const mats = (pr.tecnicos || [])
+      .map(function (t) { return String(t.matricula || '').trim(); })
+      .filter(String);
+    linha[col.matricula] = mats.length ? "'" + mats.join(', ') : '';
+
+    // Turbina e blade só entram se o cabeçalho existir na aba.
+    // "Sem turbina" é escrito por extenso: célula vazia diria apenas que
+    // ninguém preencheu, e é justamente essa dúvida que o check resolve.
+    const turbs = pr.semTurbina ? [] : (pr.turbinas || []);
+    if (col.turbina > -1) {
+      linha[col.turbina] = pr.semTurbina
+        ? 'Sem turbina'
+        : turbs.map(function (t) { return t.nome; }).filter(String).join(', ');
+    }
+    if (col.blade > -1) {
+      if (pr.semTurbina) {
+        // Serviço em solo: blade sem turbina para prefixar. A coluna TURBINA
+        // já diz "Sem turbina", então a lista crua não fica ambígua.
+        linha[col.blade] = (pr.bladesSoltas || [])
+          .map(function (b) { return String(b || '').trim(); })
+          .filter(String).join(', ');
+      } else {
+        // Prefixo com o nome da turbina sempre, mesmo com uma só: sem ele, uma
+        // aba com projetos de 1 e de 2 turbinas teria dois formatos na mesma coluna.
+        linha[col.blade] = turbs.map(function (t) {
+          const bl = (t.blades || []).map(function (b) { return String(b || '').trim(); }).filter(String);
+          return bl.length ? t.nome + ': ' + bl.join(', ') : '';
+        }).filter(String).join(' | ');
+      }
+    }
+    return linha;
+  });
+
+  // Limpa da linha 2 para baixo e regrava. Reescrever inteiro é o que mantém
+  // o espelho fiel quando um projeto é concluído ou excluído.
+  const ultima = aba.getLastRow();
+  if (ultima > 1) aba.getRange(2, 1, ultima - 1, larg).clearContent();
+  if (linhas.length) aba.getRange(2, 1, linhas.length, larg).setValues(linhas);
+
+  return linhas.length;
+}
+
+/**
+ * Chamada depois de cada gravação de projeto. Nunca derruba o salvamento:
+ * se a planilha de inputs estiver fora do ar ou sem permissão, o projeto já
+ * está gravado na base do portal e o espelho fica para a próxima.
+ */
+function espelharSupervisoresSeguro_(matricula) {
+  try {
+    const n = espelharSupervisores_();
+    return { ok: true, linhas: n };
+  } catch (e) {
+    registrar_(matricula || '', 'ESPELHO_SUP', 'FALHA', String(e.message));
+    return { ok: false, detalhe: e.message };
+  }
+}
+
+/** Menu: Portal > Atualizar aba SUPERVISORES. Também serve para gatilho por tempo. */
+function atualizarAbaSupervisores() {
+  try {
+    const n = espelharSupervisores_();
+    Logger.log('Aba SUPERVISORES atualizada: ' + n + ' projetos em andamento.');
+    avisar_('Aba SUPERVISORES atualizada.\n\n' + n + ' projetos em andamento gravados.');
+  } catch (e) {
+    Logger.log('ERRO ao atualizar SUPERVISORES: ' + e.message);
+    avisar_('Não deu certo:\n\n' + e.message);
+  }
 }
 
 
@@ -961,7 +1127,12 @@ function acaoProjetosSalvar_(p) {
       registrar_(matricula, 'PROJ_SALVAR', conflitos.length ? 'CONFLITO' : 'OK',
         aceitos.length + ' aceitos, ' + conflitos.length + ' conflitos, ' + remover.length + ' removidos');
     }
-    return { ok: true, rev: rev, aceitos: aceitos, conflitos: conflitos };
+
+    // Espelho na aba SUPERVISORES do Banco de inputs. Fica dentro da trava
+    // para duas gravações simultâneas não escreverem por cima uma da outra.
+    const espelho = espelharSupervisoresSeguro_(matricula);
+
+    return { ok: true, rev: rev, aceitos: aceitos, conflitos: conflitos, espelho: espelho.ok };
 
   } finally {
     trava.releaseLock();
