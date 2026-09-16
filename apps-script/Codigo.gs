@@ -131,6 +131,8 @@ function onOpen() {
     .addSeparator()
     .addItem('Configurar planilhas (RDO, MINI MASTER e Banco de inputs)', 'menuConfigurarPlanilhas')
     .addItem('Conferir colunas do RDO', 'menuColunasRDO')
+    .addItem('Configurar planilha do EHS', 'menuConfigurarEHS')
+    .addItem('Conferir colunas do EHS', 'menuColunasEHS')
     .addItem('Atualizar aba SUPERVISORES', 'atualizarAbaSupervisores')
     .addToUi();
 }
@@ -394,6 +396,8 @@ function doPost(e) {
       case 'tecnicosLista':          resposta = acaoTecnicosLista_(corpo);         break;
       case 'tiposReparoLista':       resposta = acaoTiposReparoLista_(corpo);      break;
       case 'supervisoresLista':      resposta = acaoSupervisoresLista_(corpo);     break;
+      case 'ehsStatus':              resposta = acaoEhsStatus_(corpo);             break;
+      case 'ehsFiltros':             resposta = acaoEhsFiltros_(corpo);            break;
 
       default:               resposta = { ok: false, motivo: 'ACAO_DESCONHECIDA' };
     }

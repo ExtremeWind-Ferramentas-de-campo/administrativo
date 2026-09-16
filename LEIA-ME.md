@@ -144,6 +144,27 @@ precisas. Não são 3 caixas fixas como no bloco de turbina, onde as 3 são as p
 daquela máquina — aqui pode ser uma blade só, ou várias de turbinas diferentes
 que chegaram juntas. A lista é opcional: projeto sem turbina e sem blade salva.
 
+### Status RD EHS
+
+Mesma mecânica do Status RDO, em **outra planilha**: filtros de data, cliente e
+parque, cobrança dos projetos em andamento e card com link para o PDF. O
+casamento também é pelo nome do parque, então vale tudo que está escrito acima
+sobre grafia.
+
+O EHS **não tem** avanço de reparo, turbina nem blade — copiar esses campos do
+RDO só encheria o card de etiqueta vazia. No lugar do avanço, a cobrança mostra
+o supervisor do projeto.
+
+O código fica em `apps-script/StatusEHS.gs`, separado: nada do RDO precisa ser
+mexido. Colunas essenciais são `data`, `parque` e `link` — `cliente` e a
+matrícula de quem enviou podem faltar sem derrubar a tela. Apelidos em
+`COLUNAS_EHS`. Diagnóstico em **Portal > Conferir colunas do EHS**.
+
+| Propriedade | O que é |
+|---|---|
+| `ID_EHS` | link ou ID da planilha do reporte diário de EHS |
+| `ABA_EHS` | nome da aba (padrão: `REPORT DIÁRIO DE EHS - EXTREME WIND`) |
+
 ### Espelho na aba SUPERVISORES
 
 Os projetos **em andamento** são copiados para a aba `SUPERVISORES` da planilha

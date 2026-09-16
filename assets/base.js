@@ -101,6 +101,7 @@ var MENSAGENS_MODULO = {
   SEM_PERMISSAO:   'Seu perfil não permite esta alteração.',
   USUARIOS_INDISPONIVEL:'Não consegui ler a lista de supervisores.',
   INPUTS_INDISPONIVEL:'Não consegui ler a planilha Banco de inputs.',
+  EHS_INDISPONIVEL:'Não consegui ler a planilha do EHS.',
   MINIMASTER_INDISPONIVEL:'Não consegui ler a planilha MINI MASTER.',
   RDO_INDISPONIVEL:'Não consegui ler a planilha do RDO.',
   OCUPADO:         'Outra pessoa está salvando agora. Tente de novo em instantes.',
