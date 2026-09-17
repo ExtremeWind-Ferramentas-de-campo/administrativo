@@ -193,13 +193,13 @@
       <div class="linha-campos">
         <div class="campo" id="c-parque">
           <label for="f-parque">Nome do parque</label>
-          <input id="f-parque" required autocomplete="off"
+          <input id="f-parque" autocomplete="off"
                  placeholder="Ex.: SANTO AGOSTINHO 1">
           <span class="dica" id="d-parque">Escreva exatamente como o parque aparece no RDO — é por esse texto que o Status RDO encontra o relatório.</span>
         </div>
         <div class="campo" id="c-cliente">
           <label for="f-cliente">Cliente</label>
-          <input id="f-cliente" required placeholder="Ex.: Casa dos Ventos">
+          <input id="f-cliente" placeholder="Ex.: Casa dos Ventos">
           <span class="dica" id="d-cliente"></span>
         </div>
       </div>
@@ -208,7 +208,7 @@
         <div class="campo" id="c-tipo">
           <label for="f-tipo">Tipo de reparo</label>
           <div class="cx-sug" id="cx-tipo">
-            <input id="f-tipo" required autocomplete="off" placeholder="Digite para filtrar e escolha na lista">
+            <input id="f-tipo" autocomplete="off" placeholder="Digite para filtrar e escolha na lista">
           </div>
           <span class="dica" id="d-tipo">A lista vem da planilha Banco de inputs, aba ATV POR HR.</span>
         </div>
@@ -229,7 +229,7 @@
         </div>
         <div class="campo" id="c-fim" hidden>
           <label for="f-fim">Data de finalização</label>
-          <input id="f-fim" type="date" required>
+          <input id="f-fim" type="date">
           <span class="dica" id="d-fim">Obrigatória para concluir o projeto.</span>
         </div>
       </div>
@@ -1018,64 +1018,56 @@ document.getElementById('form').addEventListener('submit', function(e){
   var inicio  = document.getElementById('f-inicio').value || '';
   var fim     = document.getElementById('f-fim').value || '';
 
-  var parar = false;
-  marcarErro('c-parque','d-parque', parque ? '' : 'Informe o nome do parque.'); parar = parar || !parque;
-  if(parque){
-    document.getElementById('d-parque').textContent =
-      'Escreva exatamente como o parque aparece no RDO — é por esse texto que o Status RDO encontra o relatório.';
-  }
-  marcarErro('c-cliente','d-cliente', cliente ? '' : 'Informe o cliente.');     parar = parar || !cliente;
-  marcarErro('c-tipo','d-tipo', tipo ? '' : 'Informe o tipo de reparo.');       parar = parar || !tipo;
-  if(tipo){
-    document.getElementById('d-tipo').textContent =
-      'A lista vem da planilha Banco de inputs, aba ATV POR HR.';
-  }
+  /* Nada aqui barra o salvamento.
+     O bloqueio anterior exigia que todo técnico viesse da lista da MINI MASTER
+     para trazer a matrícula. Quando a MINI MASTER não carrega, nenhuma sugestão
+     aparece, a matrícula fica sempre vazia e o projeto vira impossível de
+     salvar — o supervisor digita o nome certo e continua levando alerta.
+     Campo pela metade é problema menor que card que não nasce, então os avisos
+     viraram apenas avisos: aparecem, mas deixam gravar. */
+  var avisos = [];
 
-  // Concluído sem data de fim é projeto que "acabou" sem ninguém saber quando.
+  marcarErro('c-parque','d-parque','');
+  document.getElementById('d-parque').textContent = parque
+    ? 'Escreva exatamente como o parque aparece no RDO — é por esse texto que o Status RDO encontra o relatório.'
+    : 'Sem o nome do parque, o Status RDO não consegue casar este projeto com nenhum relatório.';
+  if(!parque) avisos.push('sem nome do parque');
+
+  marcarErro('c-cliente','d-cliente','');
+  if(!cliente) avisos.push('sem cliente');
+
+  marcarErro('c-tipo','d-tipo','');
+  document.getElementById('d-tipo').textContent =
+    'A lista vem da planilha Banco de inputs, aba ATV POR HR.';
+  if(!tipo) avisos.push('sem tipo de reparo');
+
+  marcarErro('c-fim','d-fim','');
   if(status === 'concluido'){
-    if(!fim){
-      marcarErro('c-fim','d-fim','Informe a data de finalização para concluir.');
-      parar = true;
-    }else if(inicio && fim < inicio){
-      marcarErro('c-fim','d-fim','A finalização não pode ser anterior ao início.');
-      parar = true;
-    }else{
-      marcarErro('c-fim','d-fim','');
-      document.getElementById('d-fim').textContent = 'Obrigatória para concluir o projeto.';
-    }
+    document.getElementById('d-fim').textContent = (inicio && fim && fim < inicio)
+      ? 'Atenção: a finalização está antes do início.'
+      : 'Data de finalização do projeto.';
+    if(!fim) avisos.push('concluído sem data de finalização');
+    else if(inicio && fim < inicio) avisos.push('finalização anterior ao início');
   }else{
-    marcarErro('c-fim','d-fim','');
     fim = '';
   }
 
   var supNome = document.getElementById('f-sup').value.trim();
   var supMat  = document.getElementById('f-sup-mat').value.trim();
-  // Nome digitado sem matrícula = nome que não existe como conta SUPERVISOR.
-  // Aceitar viraria filtro quebrado depois: o filtro por supervisor só acha
-  // quem foi escolhido na lista.
-  if(supNome && !supMat){
-    marcarErro('c-sup','d-sup','Escolha o supervisor na lista para trazer a matrícula.');
-    parar = true;
-  }else{
-    marcarErro('c-sup','d-sup','');
-    document.getElementById('d-sup').textContent =
-      'Só aparecem contas com perfil SUPERVISOR. Um supervisor por projeto.';
-  }
+  marcarErro('c-sup','d-sup','');
+  document.getElementById('d-sup').textContent =
+    'Só aparecem contas com perfil SUPERVISOR. Um supervisor por projeto.';
+  // Sem matrícula o filtro por supervisor ainda funciona (ele casa pelo nome),
+  // só perde o vínculo com a conta. Vale o aviso, não o bloqueio.
+  if(supNome && !supMat) avisos.push('supervisor sem matrícula');
   var supervisor = supNome ? { nome: supNome, matricula: supMat } : null;
 
   var semTurbina = document.getElementById('f-sem-turbina').checked;
   var turbinas = semTurbina ? [] : lerTurbinasDoFormulario();
   var bladesSoltas = semTurbina ? lerBladesSoltas() : [];
-  // O check existe para o supervisor DIZER que não tem turbina. Deixar salvar
-  // sem turbina e sem o check faria "não informou" virar indistinguível de
-  // "não tem" na aba SUPERVISORES.
-  if(!semTurbina && !turbinas.length){
-    marcarErro('c-turb','d-turb','Adicione uma turbina ou marque "Projeto sem turbina".');
-    parar = true;
-  }else{
-    marcarErro('c-turb','d-turb','');
-    aplicarSemTurbina();
-  }
+  marcarErro('c-turb','d-turb','');
+  aplicarSemTurbina();
+  if(!semTurbina && !turbinas.length) avisos.push('sem turbina e sem o check marcado');
 
   var tecnicos = [];
   Array.prototype.forEach.call(document.querySelectorAll('#listaTec .lin-tec'), function(l){
@@ -1083,14 +1075,11 @@ document.getElementById('form').addEventListener('submit', function(e){
     var m = l.querySelector('.tec-mat').value.trim();
     if(n) tecnicos.push({ nome:n, matricula:m });
   });
+  marcarErro('c-tec','d-tec','');
+  document.getElementById('d-tec').textContent =
+    'Digite o nome e escolha na lista. A matrícula vem junto.';
   var semMatricula = tecnicos.filter(function(t){ return !t.matricula; });
-  marcarErro('c-tec','d-tec', semMatricula.length
-    ? 'Escolha o nome na lista para trazer a matrícula: ' +
-      semMatricula.map(function(t){ return t.nome || '(linha em branco)'; }).join(', ')
-    : 'Digite o nome e escolha na lista. A matrícula vem junto.');
-  parar = parar || semMatricula.length > 0;
-
-  if(parar) return;
+  if(semMatricula.length) avisos.push(semMatricula.length + ' técnico(s) sem matrícula');
 
   var agora = new Date().toISOString();
   var alvo;
@@ -1126,6 +1115,12 @@ document.getElementById('form').addEventListener('submit', function(e){
   fecharJanela();
   montarOpcoes();
   desenhar();
+
+  // Depois de fechar a janela, senão o recado sumiria junto com ela.
+  if(avisos.length){
+    recado('Projeto salvo com pendências: ' + avisos.join(', ') +
+           '. Dá para completar editando o card.');
+  }
 });
 
 document.getElementById('btExcluir').addEventListener('click', function(){
