@@ -77,7 +77,13 @@
   .turb-item span{color:var(--muted)}
 
   .lista-tec{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
-  .lin-tec{display:grid;grid-template-columns:1fr 130px 42px;gap:8px;align-items:center}
+  .lin-tec{display:grid;grid-template-columns:70px 1fr 130px 42px;gap:8px;align-items:center}
+  .lin-tec select{
+    background:var(--card-2);border:1px solid var(--linha);border-radius:10px;
+    padding:10px 6px;min-height:42px;font-family:inherit;font-size:.86rem;color:var(--ink);
+    width:100%;text-align:center;
+  }
+  .lin-tec select:focus{outline:2px solid var(--azul);outline-offset:1px}
   .lin-tec input{
     background:var(--card-2);border:1px solid var(--linha);border-radius:10px;
     padding:10px 11px;min-height:42px;font-family:inherit;font-size:.9rem;color:var(--ink);width:100%;
@@ -89,7 +95,36 @@
     height:42px;cursor:pointer;font-size:1.1rem;line-height:1;font-family:inherit;
   }
   .tirar:hover{border-color:var(--erro)}
-  @media(max-width:520px){ .lin-tec{grid-template-columns:1fr 100px 42px} }
+  @media(max-width:520px){
+    .lin-tec{grid-template-columns:62px 1fr 70px 38px;gap:6px}
+    .lin-tec input{padding:9px 7px;font-size:.84rem}
+    .lin-tec select{padding:9px 2px;font-size:.82rem}
+    .lin-tec .tirar{width:38px}
+    .bloco-eq{padding:10px 9px}
+  }
+
+  /* ---------- formações de equipe (histórico de trocas) ---------- */
+  .lista-eq{display:flex;flex-direction:column;gap:12px;margin-bottom:10px}
+  .bloco-eq{
+    border:1px solid var(--linha);border-left:3px solid var(--linha);
+    border-radius:12px;padding:12px;background:var(--card);
+  }
+  .bloco-eq.vigente{border-left-color:var(--azul);background:var(--card-2)}
+  .eq-topo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .eq-topo label{font-size:.78rem;font-weight:600;color:var(--muted);flex:none}
+  .eq-topo input[type=date]{
+    background:var(--card-2);border:1px solid var(--linha);border-radius:10px;
+    padding:8px 10px;min-height:38px;font-family:inherit;font-size:.88rem;color:var(--ink);
+    flex:none;width:auto;min-width:150px;
+  }
+  .bloco-eq.vigente .eq-topo input[type=date]{background:var(--card)}
+  .eq-topo input[type=date]:focus{outline:2px solid var(--azul);outline-offset:1px}
+  .eq-marca{
+    font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:999px;
+    background:var(--azul-fraco);color:var(--azul);
+  }
+  .eq-marca.futura{background:var(--alerta-fraco);color:var(--alerta)}
+  .eq-topo .tirar{margin-left:auto;width:42px}
 
   /* caixa genérica de campo com lista que filtra enquanto digita (Tipo de reparo) */
   .cx-sug{position:relative}
@@ -219,6 +254,15 @@
       </div>
 
       <div class="linha-campos">
+        <div class="campo" id="c-fim-prev">
+          <label for="f-fim-prev">Previsão de término</label>
+          <input id="f-fim-prev" type="date">
+          <span class="dica" id="d-fim-prev">Quando a frente deve liberar. É o que desenha a barra no Gantt de Campo.</span>
+        </div>
+        <div class="campo"></div>
+      </div>
+
+      <div class="linha-campos">
         <div class="campo">
           <label for="f-status">Situação</label>
           <select id="f-status">
@@ -267,10 +311,10 @@
       </div>
 
       <div class="campo" id="c-tec">
-        <label>Técnicos da equipe</label>
-        <div class="lista-tec" id="listaTec"></div>
-        <button class="btn btn--vazado btn--pequeno" id="btAddTec" type="button">+ Adicionar técnico</button>
-        <span class="dica" id="d-tec">Digite o nome e escolha na lista. A matrícula vem junto.</span>
+        <label>Equipe e trocas</label>
+        <div class="lista-eq" id="listaEq"></div>
+        <button class="btn btn--vazado btn--pequeno" id="btAddEq" type="button">+ Registrar troca de equipe</button>
+        <span class="dica" id="d-tec">Uma formação por período. A troca copia a formação atual para você só mexer em quem mudou.</span>
       </div>
 
       <div class="janela-rodape">
@@ -326,6 +370,10 @@ function carregar(primeira){
         snapshot[p.id] = JSON.stringify(limpo);
         delete p._rev;
         if(!Array.isArray(p.tecnicos)) p.tecnicos = [];
+        // Uma troca marcada para o futuro entra sozinha quando a data chega:
+        // o card não pode esperar alguém abrir e salvar o projeto de novo para
+        // só então mostrar a equipe certa.
+        if(Array.isArray(p.equipes) && p.equipes.length) p.tecnicos = equipeVigente(p.equipes);
         if(p.supervisor && !p.supervisor.nome) p.supervisor = null;
         if(!Array.isArray(p.turbinas)) p.turbinas = [];
         if(!Array.isArray(p.bladesSoltas)) p.bladesSoltas = [];
@@ -357,10 +405,26 @@ function nomeSupervisor(p){
   return (p.supervisor && p.supervisor.nome) ? p.supervisor.nome : '';
 }
 
+/* Data da próxima troca já registrada, se houver. Serve para o card avisar que
+   a equipe mostrada tem prazo — senão a troca fica escondida dentro da janela
+   de edição e ninguém lembra dela até o dia. */
+function proximaTroca(p){
+  if(!Array.isArray(p.equipes)) return '';
+  var hoje = hojeISO();
+  var futuras = p.equipes
+    .map(function(e){ return e.desde || ''; })
+    .filter(function(d){ return d && d > hoje; })
+    .sort();
+  return futuras[0] || '';
+}
+
 function dentroDoPeriodo(p, de, ate){
   if(!de && !ate) return true;
   var ini = p.inicio || '';
-  var fim = p.fim || (String(p.status || 'andamento') === 'andamento' ? '9999-12-31' : '');
+  // Sem data real, a previsão é a melhor resposta para "até quando dura".
+  // Só quando não há nem previsão o projeto em andamento vira aberto.
+  var fim = p.fim || p.fimPrevisto ||
+            (String(p.status || 'andamento') === 'andamento' ? '9999-12-31' : '');
 
   // Projeto sem nenhuma data não dá para posicionar no tempo. Some quando
   // existe filtro de período — melhor sumir do que aparecer por acidente.
@@ -387,6 +451,11 @@ function filtrar(){
       }))
       .concat(p.bladesSoltas || [])
       .concat((p.tecnicos||[]).map(function(t){ return t.nome + ' ' + t.matricula; }))
+      // também quem já passou pelo projeto: procurar por um técnico e não achar
+      // o parque onde ele esteve mês passado é o tipo de busca que decepciona
+      .concat((p.equipes||[]).reduce(function(ac, e){
+        return ac.concat((e.tecnicos||[]).map(function(t){ return t.nome + ' ' + t.matricula; }));
+      }, []))
       .join(' ');
     return chaveBusca(alvo).indexOf(f.termo) > -1;
   });
@@ -469,6 +538,7 @@ function desenhar(){
         (p.tipoReparo ? '<span class="etiqueta etiqueta--azul">' + esc(p.tipoReparo) + '</span>' : '') +
         (p.inicio ? '<span class="etiqueta">Início ' + esc(dataBonita(p.inicio)) + '</span>' : '') +
         (p.fim ? '<span class="etiqueta">Fim ' + esc(dataBonita(p.fim)) + '</span>' : '') +
+        (p.fimPrevisto ? '<span class="etiqueta">Previsão ' + esc(dataBonita(p.fimPrevisto)) + '</span>' : '') +
       '</div>' +
       (sup
         ? '<div class="supervisores"><div class="tecnicos-tit">Supervisor</div>' +
@@ -493,9 +563,10 @@ function desenhar(){
             }).join('') + '</div>'
           : '')) +
       (p.tecnicos && p.tecnicos.length
-        ? '<div class="tecnicos"><div class="tecnicos-tit">Técnicos (' + p.tecnicos.length + ')</div>' +
+        ? '<div class="tecnicos"><div class="tecnicos-tit">Técnicos (' + p.tecnicos.length + ')' +
+          (proximaTroca(p) ? ' · troca em ' + esc(dataBonita(proximaTroca(p))) : '') + '</div>' +
           p.tecnicos.map(function(t){
-            return '<div class="tecnico"><span>' + esc(t.nome) + '</span>' +
+            return '<div class="tecnico"><span>' + (t.nivel ? esc(t.nivel) + ' ' : '') + esc(t.nome) + '</span>' +
                    '<span class="mat">' + esc(t.matricula) + '</span></div>';
           }).join('') + '</div>'
         : '') +
@@ -599,10 +670,32 @@ function aplicarSemTurbina(){
     : 'As 3 blades são opcionais — preencha só as que interessam.';
 }
 
-function linhaTecnico(nome, matricula){
+/* O nível (N1, N1L, N2, N3) é digitado aqui, não vem da MINI MASTER: aquela
+   planilha só devolve matrícula e nome. É o mesmo prefixo que você usa no
+   Excel — ele aparece antes do nome no Gantt. */
+var NIVEIS = ['N1','N1L','N2','N3'];
+
+/* A formação anterior vale até a véspera da próxima — não até o mesmo dia.
+   Dizer "até 22/09" quando a seguinte já começa em 22/09 faz parecer que os
+   dois times estão no parque no mesmo dia. */
+function diaAnterior(iso){
+  var q = String(iso || '').split('-');
+  if(q.length !== 3) return iso || '';
+  var d = new Date(+q[0], +q[1]-1, +q[2]);
+  d.setDate(d.getDate() - 1);
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+
+function linhaTecnico(nome, matricula, nivel){
   var div = document.createElement('div');
   div.className = 'lin-tec';
   div.innerHTML =
+    '<select class="tec-nivel" aria-label="Nível do técnico">' +
+      '<option value="">—</option>' +
+      NIVEIS.map(function(n){
+        return '<option value="' + n + '"' + (n === nivel ? ' selected' : '') + '>' + n + '</option>';
+      }).join('') +
+    '</select>' +
     '<input class="tec-nome" placeholder="Digite o nome e escolha na lista" autocomplete="off" value="' + esc(nome || '') + '">' +
     '<input class="tec-mat mono" placeholder="matrícula" readonly tabindex="-1" value="' + esc(matricula || '') + '">' +
     '<button class="tirar" type="button" aria-label="Remover técnico">&times;</button>';
@@ -610,6 +703,111 @@ function linhaTecnico(nome, matricula){
   div.querySelector('.tirar').addEventListener('click', function(){ fecharSugestoes(); div.remove(); });
   ligarBusca(div, function(){ return TECNICOS; }, 'Ninguém com esse nome na MINI MASTER.');
   return div;
+}
+
+/* ---------------------------------------------------------------------------
+   FORMAÇÕES DE EQUIPE
+   O projeto guarda uma lista de formações, cada uma valendo A PARTIR de uma
+   data:
+
+     equipes: [ { desde:'2026-08-17', tecnicos:[...] },
+                { desde:'2026-08-24', tecnicos:[...] } ]
+
+   E continua guardando  tecnicos  com a formação que vale HOJE — é esse campo
+   que o espelho SUPERVISORES e o resto do sistema leem. Os dois são gravados
+   juntos no salvar; ninguém precisa manter à mão.
+
+   Projeto antigo, sem  equipes , abre com uma formação só, começando na data
+   de início. Nada se perde e nada precisa ser recadastrado.
+   --------------------------------------------------------------------------- */
+function blocoEquipe(desde, tecnicos){
+  var div = document.createElement('div');
+  div.className = 'bloco-eq';
+  div.innerHTML =
+    '<div class="eq-topo">' +
+      '<label>A partir de</label>' +
+      '<input type="date" class="eq-desde" value="' + esc(desde || '') + '">' +
+      '<span class="eq-marca" hidden></span>' +
+      '<button class="tirar eq-tirar" type="button" aria-label="Remover esta formação">&times;</button>' +
+    '</div>' +
+    '<div class="lista-tec"></div>' +
+    '<button class="btn btn--vazado btn--pequeno eq-add" type="button">+ Adicionar técnico</button>';
+
+  var lista = div.querySelector('.lista-tec');
+  var tecs = (tecnicos && tecnicos.length) ? tecnicos : [{ nome:'', matricula:'', nivel:'' }];
+  tecs.forEach(function(t){ lista.appendChild(linhaTecnico(t.nome, t.matricula, t.nivel)); });
+
+  div.querySelector('.eq-add').addEventListener('click', function(){
+    lista.appendChild(linhaTecnico('', '', ''));
+  });
+  div.querySelector('.eq-tirar').addEventListener('click', function(){
+    if(document.querySelectorAll('#listaEq .bloco-eq').length < 2){
+      avisoJanela('O projeto precisa de pelo menos uma formação de equipe.', 'erro');
+      return;
+    }
+    fecharSugestoes();
+    div.remove();
+    marcarBlocosEquipe();
+  });
+  div.querySelector('.eq-desde').addEventListener('change', marcarBlocosEquipe);
+  return div;
+}
+
+/* Marca qual formação vale hoje e qual ainda vai entrar. Sem isso, com três
+   blocos na tela não dá para saber qual deles é a equipe que está no parque
+   agora — que é a pergunta que o supervisor faz. */
+function marcarBlocosEquipe(){
+  var hoje = hojeISO();
+  var blocos = Array.prototype.slice.call(document.querySelectorAll('#listaEq .bloco-eq'));
+
+  var vigente = -1;
+  blocos.forEach(function(bl, i){
+    var d = bl.querySelector('.eq-desde').value;
+    if(d && d <= hoje) vigente = i;
+  });
+  // Todas no futuro (projeto que ainda não começou): a primeira é a que vale.
+  if(vigente === -1 && blocos.length) vigente = 0;
+
+  blocos.forEach(function(bl, i){
+    var d = bl.querySelector('.eq-desde').value;
+    var marca = bl.querySelector('.eq-marca');
+    bl.classList.toggle('vigente', i === vigente);
+    marca.classList.toggle('futura', !!d && d > hoje);
+    if(i === vigente){ marca.hidden = false; marca.textContent = 'equipe de hoje'; }
+    else if(d && d > hoje){ marca.hidden = false; marca.textContent = 'a partir de ' + dataBonita(d); }
+    else if(d){
+      var prox = blocos[i+1] && blocos[i+1].querySelector('.eq-desde').value;
+      marca.hidden = false;
+      marca.textContent = prox ? ('até ' + dataBonita(diaAnterior(prox))) : 'equipe de hoje';
+    }
+    else { marca.hidden = true; }
+  });
+}
+
+/* Lê as formações da tela, já ordenadas por data e sem linha em branco. */
+function lerEquipesDoFormulario(){
+  var out = [];
+  Array.prototype.forEach.call(document.querySelectorAll('#listaEq .bloco-eq'), function(bl){
+    var tecnicos = [];
+    Array.prototype.forEach.call(bl.querySelectorAll('.lin-tec'), function(l){
+      var n = l.querySelector('.tec-nome').value.trim();
+      var m = l.querySelector('.tec-mat').value.trim();
+      var v = l.querySelector('.tec-nivel').value;
+      if(n) tecnicos.push({ nome:n, matricula:m, nivel:v });
+    });
+    out.push({ desde: bl.querySelector('.eq-desde').value || '', tecnicos: tecnicos });
+  });
+  out.sort(function(a,b){ return String(a.desde).localeCompare(String(b.desde)); });
+  return out;
+}
+
+/* A formação que vale hoje. É ela que vai para  p.tecnicos . */
+function equipeVigente(equipes){
+  var hoje = hojeISO();
+  var achada = null;
+  equipes.forEach(function(e){ if(e.desde && e.desde <= hoje) achada = e; });
+  if(!achada) achada = equipes[0];
+  return achada ? achada.tecnicos.slice() : [];
 }
 
 /* ---------- lista de técnicos (MINI MASTER) ---------- */
@@ -922,6 +1120,8 @@ function abrirJanela(id){
   document.getElementById('f-tipo').value    = p ? (p.tipoReparo || '') : '';
   document.getElementById('c-tipo').classList.remove('erro');
   document.getElementById('f-inicio').value  = p ? (p.inicio || '') : hojeISO();
+  document.getElementById('f-fim-prev').value = p ? (p.fimPrevisto || '') : '';
+  marcarErro('c-fim-prev','d-fim-prev','');
   document.getElementById('f-status').value  = p ? (p.status || 'andamento') : 'andamento';
 
   // ordem importa: a data guardada entra depois de aplicarStatusFim, senão ela
@@ -950,10 +1150,14 @@ function abrirJanela(id){
   aplicarSemTurbina();
   marcarErro('c-turb','d-turb','');
 
-  var lista = document.getElementById('listaTec');
-  lista.innerHTML = '';
-  var tecs = (p && p.tecnicos && p.tecnicos.length) ? p.tecnicos : [{nome:'',matricula:''}];
-  tecs.forEach(function(t){ lista.appendChild(linhaTecnico(t.nome, t.matricula)); });
+  var listaEq = document.getElementById('listaEq');
+  listaEq.innerHTML = '';
+  var eqs = (p && Array.isArray(p.equipes) && p.equipes.length)
+    ? p.equipes
+    : [{ desde: (p && p.inicio) || document.getElementById('f-inicio').value || hojeISO(),
+         tecnicos: (p && p.tecnicos) || [] }];
+  eqs.forEach(function(e){ listaEq.appendChild(blocoEquipe(e.desde, e.tecnicos)); });
+  marcarBlocosEquipe();
 
   document.getElementById('veu').hidden = false;
   document.body.style.overflow = 'hidden';
@@ -980,8 +1184,27 @@ document.getElementById('f-sem-turbina').addEventListener('change', function(){
   aplicarSemTurbina();
 });
 
-document.getElementById('btAddTec').addEventListener('click', function(){
-  document.getElementById('listaTec').appendChild(linhaTecnico('',''));
+/* A troca nasce copiando a formação de baixo, porque troca real é quase sempre
+   uma pessoa entrando no lugar de outra — não uma equipe nova do zero. Copiar
+   poupa redigitar três nomes para mexer em um. */
+document.getElementById('btAddEq').addEventListener('click', function(){
+  var blocos = document.querySelectorAll('#listaEq .bloco-eq');
+  var ultimo = blocos[blocos.length - 1];
+  var copia = [];
+  if(ultimo){
+    Array.prototype.forEach.call(ultimo.querySelectorAll('.lin-tec'), function(l){
+      var n = l.querySelector('.tec-nome').value.trim();
+      if(n) copia.push({ nome:n,
+                         matricula: l.querySelector('.tec-mat').value.trim(),
+                         nivel: l.querySelector('.tec-nivel').value });
+    });
+  }
+  var lista = document.getElementById('listaEq');
+  var novo = blocoEquipe(hojeISO(), copia);
+  lista.appendChild(novo);
+  marcarBlocosEquipe();
+  novo.querySelector('.eq-desde').focus();
+  novo.scrollIntoView({ block:'nearest', behavior:'smooth' });
 });
 document.getElementById('veu').addEventListener('click', function(e){
   if(e.target.id === 'veu') fecharJanela();
@@ -1017,6 +1240,7 @@ document.getElementById('form').addEventListener('submit', function(e){
   var status  = document.getElementById('f-status').value;
   var inicio  = document.getElementById('f-inicio').value || '';
   var fim     = document.getElementById('f-fim').value || '';
+  var fimPrev = document.getElementById('f-fim-prev').value || '';
 
   /* Nada aqui barra o salvamento.
      O bloqueio anterior exigia que todo técnico viesse da lista da MINI MASTER
@@ -1040,6 +1264,17 @@ document.getElementById('form').addEventListener('submit', function(e){
   document.getElementById('d-tipo').textContent =
     'A lista vem da planilha Banco de inputs, aba ATV POR HR.';
   if(!tipo) avisos.push('sem tipo de reparo');
+
+  /* Previsão e data real são coisas diferentes e por isso são dois campos.
+     A previsão vale enquanto o projeto roda e é o que estica a barra do Gantt;
+     a data real só existe quando o projeto fecha. Guardar as duas no mesmo
+     campo apagaria a previsão na hora de concluir — e some o histórico de
+     quanto a frente atrasou. */
+  marcarErro('c-fim-prev','d-fim-prev','');
+  document.getElementById('d-fim-prev').textContent =
+    'Quando a frente deve liberar. É o que desenha a barra no Gantt de Campo.';
+  if(fimPrev && inicio && fimPrev < inicio) avisos.push('previsão de término antes do início');
+  if(status === 'andamento' && !fimPrev) avisos.push('sem previsão de término');
 
   marcarErro('c-fim','d-fim','');
   if(status === 'concluido'){
@@ -1069,15 +1304,28 @@ document.getElementById('form').addEventListener('submit', function(e){
   aplicarSemTurbina();
   if(!semTurbina && !turbinas.length) avisos.push('sem turbina e sem o check marcado');
 
-  var tecnicos = [];
-  Array.prototype.forEach.call(document.querySelectorAll('#listaTec .lin-tec'), function(l){
-    var n = l.querySelector('.tec-nome').value.trim();
-    var m = l.querySelector('.tec-mat').value.trim();
-    if(n) tecnicos.push({ nome:n, matricula:m });
-  });
+  var equipes = lerEquipesDoFormulario();
   marcarErro('c-tec','d-tec','');
   document.getElementById('d-tec').textContent =
-    'Digite o nome e escolha na lista. A matrícula vem junto.';
+    'Uma formação por período. A troca copia a formação atual para você só mexer em quem mudou.';
+
+  // Formação sem data não tem como ser posicionada no tempo: ela vira a data de
+  // início do projeto em vez de ser descartada em silêncio.
+  equipes.forEach(function(e){ if(!e.desde) e.desde = inicio || hojeISO(); });
+  equipes = equipes.filter(function(e){ return e.tecnicos.length; });
+  equipes.sort(function(a,b){ return String(a.desde).localeCompare(String(b.desde)); });
+
+  var datas = {};
+  equipes.forEach(function(e){
+    if(datas[e.desde]) avisos.push('duas formações começando em ' + dataBonita(e.desde));
+    datas[e.desde] = true;
+  });
+  var antesDoInicio = inicio && equipes.filter(function(e){ return e.desde < inicio; }).length;
+  if(antesDoInicio) avisos.push('formação começando antes do início do projeto');
+
+  // tecnicos continua sendo a equipe de HOJE: é o campo que o espelho
+  // SUPERVISORES e o Status RDO leem. equipes é o histórico por trás dele.
+  var tecnicos = equipeVigente(equipes);
   var semMatricula = tecnicos.filter(function(t){ return !t.matricula; });
   if(semMatricula.length) avisos.push(semMatricula.length + ' técnico(s) sem matrícula');
 
@@ -1102,11 +1350,13 @@ document.getElementById('form').addEventListener('submit', function(e){
   alvo.inicio = inicio;
   alvo.status = status;
   alvo.fim = fim;                       // vazio enquanto o projeto está em andamento
+  alvo.fimPrevisto = fimPrev;           // previsão; sobrevive à conclusão, para comparar
   alvo.supervisor = supervisor;
   alvo.semTurbina = semTurbina;
   alvo.turbinas = turbinas;
   alvo.bladesSoltas = bladesSoltas;
-  alvo.tecnicos = tecnicos;
+  alvo.tecnicos = tecnicos;             // equipe de hoje, lida pelo resto do sistema
+  alvo.equipes = equipes;               // histórico das trocas, lido pelo Gantt
   alvo.atualizadoPor = SESSAO.nome || SESSAO.matricula;
   alvo.atualizadoEm = agora;
   delete alvo.equipe;                   // campo aposentado: some também nos projetos antigos

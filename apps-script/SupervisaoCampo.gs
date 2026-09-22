@@ -833,6 +833,32 @@ function abaSupervisoresInputs_() {
 }
 
 /**
+ * Equipe que está no parque HOJE.
+ *
+ * O projeto guarda  equipes : uma lista de formações, cada uma valendo a partir
+ * de uma data. O campo  tecnicos  guarda a formação vigente no momento em que
+ * alguém salvou o projeto — e é por isso que ele não basta aqui: uma troca
+ * marcada para daqui a duas semanas só apareceria em  tecnicos  se alguém
+ * abrisse e salvasse o projeto de novo naquele dia. Recalculando na hora do
+ * espelho, a troca entra sozinha quando a data chega (com o gatilho diário em
+ * atualizarAbaSupervisores).
+ *
+ * Projeto antigo, sem  equipes , continua usando  tecnicos  como sempre.
+ */
+function equipeVigenteDoProjeto_(pr) {
+  const eqs = Array.isArray(pr.equipes) ? pr.equipes.filter(function (e) { return e && e.desde; }) : [];
+  if (!eqs.length) return pr.tecnicos || [];
+
+  eqs.sort(function (a, b) { return String(a.desde).localeCompare(String(b.desde)); });
+  const hoje = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  let achada = null;
+  eqs.forEach(function (e) { if (String(e.desde) <= hoje) achada = e; });
+  if (!achada) achada = eqs[0];          // projeto que ainda não começou
+  return achada.tecnicos || [];
+}
+
+/**
  * Reescreve a aba SUPERVISORES com os projetos em andamento.
  * Devolve quantas linhas gravou.
  */
@@ -869,7 +895,7 @@ function espelharSupervisores_() {
     linha[col.tipo]       = pr.tipoReparo || '';
     // Todas as matrículas numa célula só. O apóstrofo à frente força texto:
     // sem ele o Sheets come o zero à esquerda quando sobra uma matrícula só.
-    const mats = (pr.tecnicos || [])
+    const mats = equipeVigenteDoProjeto_(pr)
       .map(function (t) { return String(t.matricula || '').trim(); })
       .filter(String);
     linha[col.matricula] = mats.length ? "'" + mats.join(', ') : '';

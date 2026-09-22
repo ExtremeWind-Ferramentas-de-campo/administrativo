@@ -58,6 +58,21 @@ Os cards são pintados pela **cor do cliente**, a mesma do Status RDO
 (`corDoCliente`, em `assets/base.js`). A legenda aparece quando há mais de um
 cliente na tela.
 
+### Nenhum campo é obrigatório
+
+Nada no formulário de projeto barra o salvamento. A versão anterior exigia que
+todo técnico viesse da lista da MINI MASTER, para trazer a matrícula junto.
+Quando a MINI MASTER não carrega, nenhuma sugestão aparece, a matrícula fica
+sempre vazia e o projeto vira **impossível de salvar** — o supervisor digita o
+nome certo e continua levando alerta, sem pista do motivo.
+
+Card pela metade é problema menor que card que não nasce. Os avisos continuam
+existindo: ao salvar, um recado lista o que ficou pendente (sem parque, técnico
+sem matrícula, concluído sem data de fim) e o card pode ser completado depois.
+
+Se as sugestões de técnico não aparecerem, o problema está na MINI MASTER, não
+no formulário — rode `verConfiguracao()` e veja quantos técnicos ele lê.
+
 ### Filtros da tela de projetos
 
 Cliente, supervisor, situação e período. Cliente e supervisor são montados a
@@ -133,7 +148,8 @@ turbinas no mesmo projeto, blade fora do bloco deixaria de dizer a qual turbina
 pertence. As 3 caixas são opcionais — preencha só as que interessam. Bloco de
 turbina aberto e deixado sem nome some sozinho ao salvar.
 
-O check **"Projeto sem turbina"** é obrigatório quando não há turbina nenhuma:
+O check **"Projeto sem turbina"** distingue "não tem turbina" de "ninguém
+preencheu" na aba SUPERVISORES — vale marcar, mas não é obrigatório:
 sem ele, "ninguém preencheu" e "não tem turbina" ficariam indistinguíveis na
 aba SUPERVISORES. Marcar o check esconde os blocos mas **não apaga** o que já
 foi digitado — desmarcar traz de volta.
@@ -503,3 +519,55 @@ São dois, definidos no topo do `Codigo.gs`:
 Salvar no quadro **não** gera linha de log: a própria aba `MAT_CARDS` já guarda
 `atualizado_por` e `atualizado_em` de cada solicitação. Só conflito e exclusão
 são registrados.
+
+---
+
+## Gantt de Campo (módulo novo)
+
+Arquivo: `modulos/gantt-campo.html`. Entra pelo card **Gantt de Campo** dentro de
+Supervisão de Campo. É **só leitura**: mostra os mesmos projetos de *Projetos em
+Andamento* em linha do tempo, uma coluna por semana.
+
+- Semana ISO, começando na segunda. O número bate com a planilha de campo:
+  14/09/2026 = W38. O mês de cada semana é o da quinta-feira dela, por isso a
+  semana de 28/09 aparece sob outubro.
+- A coluna da semana corrente fica marcada em vermelho.
+- Os nomes dos técnicos aparecem na primeira semana, na semana atual e sempre que
+  a formação muda. Quem sai fica **vermelho e riscado** na última semana dele.
+- Abrindo o arquivo direto do computador (`file://`), a tela roda em **modo
+  exemplo**, com dados fictícios, só para conferir o desenho. No portal, nunca.
+
+### Campos novos no projeto
+
+Os dois são gravados dentro do JSON da aba `PROJ_CARDS`. Nenhuma coluna nova.
+
+- **`equipes`** — histórico das formações. Uma lista, cada item valendo a partir
+  de uma data:
+
+      equipes: [
+        { desde:'2026-08-17', tecnicos:[ {nivel:'N1', nome:'...', matricula:'...'}, ... ] },
+        { desde:'2026-08-24', tecnicos:[ ... ] }
+      ]
+
+  O campo `tecnicos` **continua existindo** e guarda a formação vigente — é ele
+  que o espelho `SUPERVISORES` e o Status RDO leem. Projeto antigo, sem
+  `equipes`, abre com uma formação só e não precisa ser recadastrado.
+
+- **`fimPrevisto`** — previsão de término. Vale enquanto o projeto roda e é o que
+  estica a barra do Gantt. É separado de `fim`, que só existe quando o projeto é
+  concluído; assim a previsão sobrevive à conclusão e dá para comparar previsto
+  com realizado.
+
+### Gatilho diário — obrigatório
+
+Uma troca de equipe marcada para uma data futura só entra na aba `SUPERVISORES`
+quando alguma coisa reescreve o espelho. Sem gatilho, ele fica parado na última
+gravação de projeto.
+
+No editor do Apps Script: **Acionadores** > *Adicionar acionador* >
+função `atualizarAbaSupervisores`, origem *Baseado no tempo*, tipo *Contador de
+dias*, de madrugada.
+
+O `SupervisaoCampo.gs` já recalcula a equipe vigente na hora de escrever o
+espelho (função `equipeVigenteDoProjeto_`); o gatilho só faz isso acontecer todo
+dia.
