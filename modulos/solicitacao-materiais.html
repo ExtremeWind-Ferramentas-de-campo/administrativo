@@ -1434,7 +1434,12 @@
                 });
               })
               .then(function(res){
-                if(!res || !res.ok) throw new Error('falha');
+                /* Conferir só o res.ok não basta: uma resposta vinda de outro
+                   lugar que não o anexar pode trazer ok sem driveId, e aí o
+                   card guardaria um anexo que não existe no Drive — o arquivo
+                   some e só se descobre na hora de baixar, dias depois.
+                   Sem driveId, é falha. */
+                if(!res || !res.ok || !res.driveId) throw new Error('falha');
                 if(res.thumbId && miniGerada){
                   miniaturas[res.thumbId] = 'data:image/jpeg;base64,' + miniGerada;
                 }
