@@ -322,7 +322,11 @@ document.getElementById('f-data').addEventListener('change', buscar);
 /* ---------- início ---------- */
 if(iniciarModulo()){
   document.getElementById('f-data').value = hojeISO();
-  preencherFiltros().then(buscar);
+  /* As duas chamadas são independentes: a lista de clientes/parques não muda o
+     que a consulta do dia devolve (na abertura os dois filtros estão em
+     "todos"). Em série, a tela esperava duas viagens ao Apps Script uma depois
+     da outra; em paralelo, espera a mais lenta das duas. */
+  Promise.all([preencherFiltros(), buscar()]);
 }
 </script>
 </body>

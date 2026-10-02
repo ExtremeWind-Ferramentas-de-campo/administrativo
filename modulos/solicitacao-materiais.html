@@ -908,9 +908,13 @@
     function iniciarPolling(){
       if(timerPolling) clearInterval(timerPolling);
       timerPolling = setInterval(function(){
+        // 8 s era uma execução do Apps Script a cada 8 s POR ABA aberta. Com a
+        // equipe toda no quadro, isso enfileirava requisições na frente dos
+        // cliques de quem estava mexendo. 20 s continua parecendo tempo real
+        // para um quadro de solicitações.
         if(saveInFlight || document.hidden) return;
         carregar(false).catch(function(){ /* silencioso: a próxima rodada tenta de novo */ });
-      }, 8000);
+      }, 20000);
     }
 
     /* ================= salvamento =================

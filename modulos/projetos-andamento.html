@@ -539,6 +539,12 @@ function desenhar(){
         (p.inicio ? '<span class="etiqueta">Início ' + esc(dataBonita(p.inicio)) + '</span>' : '') +
         (p.fim ? '<span class="etiqueta">Fim ' + esc(dataBonita(p.fim)) + '</span>' : '') +
         (p.fimPrevisto ? '<span class="etiqueta">Previsão ' + esc(dataBonita(p.fimPrevisto)) + '</span>' : '') +
+        /* Projeto criado por uma linha da planilha nasce sem início e sem
+           previsão: a aba não tem essas colunas. Sem esta etiqueta, o card
+           aparece como "Sem data" no Gantt e ninguém sabe que está esperando
+           alguém completar aqui. */
+        (p.origem === 'planilha' && (!p.inicio || !p.fimPrevisto)
+          ? '<span class="etiqueta etiqueta--neutra">Veio da planilha — falta data</span>' : '') +
       '</div>' +
       (sup
         ? '<div class="supervisores"><div class="tecnicos-tit">Supervisor</div>' +
@@ -1351,6 +1357,9 @@ document.getElementById('form').addEventListener('submit', function(e){
   alvo.status = status;
   alvo.fim = fim;                       // vazio enquanto o projeto está em andamento
   alvo.fimPrevisto = fimPrev;           // previsão; sobrevive à conclusão, para comparar
+  // Preenchidas as duas datas, o card deixa de estar pela metade e a etiqueta
+  // de "veio da planilha" sai sozinha.
+  if(alvo.origem === 'planilha' && inicio && fimPrev) delete alvo.origem;
   alvo.supervisor = supervisor;
   alvo.semTurbina = semTurbina;
   alvo.turbinas = turbinas;
@@ -1437,13 +1446,27 @@ if(iniciarModulo()){
     .then(function(){
       desbloquear();
       if(podeEditar){
-        carregarTecnicos(); carregarSupervisores(); carregarTiposReparo();
         ligarBuscaTipo(); ligarBuscaSupervisor(); ligarStatusFim();
+
+        /* Técnicos, supervisores e tipos de reparo só servem dentro da janela
+           de edição, mas eram três idas ao servidor disputando espaço com o
+           desenho do quadro. Saem daqui e vão para depois da primeira pintura:
+           o quadro aparece na hora e as listas chegam antes de alguém
+           conseguir abrir a janela e rolar até os campos. */
+        setTimeout(function(){
+          carregarTecnicos(); carregarSupervisores(); carregarTiposReparo();
+        }, 1200);
       }
       if(!podeEditar){
         avisoTopo('Seu perfil acompanha os projetos, mas não altera. Criar e editar é do supervisor.', 'info');
       }
-      setInterval(function(){ carregar(false).catch(function(){}); }, 20000);
+      /* Aba escondida não precisa de atualização: cada rodada é uma execução do
+         Apps Script, e elas entram na fila na frente do próximo clique de quem
+         está com a tela aberta de verdade. */
+      setInterval(function(){
+        if(document.hidden) return;
+        carregar(false).catch(function(){});
+      }, 20000);
     })
     .catch(function(err){
       if(err && err.motivo === 'SESSAO') return;
