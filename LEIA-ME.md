@@ -162,24 +162,31 @@ que chegaram juntas. A lista é opcional: projeto sem turbina e sem blade salva.
 
 ### Status RD EHS
 
-Mesma mecânica do Status RDO, em **outra planilha**: filtros de data, cliente e
-parque, cobrança dos projetos em andamento e card com link para o PDF. O
-casamento também é pelo nome do parque, então vale tudo que está escrito acima
-sobre grafia.
+Mesma mecânica do Status RDO: filtros de data, cliente e parque, cobrança dos
+projetos em andamento e card que abre o PDF.
 
-O EHS **não tem** avanço de reparo, turbina nem blade — copiar esses campos do
-RDO só encheria o card de etiqueta vazia. No lugar do avanço, a cobrança mostra
-o supervisor do projeto.
+**De onde vem:** aba `Reports EHS` da **mesma planilha do RDO** (`ID_RDO`). É a
+aba que o app de campo grava desde que o report saiu do construtor de
+formulários (`ReportEHS.gs` no backend do RDO). Nenhuma propriedade nova.
 
-O código fica em `apps-script/StatusEHS.gs`, separado: nada do RDO precisa ser
-mexido. Colunas essenciais são `data`, `parque` e `link` — `cliente` e a
-matrícula de quem enviou podem faltar sem derrubar a tela. Apelidos em
-`COLUNAS_EHS`. Diagnóstico em **Portal > Conferir colunas do EHS**.
+As propriedades antigas `ID_EHS` e `ABA_EHS` são **ignoradas** de propósito:
+apontam para a planilha velha e, se valessem, a tela mostraria os reportes
+antigos sem dar erro. Pode apagá-las. Para mudar só o nome da aba, use
+`ABA_EHS_REPORTS` ou **Portal > Configurar aba do EHS**.
 
-| Propriedade | O que é |
-|---|---|
-| `ID_EHS` | link ou ID da planilha do reporte diário de EHS |
-| `ABA_EHS` | nome da aba (padrão: `REPORT DIÁRIO DE EHS - EXTREME WIND`) |
+Colunas usadas: `Data`, `Parque`, `Link_PDF` (essenciais), `Cliente`,
+`Matricula_login`, `Supervisor`, `Recebido_em`. As colunas das perguntas do
+formulário, que vêm depois, não são lidas.
+
+O app grava **um report por matrícula por dia**, então o mesmo parque pode ter
+mais de um. Qualquer um satisfaz a cobrança; o card lista todos que enviaram e
+o botão abre o PDF do primeiro. A lista de baixo mostra cada report.
+
+O casamento continua pelo nome do parque. Como o app pré-preenche o parque pela
+aba `SUPERVISORES` (que é espelho dos projetos daqui), a grafia tende a bater
+sozinha — só diverge se o técnico estiver sem projeto e escolher outro parque.
+
+Diagnóstico: **Portal > Conferir colunas do EHS**.
 
 ### Espelho na aba SUPERVISORES
 
@@ -336,6 +343,30 @@ salva, segue o tema do aparelho.
 
 Os ícones vêm do Font Awesome 6 pelo CDN. Sem internet, os cards continuam
 funcionando; só os pictogramas somem.
+
+---
+
+## Instalar como app (Chrome)
+
+O portal tem `manifest.json` + `sw.js`. Aberto pelo endereço do GitHub Pages
+(https), o Chrome mostra o ícone de instalar na barra de endereço e o portal
+mostra um botão **Instalar** ao lado do botão de tema. No Android aparece também
+em ⋮ > Instalar app. No iPhone: Compartilhar > Adicionar à Tela de Início.
+
+Instalado, o portal **continua precisando de internet**: login e dados vêm do
+Apps Script, que nunca é guardado no aparelho. Offline só abre a casca da tela.
+
+Ao publicar mudanças, suba o número em `CACHE` no `sw.js` (`ew-portal-v1` →
+`v2`). HTML, JS e CSS já vêm da rede primeiro, então a versão nova aparece
+mesmo sem isso; o número serve para descartar a cópia velha.
+
+**Mesmo domínio do site de campo:** o Cache Storage é por domínio, não por
+pasta. Este `sw.js` só apaga caches que começam com `ew-portal-`, mas o
+`sw.js` do site de campo apaga *todo* cache que não é o dele. Efeito prático:
+quando o site de campo atualiza, o portal perde a cópia offline e baixa de
+novo no próximo acesso. Não quebra nada. Para acabar com isso, troque no
+`sw.js` do site de campo o filtro do `activate` para apagar só os caches que
+começam com `ew-site-`.
 
 ---
 

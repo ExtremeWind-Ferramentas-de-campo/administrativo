@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
 <title>Status RDO — Extreme Wind</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#2b7fd0">
 <link rel="stylesheet" href="../assets/base.css">
 <style>
   .filtros{
@@ -304,8 +306,13 @@ function desenhar(res){
   html += '</div>';
 
   painel.innerHTML = html;
+}
 
-  // um só ouvinte para todos os "abrir PDF"
+/* Um só ouvinte para todos os "abrir PDF", ligado UMA vez. Antes ficava dentro
+   de desenhar(): o #painel não é recriado a cada busca, então cada busca
+   somava mais um ouvinte e, depois de 3 buscas, um clique abria 3 abas. */
+(function(){
+  var painel = document.getElementById('painel');
   painel.addEventListener('click', function(e){
     var alvo = e.target.closest('[data-link]');
     if(alvo) abrirPdf(alvo.getAttribute('data-link'));
@@ -315,7 +322,7 @@ function desenhar(res){
     var alvo = e.target.closest('[data-link]');
     if(alvo){ e.preventDefault(); abrirPdf(alvo.getAttribute('data-link')); }
   });
-}
+})();
 
 function abrirPdf(link){
   if(!link) return;

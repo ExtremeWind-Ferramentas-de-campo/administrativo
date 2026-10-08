@@ -1,29 +1,34 @@
 /* ===========================================================================
    STATUS RD EHS — Reporte Diário de EHS
    ---------------------------------------------------------------------------
-   Mesma ideia do Status RDO, em outra planilha: lê os reportes de EHS (só
-   leitura) e cruza com os projetos EM ANDAMENTO para cobrar quem não enviou.
+   Mesma ideia do Status RDO: lê os reportes de EHS (só leitura) e cruza com
+   os projetos EM ANDAMENTO para cobrar quem não enviou.
+
+   out/2026: os reportes saíram da planilha do construtor de formulários e
+   passaram a ser gravados pelo backend do RDO (ReportEHS.gs) na aba
+   "Reports EHS" da MESMA planilha do banco de dados do RDO. Por isso:
+     - a planilha é a do ID_RDO (nenhuma propriedade nova para configurar);
+     - as propriedades antigas ID_EHS e ABA_EHS são IGNORADAS de propósito:
+       elas apontam para a planilha velha e, se valessem, a tela continuaria
+       mostrando os reportes antigos sem dar erro nenhum.
+
+   Colunas fixas da aba (gravadas pelo ReportEHS.gs):
+     Protocolo | Recebido_em | Matricula_login | Data | Cliente | Parque |
+     Supervisor | Link_PDF | Caminho_PDF | (uma coluna por pergunta...)
 
    Arquivo separado de propósito. Compartilha os utilitários do
-   SupervisaoCampo.gs (prop_, dataISO_, chaveTexto_, acharColuna_, lerProjetos_,
-   lerTecnicos_, ehFimDeSemana_) porque no Apps Script todos os arquivos vivem
-   no mesmo escopo — mas nada do RDO precisa ser mexido para o EHS funcionar.
+   SupervisaoCampo.gs (prop_, idPlanilhaRDO_, dataISO_, chaveTexto_,
+   acharColuna_, lerProjetos_, lerTecnicos_, ehFimDeSemana_).
 
-   PROPRIEDADES (Configurações do projeto > Propriedades do script):
-     ID_EHS    link ou ID da planilha do reporte diário de EHS
-     ABA_EHS   nome da aba (padrão: REPORT DIÁRIO DE EHS - EXTREME WIND)
+   PROPRIEDADE (opcional, Configurações do projeto > Propriedades do script):
+     ABA_EHS_REPORTS   nome da aba (padrão: Reports EHS)
    =========================================================================== */
 
-const ABA_EHS_PADRAO = 'REPORT DIÁRIO DE EHS - EXTREME WIND';
+const ABA_EHS_PADRAO = 'Reports EHS';
+const CACHE_EHS_CHAVE = 'ehs_reports_v2';   // chave nova: o cache da planilha antiga não volta
 
-function idPlanilhaEHS_() {
-  const id = extrairId_(prop_('ID_EHS'));
-  if (!id) throw new Error('A planilha do EHS ainda não foi configurada. ' +
-                           'Crie a propriedade ID_EHS em Configurações do projeto > ' +
-                           'Propriedades do script, ou use Portal > Configurar planilha do EHS.');
-  return id;
-}
-function abaNomeEHS_() { return prop_('ABA_EHS', ABA_EHS_PADRAO); }
+function idPlanilhaEHS_() { return idPlanilhaRDO_(); }
+function abaNomeEHS_() { return prop_('ABA_EHS_REPORTS', ABA_EHS_PADRAO); }
 
 /* Apelidos aceitos para cada coluna. A comparação ignora maiúsculas, acentos e
    espaços. Acrescente aqui se o cabeçalho da planilha mudar.
@@ -32,14 +37,16 @@ function abaNomeEHS_() { return prop_('ABA_EHS', ABA_EHS_PADRAO); }
    todos os apelidos antes de tentar nome que contenha: sem isso, numa planilha
    de Formulários o carimbo de data/hora roubaria a coluna Data. */
 const COLUNAS_EHS = {
-  data:    ['data', 'data_exp', 'data_relatorio', 'data_do_relatorio', 'data_execucao', 'carimbo_de_data_hora'],
-  parque:  ['parque', 'parque_eolico', 'nome_parque', 'usina', 'complexo', 'pe'],
-  cliente: ['cliente', 'contratante', 'empresa'],
-  link:    ['link_do_pdf', 'link_pdf', 'linkpdf', 'link', 'pdf', 'url_pdf', 'arquivo'],
-  autor:   ['matricula_login', 'matricula', 'responsavel', 'tecnico', 'supervisor', 'criado_por', 'usuario']
+  data:       ['data', 'data_exp', 'data_relatorio', 'data_do_relatorio'],
+  parque:     ['parque', 'parque_eolico', 'nome_parque'],
+  cliente:    ['cliente', 'contratante', 'empresa'],
+  link:       ['link_pdf', 'link_do_pdf', 'linkpdf', 'url_pdf'],
+  autor:      ['matricula_login', 'matricula'],
+  supervisor: ['supervisor'],
+  recebido:   ['recebido_em']
 };
 
-/* Só data, parque e link seguram o funcionamento. Cliente e autor podem faltar
+/* Só data, parque e link seguram o funcionamento. Os outros podem faltar
    sem derrubar a tela — o filtro de cliente fica vazio e o card não diz quem
    enviou, mas a cobrança continua de pé. */
 const COLUNAS_EHS_ESSENCIAIS = ['data', 'parque', 'link'];
@@ -47,10 +54,14 @@ const COLUNAS_EHS_ESSENCIAIS = ['data', 'parque', 'link'];
 function abaEHS_() {
   const ss = SpreadsheetApp.openById(idPlanilhaEHS_());
   const nome = abaNomeEHS_();
-  const aba = ss.getSheetByName(nome);
+  // tolera maiúscula/acento/espaço: "Reports EHS", "REPORTS EHS", "Reports  EHS "
+  const alvo = normalizarCab_(nome);
+  const aba = ss.getSheetByName(nome) ||
+              ss.getSheets().filter(function (s) { return normalizarCab_(s.getName()) === alvo; })[0];
   if (!aba) {
     const nomes = ss.getSheets().map(function (s) { return s.getName(); }).join(' | ');
-    throw new Error('A aba "' + nome + '" não existe na planilha do EHS. Abas encontradas: ' + nomes);
+    throw new Error('A aba "' + nome + '" não existe na planilha do RDO. Abas encontradas: ' + nomes +
+                    '. Ela é criada sozinha no primeiro reporte enviado pelo app.');
   }
   return aba;
 }
@@ -67,15 +78,28 @@ function detectarColunasEHS_(cabecalho) {
 /** Lê a planilha do EHS inteira, com cache curto. */
 function lerEHS_() {
   const cache = CacheService.getScriptCache();
-  const guardado = cache.get('ehs_dados');
+  const guardado = cache.get(CACHE_EHS_CHAVE);
   if (guardado) {
     try { return JSON.parse(guardado); } catch (e) { /* cache ruim: relê */ }
   }
 
   const aba = abaEHS_();
-  const faixa = aba.getDataRange();
+  const nLin = aba.getLastRow();
+  if (nLin < 2) return [];
+  const cab = aba.getRange(1, 1, 1, Math.max(1, aba.getLastColumn())).getValues()[0];
+  const mapa = detectarColunasEHS_(cab);
+  const faltando = COLUNAS_EHS_ESSENCIAIS.filter(function (c) { return mapa[c] === -1; });
+  if (faltando.length) {
+    throw new Error('Colunas não encontradas na aba "' + aba.getName() + '": ' +
+                    faltando.join(', ') + '. Cabeçalho lido: ' + cab.filter(String).join(' | ') +
+                    '. Acrescente o nome real em COLUNAS_EHS, no StatusEHS.gs.');
+  }
+
+  // Depois das colunas fixas vem uma coluna por pergunta do formulário, com
+  // texto longo. Ler só até a última coluna usada aqui evita trazer tudo isso.
+  const ultimaCol = Math.max.apply(null, Object.keys(mapa).map(function (k) { return mapa[k]; })) + 1;
+  const faixa = aba.getRange(1, 1, nLin, ultimaCol);
   const dados = faixa.getValues();
-  if (dados.length < 2) return [];
 
   // Igual ao RDO: o texto EXIBIDO é o que a pessoa vê na planilha. O valor cru
   // transforma coisas como "5/5" em Date e o card mostraria a data por extrato.
@@ -86,15 +110,6 @@ function lerEHS_() {
     return String(v == null ? '' : v).trim();
   };
 
-  const mapa = detectarColunasEHS_(dados[0]);
-  const faltando = COLUNAS_EHS_ESSENCIAIS.filter(function (c) { return mapa[c] === -1; });
-  if (faltando.length) {
-    throw new Error('Colunas não encontradas na aba "' + abaNomeEHS_() + '": ' +
-                    faltando.join(', ') + '. Cabeçalho lido: ' +
-                    dados[0].filter(String).join(' | ') +
-                    '. Acrescente o nome real em COLUNAS_EHS, no StatusEHS.gs.');
-  }
-
   const linhas = [];
   for (let l = 1; l < dados.length; l++) {
     const linha = dados[l];
@@ -104,16 +119,18 @@ function lerEHS_() {
     if (!data && !celulaParque) continue;
 
     linhas.push({
-      data:    data,
-      parque:  celulaParque.replace(/\s+/g, ' '),
-      cliente: txt(l, mapa.cliente),
-      link:    txt(l, mapa.link),
-      autor:   txt(l, mapa.autor)
+      data:       data,
+      parque:     celulaParque.replace(/\s+/g, ' '),
+      cliente:    txt(l, mapa.cliente),
+      link:       txt(l, mapa.link),
+      autor:      txt(l, mapa.autor),
+      supervisor: txt(l, mapa.supervisor),
+      recebido:   txt(l, mapa.recebido)
     });
   }
 
   try {
-    cache.put('ehs_dados', JSON.stringify(linhas), CACHE_RDO_SEGUNDOS);
+    cache.put(CACHE_EHS_CHAVE, JSON.stringify(linhas), CACHE_RDO_SEGUNDOS);
   } catch (e) {
     // passou do limite do cache: segue sem, só fica mais lento
   }
@@ -147,10 +164,14 @@ function acaoEhsStatus_(p) {
 
   const doDia = linhas.filter(function (r) { return r.data === data; });
 
-  // Casamento pelo nome do parque, mesma regra do RDO.
+  // Casamento pelo nome do parque, mesma regra do RDO. O app grava UM report
+  // por matrícula por dia, então o mesmo parque pode ter mais de um (cada
+  // técnico que logou e enviou). A cobrança fica satisfeita com qualquer um;
+  // o card mostra todos que enviaram e abre o PDF do primeiro.
   const porParque = {};
   doDia.forEach(function (r) {
-    if (!porParque[chaveTexto_(r.parque)]) porParque[chaveTexto_(r.parque)] = r;
+    const k = chaveTexto_(r.parque);
+    (porParque[k] = porParque[k] || []).push(r);
   });
 
   let nomePorMatricula = {};
@@ -166,14 +187,22 @@ function acaoEhsStatus_(p) {
   const projetos = lerProjetos_()
     .filter(function (pr) { return String(pr.status || 'andamento') === 'andamento'; })
     .map(function (pr) {
-      const achado = porParque[chaveTexto_(pr.parque)] || null;
+      const achados = porParque[chaveTexto_(pr.parque)] || [];
+      const comLink = achados.filter(function (r) { return r.link; })[0] || achados[0] || null;
+      const autores = [];
+      achados.forEach(function (r) {
+        const n = quemFez(r);
+        if (n && autores.indexOf(n) === -1) autores.push(n);
+      });
       return {
         id: pr.id, codigo: pr.codigo, parque: pr.parque, cliente: pr.cliente,
         tipoReparo: pr.tipoReparo,
-        supervisor: (pr.supervisor && pr.supervisor.nome) ? pr.supervisor.nome : '',
-        estado: achado ? 'ENVIADO' : (fds ? 'NAO_OBRIGATORIO' : 'FALTA'),
-        link: achado ? achado.link : '',
-        autor: quemFez(achado)
+        supervisor: (pr.supervisor && pr.supervisor.nome) ? pr.supervisor.nome
+                  : (comLink ? comLink.supervisor : ''),
+        estado: achados.length ? 'ENVIADO' : (fds ? 'NAO_OBRIGATORIO' : 'FALTA'),
+        link: comLink ? comLink.link : '',
+        autor: autores.join(', '),
+        qtd: achados.length
       };
     });
 
@@ -184,7 +213,7 @@ function acaoEhsStatus_(p) {
     if (fCliente && chaveTexto_(r.cliente) !== fCliente) return false;
     if (fParque && chaveTexto_(r.parque) !== fParque) return false;
     return true;
-  }).slice(0, 400);
+  }).slice(-400);   // as mais recentes ficam no fim da aba
 
   relatorios.forEach(function (r) { r.autorNome = quemFez(r); });
   relatorios.sort(function (a, b) { return String(a.parque).localeCompare(String(b.parque)); });
@@ -229,38 +258,32 @@ function acaoEhsFiltros_(p) {
    MENU E DIAGNÓSTICO
    --------------------------------------------------------------------------- */
 
-/** Menu: Portal > Configurar planilha do EHS */
+/** Menu: Portal > Configurar aba do EHS
+ *  A planilha é sempre a do RDO (ID_RDO); aqui só se troca o nome da aba. */
 function menuConfigurarEHS() {
   const ui = SpreadsheetApp.getUi();
-  const props = PropertiesService.getScriptProperties();
-
-  const r1 = ui.prompt('Planilha do EHS',
-    'Cole o link (ou o ID) da planilha do reporte diário de EHS.\n\n' +
-    'Atual: ' + (props.getProperty('ID_EHS') || '(não configurada)'),
+  const r = ui.prompt('Aba dos reportes de EHS',
+    'Os reportes ficam na planilha do RDO. Nome da aba:\n\nAtual: ' + abaNomeEHS_(),
     ui.ButtonSet.OK_CANCEL);
-  if (r1.getSelectedButton() !== ui.Button.OK) return;
-  const id = extrairId_(r1.getResponseText());
-  if (!id) { ui.alert('Não consegui extrair o ID desse texto.'); return; }
-
-  const r2 = ui.prompt('Aba do EHS',
-    'Nome da aba onde ficam os reportes.\n\nAtual: ' + abaNomeEHS_(),
-    ui.ButtonSet.OK_CANCEL);
-  if (r2.getSelectedButton() !== ui.Button.OK) return;
-
-  props.setProperties({
-    ID_EHS: id,
-    ABA_EHS: r2.getResponseText().trim() || ABA_EHS_PADRAO
-  }, false);
-  CacheService.getScriptCache().remove('ehs_dados');
-
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  PropertiesService.getScriptProperties()
+    .setProperty('ABA_EHS_REPORTS', r.getResponseText().trim() || ABA_EHS_PADRAO);
+  CacheService.getScriptCache().remove(CACHE_EHS_CHAVE);
   menuColunasEHS();
 }
 
 /** Menu: Portal > Conferir colunas do EHS */
 function menuColunasEHS() {
-  let txt = 'PLANILHA DO EHS\n\n';
-  txt += '  ID_EHS  : ' + (PropertiesService.getScriptProperties().getProperty('ID_EHS') || '(não configurado)') + '\n';
-  txt += '  ABA_EHS : ' + abaNomeEHS_() + '\n\n';
+  const props = PropertiesService.getScriptProperties();
+  CacheService.getScriptCache().remove(CACHE_EHS_CHAVE);
+  let txt = 'REPORTES DE EHS\n\n';
+  txt += '  Planilha : a do RDO (ID_RDO = ' + (props.getProperty('ID_RDO') || '(não configurado)') + ')\n';
+  txt += '  Aba      : ' + abaNomeEHS_() + '\n';
+  if (props.getProperty('ID_EHS') || props.getProperty('ABA_EHS')) {
+    txt += '\n  Aviso: ID_EHS / ABA_EHS (planilha antiga) ainda existem nas propriedades.\n' +
+           '  Não são mais usadas — pode apagar.\n';
+  }
+  txt += '\n';
 
   try {
     const aba = abaEHS_();

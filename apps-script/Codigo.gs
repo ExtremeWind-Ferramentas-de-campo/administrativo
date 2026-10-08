@@ -131,7 +131,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Configurar planilhas (RDO, MINI MASTER e Banco de inputs)', 'menuConfigurarPlanilhas')
     .addItem('Conferir colunas do RDO', 'menuColunasRDO')
-    .addItem('Configurar planilha do EHS', 'menuConfigurarEHS')
+    .addItem('Configurar aba do EHS', 'menuConfigurarEHS')
     .addItem('Conferir colunas do EHS', 'menuColunasEHS')
     .addItem('Atualizar aba SUPERVISORES', 'atualizarAbaSupervisores')
     .addToUi();

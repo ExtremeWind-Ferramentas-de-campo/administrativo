@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
 <title>Status RD EHS — Extreme Wind</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#2b7fd0">
 <link rel="stylesheet" href="../assets/base.css">
 <style>
   .filtros{
@@ -83,7 +85,7 @@
 
   <div class="filtros">
     <div class="campo">
-      <label for="f-data">Data</label>
+      <label for="f-data">Data do report</label>
       <input id="f-data" type="date">
     </div>
     <div class="campo">
@@ -116,12 +118,12 @@
 <script>
 /* ============================================================================
    STATUS RD EHS
-   Lê a planilha do reporte diário de EHS (só leitura) e cruza com os projetos
-   em andamento. Mesma mecânica do Status RDO, em outra planilha.
+   Lê a aba "Reports EHS" da planilha do banco de dados do RDO (só leitura) e
+   cruza com os projetos em andamento. Mesma mecânica do Status RDO.
 
    A cobrança sai dos projetos: cada projeto em andamento deveria ter um
    reporte de EHS na data escolhida, casado pelo NOME DO PARQUE. Por isso o
-   parque cadastrado no projeto precisa bater com o que vai na planilha do EHS —
+   parque cadastrado no projeto precisa bater com o que vai na aba Reports EHS —
    a comparação ignora acento e maiúscula, mas não adivinha nome diferente.
 
    Sábado e domingo entram como "não obrigatório": o reporte pode existir,
@@ -159,7 +161,7 @@ function preencherFiltros(){
 
 function buscar(){
   var painel = document.getElementById('painel');
-  painel.innerHTML = '<div class="carregando">Consultando a planilha do EHS…</div>';
+  painel.innerHTML = '<div class="carregando">Consultando os reports de EHS…</div>';
   avisoTopo('');
 
   return chamar('ehsStatus', {
@@ -226,6 +228,7 @@ function desenhar(res){
             esc(p.cliente || 'sem cliente') +
             (p.supervisor ? ' · sup. ' + esc(p.supervisor) : '') +
             (p.autor ? ' · enviado por ' + esc(p.autor) : '') +
+            (p.qtd > 1 ? ' (' + p.qtd + ' reports)' : '') +
           '</div>' +
         '</div>' +
         '<span class="etiqueta ' + cls + '">' + rot + '</span>' +
@@ -271,6 +274,7 @@ function desenhar(res){
         '<div class="rdo-linha">' +
           '<span class="etiqueta">' + esc(dataBonita(r.data)) + '</span>' +
         '</div>' +
+        (r.supervisor ? '<div class="rdo-cliente">Supervisor: ' + esc(r.supervisor) + '</div>' : '') +
         ((r.autorNome || r.autor)
           ? '<div class="rdo-cliente">Enviado por ' + esc(r.autorNome || r.autor) + '</div>' : '') +
         (temLink
@@ -283,8 +287,13 @@ function desenhar(res){
   html += '</div>';
 
   painel.innerHTML = html;
+}
 
-  // um só ouvinte para todos os "abrir PDF"
+/* Um só ouvinte para todos os "abrir PDF", ligado UMA vez. Antes ficava dentro
+   de desenhar(): o #painel não é recriado a cada busca, então cada busca
+   somava mais um ouvinte e, depois de 3 buscas, um clique abria 3 abas. */
+(function(){
+  var painel = document.getElementById('painel');
   painel.addEventListener('click', function(e){
     var alvo = e.target.closest('[data-link]');
     if(alvo) abrirPdf(alvo.getAttribute('data-link'));
@@ -294,7 +303,7 @@ function desenhar(res){
     var alvo = e.target.closest('[data-link]');
     if(alvo){ e.preventDefault(); abrirPdf(alvo.getAttribute('data-link')); }
   });
-}
+})();
 
 function abrirPdf(link){
   if(!link) return;
