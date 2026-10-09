@@ -21,6 +21,7 @@
   /* a cor de cima é a do cliente, a mesma do Status RDO */
   .projeto{border-top:4px solid var(--c,var(--azul));display:flex;flex-direction:column;gap:10px}
   .projeto.concluido{opacity:.66}
+  .situacao-calc{min-height:44px;display:flex;align-items:center}
   .projeto-cliente-tag{
     display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.06em;
     text-transform:uppercase;color:var(--c,var(--azul));margin-top:3px;
@@ -190,7 +191,10 @@
     <div class="campo">
       <label for="filtroStatus">Situação</label>
       <select id="filtroStatus">
+        <option value="ativos">Ativos (não concluídos)</option>
+        <option value="a_iniciar">A iniciar</option>
         <option value="andamento">Em andamento</option>
+        <option value="atraso">Em atraso</option>
         <option value="concluido">Concluídos</option>
         <option value="">Todas</option>
       </select>
@@ -261,23 +265,20 @@
           <input id="f-fim-prev" type="date">
           <span class="dica" id="d-fim-prev">Quando a frente deve liberar. É o que desenha a barra no Gantt de Campo.</span>
         </div>
-        <div class="campo"></div>
+        <div class="campo" id="c-fim">
+          <label for="f-fim">Data real de finalização</label>
+          <input id="f-fim" type="date">
+          <span class="dica" id="d-fim">Preencha quando o projeto terminar. Com ela, o projeto vira Concluído.</span>
+        </div>
       </div>
 
       <div class="linha-campos">
         <div class="campo">
-          <label for="f-status">Situação</label>
-          <select id="f-status">
-            <option value="andamento">Em andamento</option>
-            <option value="concluido">Concluído</option>
-          </select>
-          <span class="dica">Só projetos em andamento são cobrados no Status RDO.</span>
+          <label>Situação</label>
+          <div class="situacao-calc"><span class="etiqueta" id="f-situacao">—</span></div>
+          <span class="dica">Calculada pelas datas. Não é preciso escolher.</span>
         </div>
-        <div class="campo" id="c-fim" hidden>
-          <label for="f-fim">Data de finalização</label>
-          <input id="f-fim" type="date">
-          <span class="dica" id="d-fim">Obrigatória para concluir o projeto.</span>
-        </div>
+        <div class="campo"></div>
       </div>
 
       <div class="linha-campos">
@@ -392,6 +393,37 @@ function carregar(primeira){
    o intervalo pedido. É o que responde às três perguntas de uma vez —
    "começou depois de X", "terminou antes de Y" e "esteve ativo entre X e Y".
    Filtrar só por p.inicio esconderia projeto que atravessa o período. */
+/* ---------- situação ----------
+   Calculada pelas datas, nunca escolhida. Ordem de prioridade:
+     data real de finalização preenchida -> Concluído
+     início depois de hoje               -> A iniciar
+     previsão de término já passou       -> Em atraso
+     o resto (inclusive sem datas)       -> Em andamento
+   O projeto continua gravando só  status: andamento | concluido  (decidido
+   pela data de finalização). É o que o backend, o Gantt e a cobrança do RDO
+   leem, então nada fora desta tela precisa saber das quatro situações.
+   Projeto antigo marcado "concluido" sem data continua concluído. */
+var SITUACOES = {
+  a_iniciar: { rotulo:'A iniciar',    classe:'etiqueta--azul'  },
+  andamento: { rotulo:'Em andamento', classe:'etiqueta--ok'    },
+  atraso:    { rotulo:'Em atraso',    classe:'etiqueta--falta' },
+  concluido: { rotulo:'Concluído',    classe:''                }
+};
+function situacaoDe(inicio, fimPrevisto, fim, statusGravado){
+  var hoje = hojeISO();
+  if(fim || statusGravado === 'concluido') return 'concluido';
+  if(inicio && inicio > hoje) return 'a_iniciar';
+  if(fimPrevisto && fimPrevisto < hoje) return 'atraso';
+  return 'andamento';
+}
+function situacaoDoProjeto(p){
+  return situacaoDe(p.inicio || '', p.fimPrevisto || '', p.fim || '', String(p.status || 'andamento'));
+}
+function etiquetaSituacao(sit){
+  var s = SITUACOES[sit];
+  return '<span class="etiqueta ' + s.classe + '">' + s.rotulo + '</span>';
+}
+
 function filtrosAtuais(){
   return {
     termo:      chaveBusca(document.getElementById('busca').value),
@@ -442,7 +474,10 @@ function dentroDoPeriodo(p, de, ate){
 function filtrar(){
   var f = filtrosAtuais();
   return projetos.filter(function(p){
-    if(f.status && (p.status || 'andamento') !== f.status) return false;
+    if(f.status){
+      var sit = situacaoDoProjeto(p);
+      if(f.status === 'ativos' ? sit === 'concluido' : sit !== f.status) return false;
+    }
     if(f.cliente && chaveBusca(p.cliente) !== chaveBusca(f.cliente)) return false;
     if(f.supervisor && chaveBusca(nomeSupervisor(p)) !== chaveBusca(f.supervisor)) return false;
     if(!dentroDoPeriodo(p, f.de, f.ate)) return false;
@@ -523,7 +558,8 @@ function desenhar(){
 
   lista.forEach(function(p){
     var el = document.createElement('div');
-    el.className = 'cartao projeto' + ((p.status||'andamento') === 'concluido' ? ' concluido' : '');
+    var sit = situacaoDoProjeto(p);
+    el.className = 'cartao projeto' + (sit === 'concluido' ? ' concluido' : '');
     el.style.setProperty('--c', corDoCliente(p.cliente));
     var sup = p.supervisor && p.supervisor.nome ? p.supervisor : null;
     el.innerHTML =
@@ -533,8 +569,7 @@ function desenhar(){
           '<div class="projeto-parque">' + esc(p.parque || '(sem parque)') + '</div>' +
           '<div class="projeto-cliente-tag">' + esc(p.cliente || 'sem cliente') + '</div>' +
         '</div>' +
-        '<span class="etiqueta ' + ((p.status||'andamento')==='concluido' ? '' : 'etiqueta--ok') + '">' +
-          ((p.status||'andamento')==='concluido' ? 'Concluído' : 'Em andamento') + '</span>' +
+        etiquetaSituacao(sit) +
       '</div>' +
       '<div class="projeto-linha">' +
         (p.tipoReparo ? '<span class="etiqueta etiqueta--azul">' + esc(p.tipoReparo) + '</span>' : '') +
@@ -598,7 +633,7 @@ document.getElementById('btLimpar').addEventListener('click', function(){
   document.getElementById('busca').value = '';
   document.getElementById('filtroCliente').value = '';
   document.getElementById('filtroSupervisor').value = '';
-  document.getElementById('filtroStatus').value = 'andamento';
+  document.getElementById('filtroStatus').value = 'ativos';
   document.getElementById('filtroDe').value = '';
   document.getElementById('filtroAte').value = '';
   desenhar();
@@ -916,25 +951,32 @@ function chaveBusca(t){
     .toLowerCase().trim();
 }
 
-/* ---------- data de finalização ----------
-   Só aparece quando a situação é "Concluído", e aí passa a ser obrigatória.
-   Deixar o campo sempre visível convidava a preencher data de fim em projeto
-   que ainda está rodando. */
+/* ---------- situação ao vivo no formulário ----------
+   Muda enquanto a pessoa mexe nas datas, para ela ver o efeito antes de
+   salvar. statusGravadoJanela guarda o "concluido" de projeto antigo sem data:
+   apagar a data de um projeto assim não pode reabri-lo por acidente, mas
+   preencher a data e depois apagá-la reabre (aí foi intenção). */
+var statusGravadoJanela = 'andamento';
 function ligarStatusFim(){
-  var status = document.getElementById('f-status');
-  status.addEventListener('change', function(){ aplicarStatusFim(); });
+  ['f-inicio','f-fim-prev','f-fim'].forEach(function(id){
+    var el = document.getElementById(id);
+    el.addEventListener('input', aplicarStatusFim);
+    el.addEventListener('change', aplicarStatusFim);
+  });
+  document.getElementById('f-fim').addEventListener('change', function(){
+    if(this.value) statusGravadoJanela = 'andamento';   // a data passa a mandar
+  });
 }
 
 function aplicarStatusFim(){
-  var concluido = document.getElementById('f-status').value === 'concluido';
-  document.getElementById('c-fim').hidden = !concluido;
-  if(!concluido){
-    document.getElementById('f-fim').value = '';
-    marcarErro('c-fim','d-fim','');
-    document.getElementById('d-fim').textContent = 'Obrigatória para concluir o projeto.';
-  }else if(!document.getElementById('f-fim').value){
-    document.getElementById('f-fim').value = hojeISO();
-  }
+  var sit = situacaoDe(
+    document.getElementById('f-inicio').value || '',
+    document.getElementById('f-fim-prev').value || '',
+    document.getElementById('f-fim').value || '',
+    statusGravadoJanela);
+  var el = document.getElementById('f-situacao');
+  el.className = 'etiqueta ' + SITUACOES[sit].classe;
+  el.textContent = SITUACOES[sit].rotulo;
 }
 
 /* ---------- supervisores (contas com perfil SUPERVISOR) ---------- */
@@ -1130,13 +1172,9 @@ function abrirJanela(id){
   document.getElementById('f-inicio').value  = p ? (p.inicio || '') : hojeISO();
   document.getElementById('f-fim-prev').value = p ? (p.fimPrevisto || '') : '';
   marcarErro('c-fim-prev','d-fim-prev','');
-  document.getElementById('f-status').value  = p ? (p.status || 'andamento') : 'andamento';
-
-  // ordem importa: a data guardada entra depois de aplicarStatusFim, senão ela
-  // seria sobrescrita pelo "hoje" que o campo assume quando abre em branco.
-  document.getElementById('f-fim').value = '';
+  document.getElementById('f-fim').value = p ? (p.fim || '') : '';
+  statusGravadoJanela = (p && !p.fim && String(p.status) === 'concluido') ? 'concluido' : 'andamento';
   aplicarStatusFim();
-  if(p && p.fim){ document.getElementById('f-fim').value = p.fim; }
   marcarErro('c-fim','d-fim','');
 
   var sup = (p && p.supervisor) ? p.supervisor : { nome:'', matricula:'' };
@@ -1245,9 +1283,10 @@ document.getElementById('form').addEventListener('submit', function(e){
   var parque  = document.getElementById('f-parque').value.trim();
   var cliente = document.getElementById('f-cliente').value.trim();
   var tipo    = document.getElementById('f-tipo').value.trim();
-  var status  = document.getElementById('f-status').value;
   var inicio  = document.getElementById('f-inicio').value || '';
   var fim     = document.getElementById('f-fim').value || '';
+  // Quem conclui é a data real de finalização (ver situacaoDe).
+  var status  = (fim || statusGravadoJanela === 'concluido') ? 'concluido' : 'andamento';
   var fimPrev = document.getElementById('f-fim-prev').value || '';
 
   /* Nada aqui barra o salvamento.
@@ -1285,15 +1324,12 @@ document.getElementById('form').addEventListener('submit', function(e){
   if(status === 'andamento' && !fimPrev) avisos.push('sem previsão de término');
 
   marcarErro('c-fim','d-fim','');
-  if(status === 'concluido'){
-    document.getElementById('d-fim').textContent = (inicio && fim && fim < inicio)
-      ? 'Atenção: a finalização está antes do início.'
-      : 'Data de finalização do projeto.';
-    if(!fim) avisos.push('concluído sem data de finalização');
-    else if(inicio && fim < inicio) avisos.push('finalização anterior ao início');
-  }else{
-    fim = '';
-  }
+  document.getElementById('d-fim').textContent = (inicio && fim && fim < inicio)
+    ? 'Atenção: a finalização está antes do início.'
+    : 'Preencha quando o projeto terminar. Com ela, o projeto vira Concluído.';
+  if(fim && inicio && fim < inicio) avisos.push('finalização anterior ao início');
+  if(fim && fim > hojeISO()) avisos.push('data de finalização no futuro');
+  if(status === 'concluido' && !fim) avisos.push('concluído sem data de finalização');
 
   var supNome = document.getElementById('f-sup').value.trim();
   var supMat  = document.getElementById('f-sup-mat').value.trim();
@@ -1357,7 +1393,7 @@ document.getElementById('form').addEventListener('submit', function(e){
   alvo.tipoReparo = tipo;
   alvo.inicio = inicio;
   alvo.status = status;
-  alvo.fim = fim;                       // vazio enquanto o projeto está em andamento
+  alvo.fim = fim;                       // preenchida = concluído
   alvo.fimPrevisto = fimPrev;           // previsão; sobrevive à conclusão, para comparar
   // Preenchidas as duas datas, o card deixa de estar pela metade e a etiqueta
   // de "veio da planilha" sai sozinha.
