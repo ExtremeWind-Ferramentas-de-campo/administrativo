@@ -77,8 +77,7 @@ function detectarColunasEHS_(cabecalho) {
 
 /** Lê a planilha do EHS inteira, com cache curto. */
 function lerEHS_() {
-  const cache = CacheService.getScriptCache();
-  const guardado = cache.get(CACHE_EHS_CHAVE);
+  const guardado = lerGrande_(CACHE_EHS_CHAVE);
   if (guardado) {
     try { return JSON.parse(guardado); } catch (e) { /* cache ruim: relê */ }
   }
@@ -129,11 +128,9 @@ function lerEHS_() {
     });
   }
 
-  try {
-    cache.put(CACHE_EHS_CHAVE, JSON.stringify(linhas), CACHE_RDO_SEGUNDOS);
-  } catch (e) {
-    // passou do limite do cache: segue sem, só fica mais lento
-  }
+  // Em pedaços (guardarGrande_, no Codigo.gs): numa chave só o cache morre em
+  // silêncio quando a aba passa de ~100 KB — e esta aba cresce ~30 linhas/dia.
+  guardarGrande_(CACHE_EHS_CHAVE, JSON.stringify(linhas), CACHE_RDO_SEGUNDOS);
   return linhas;
 }
 
@@ -254,6 +251,22 @@ function acaoEhsFiltros_(p) {
 }
 
 
+/* A lista de clientes e parques muda devagar: chave própria com cache longo.
+   CACHE_FILTROS_SEG mora no SupervisaoCampo.gs (o mesmo do RDO). Não declarar
+   de novo aqui: const repetida entre arquivos derruba o projeto inteiro. */
+function acaoEhsFiltrosCache_(p) {
+  const chave = CACHE_EHS_CHAVE + '_filtros';
+  const guardado = lerGrande_(chave);
+  if (guardado) {
+    try { return JSON.parse(guardado); } catch (e) { /* cache ruim: refaz */ }
+  }
+  const res = acaoEhsFiltros_(p);
+  const seg = (typeof CACHE_FILTROS_SEG !== 'undefined') ? CACHE_FILTROS_SEG : 900;
+  if (res.ok) guardarGrande_(chave, JSON.stringify(res), seg);
+  return res;
+}
+
+
 /* ---------------------------------------------------------------------------
    MENU E DIAGNÓSTICO
    --------------------------------------------------------------------------- */
@@ -268,14 +281,14 @@ function menuConfigurarEHS() {
   if (r.getSelectedButton() !== ui.Button.OK) return;
   PropertiesService.getScriptProperties()
     .setProperty('ABA_EHS_REPORTS', r.getResponseText().trim() || ABA_EHS_PADRAO);
-  CacheService.getScriptCache().remove(CACHE_EHS_CHAVE);
+  CacheService.getScriptCache().removeAll([CACHE_EHS_CHAVE + '_n', CACHE_EHS_CHAVE + '_filtros_n']);
   menuColunasEHS();
 }
 
 /** Menu: Portal > Conferir colunas do EHS */
 function menuColunasEHS() {
   const props = PropertiesService.getScriptProperties();
-  CacheService.getScriptCache().remove(CACHE_EHS_CHAVE);
+  CacheService.getScriptCache().removeAll([CACHE_EHS_CHAVE + '_n', CACHE_EHS_CHAVE + '_filtros_n']);
   let txt = 'REPORTES DE EHS\n\n';
   txt += '  Planilha : a do RDO (ID_RDO = ' + (props.getProperty('ID_RDO') || '(não configurado)') + ')\n';
   txt += '  Aba      : ' + abaNomeEHS_() + '\n';

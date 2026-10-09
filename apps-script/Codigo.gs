@@ -133,7 +133,9 @@ function onOpen() {
     .addItem('Conferir colunas do RDO', 'menuColunasRDO')
     .addItem('Configurar aba do EHS', 'menuConfigurarEHS')
     .addItem('Conferir colunas do EHS', 'menuColunasEHS')
-    .addItem('Atualizar aba SUPERVISORES', 'atualizarAbaSupervisores')
+    .addItem('Sincronizar aba SUPERVISORES', 'atualizarAbaSupervisores')
+    .addItem('Instalar gatilhos da aba SUPERVISORES', 'instalarGatilhosInputs')
+    .addItem('Reparar anexos sem arquivo (materiais)', 'repararAnexosFantasma')
     .addToUi();
 }
 
@@ -361,9 +363,18 @@ function resetarSenhaPeloAdmin(matricula) {
    ENDPOINT WEB
    =========================================================================== */
 
+/* Responde ok:false de propósito.
+   Toda chamada do portal é POST, e o /exec do Apps Script devolve um
+   redirecionamento que o navegador segue. Redirecionamento de POST vira GET e
+   perde o corpo — comportamento normal do HTTP. Quando isso acontece com uma
+   requisição grande (um anexo de alguns MB, por exemplo), o GET pode cair aqui
+   em vez de na resposta já calculada. Se esta função respondesse ok:true, a
+   tela leria sucesso de uma operação que nunca rodou. */
 function doGet() {
   return ContentService
-    .createTextOutput(JSON.stringify({ ok: true, servico: NOME_SISTEMA }))
+    .createTextOutput(JSON.stringify({
+      ok: false, motivo: 'USE_POST', servico: NOME_SISTEMA
+    }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -392,12 +403,12 @@ function doPost(e) {
       case 'projetosCarregar':       resposta = acaoProjetosCarregar_(corpo);      break;
       case 'projetosSalvar':         resposta = acaoProjetosSalvar_(corpo);        break;
       case 'rdoStatus':              resposta = acaoRdoStatus_(corpo);             break;
-      case 'rdoFiltros':             resposta = acaoRdoFiltros_(corpo);            break;
+      case 'rdoFiltros':             resposta = acaoRdoFiltrosCache_(corpo);       break;
       case 'tecnicosLista':          resposta = acaoTecnicosLista_(corpo);         break;
       case 'tiposReparoLista':       resposta = acaoTiposReparoLista_(corpo);      break;
       case 'supervisoresLista':      resposta = acaoSupervisoresLista_(corpo);     break;
       case 'ehsStatus':              resposta = acaoEhsStatus_(corpo);             break;
-      case 'ehsFiltros':             resposta = acaoEhsFiltros_(corpo);            break;
+      case 'ehsFiltros':             resposta = acaoEhsFiltrosCache_(corpo);       break;
 
       default:               resposta = { ok: false, motivo: 'ACAO_DESCONHECIDA' };
     }
@@ -878,6 +889,52 @@ function publico_(u) {
     cpf:        '•••.•••.' + cpf.slice(6, 9) + '-' + cpf.slice(9)
   };
 }
+
+/* ===========================================================================
+   CACHE GRANDE (em pedaços)
+   O CacheService aceita no máximo 100 KB por chave. Guardar uma tabela inteira
+   numa chave só funciona enquanto a tabela é pequena e depois passa a falhar em
+   SILÊNCIO — o put estoura, ninguém percebe, e a planilha volta a ser lida em
+   toda requisição. Aqui o texto é fatiado em pedaços e uma chave extra guarda
+   quantos são. Se qualquer pedaço vencer, o conjunto inteiro é descartado.
+   =========================================================================== */
+
+const CACHE_PEDACO = 90000;      // folga sobre os 100 KB por chave
+const CACHE_MAX_PEDACOS = 40;    // ~3,6 MB: acima disso não vale a pena cachear
+
+function guardarGrande_(chave, texto, segundos) {
+  const pedacos = [];
+  for (let i = 0; i < texto.length; i += CACHE_PEDACO) {
+    pedacos.push(texto.slice(i, i + CACHE_PEDACO));
+  }
+  if (!pedacos.length || pedacos.length > CACHE_MAX_PEDACOS) return false;
+
+  const mapa = {};
+  pedacos.forEach(function (p, i) { mapa[chave + '_p' + i] = p; });
+  mapa[chave + '_n'] = String(pedacos.length);
+
+  try { CacheService.getScriptCache().putAll(mapa, segundos); return true; }
+  catch (e) { return false; }
+}
+
+function lerGrande_(chave) {
+  const cache = CacheService.getScriptCache();
+  const n = Number(cache.get(chave + '_n'));
+  if (!n) return null;
+
+  const chaves = [];
+  for (let i = 0; i < n; i++) chaves.push(chave + '_p' + i);
+  const mapa = cache.getAll(chaves);
+
+  let texto = '';
+  for (let i = 0; i < n; i++) {
+    const p = mapa[chave + '_p' + i];
+    if (p == null) return null;    // pedaço venceu: o conjunto não serve mais
+    texto += p;
+  }
+  return texto;
+}
+
 
 function registrar_(matricula, acao, resultado, detalhe) {
   try {
