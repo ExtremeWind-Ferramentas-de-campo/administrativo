@@ -41,6 +41,21 @@
   .cob-parque{font-weight:700;font-size:.97rem}
   .cob-meta{font-size:.8rem;color:var(--muted);margin-top:2px}
   .cob-acao{flex:none}
+  .cob{flex-wrap:wrap}
+
+  /* Autorizado: Sim / Não — um par de botões por parque + dia */
+  .autoriz{display:flex;align-items:center;gap:8px;flex-basis:100%;padding-top:9px;margin-top:2px;border-top:1px dashed var(--linha)}
+  .autoriz-rot{font-size:.74rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .autoriz-par{display:inline-flex;border:1px solid var(--linha);border-radius:999px;overflow:hidden}
+  .autoriz-par button{
+    font:inherit;font-size:.8rem;font-weight:700;padding:5px 14px;border:0;background:none;color:var(--muted);cursor:pointer;
+  }
+  .autoriz-par button + button{border-left:1px solid var(--linha)}
+  .autoriz-par button:focus-visible{outline:2px solid var(--azul);outline-offset:-2px}
+  .autoriz-par button[aria-pressed="true"][data-valor="SIM"]{background:var(--ok-fraco);color:var(--ok)}
+  .autoriz-par button[aria-pressed="true"][data-valor="NAO"]{background:var(--erro-fraco);color:var(--erro)}
+  .autoriz-par button:disabled{cursor:wait;opacity:.6}
+  .autoriz-quem{font-size:.76rem;color:var(--faint)}
 
   .rdo{
     border-left:5px solid var(--c,var(--azul));cursor:pointer;display:flex;flex-direction:column;gap:9px;
@@ -180,7 +195,54 @@ function buscar(){
   });
 }
 
+/* Data que está na tela: o Sim/Não grava nesta data, não na do campo de
+   filtro (que a pessoa pode ter mexido sem clicar em Buscar). */
+var DATA_NA_TELA = '';
+
+function htmlAutoriz(parque, valor, quem){
+  var b = function(v, rot){
+    return '<button type="button" data-valor="' + v + '" aria-pressed="' + (valor === v) + '">' + rot + '</button>';
+  };
+  return '<div class="autoriz" data-parque="' + esc(parque) + '">' +
+    '<span class="autoriz-rot">Autorizado</span>' +
+    '<span class="autoriz-par" role="group" aria-label="Autorizado">' + b('SIM','Sim') + b('NAO','Não') + '</span>' +
+    '<span class="autoriz-quem">' + (valor && quem ? 'por ' + esc(quem) : '') + '</span>' +
+  '</div>';
+}
+
+function marcarAutoriz(grupo, valor){
+  var parque = grupo.getAttribute('data-parque');
+  var botoes = grupo.querySelectorAll('button');
+  var antes = null;
+  botoes.forEach(function(bt){
+    if(bt.getAttribute('aria-pressed') === 'true') antes = bt.getAttribute('data-valor');
+  });
+  if(antes === valor) return;
+
+  // marca na hora; desfaz se o servidor recusar
+  var pintar = function(v){
+    botoes.forEach(function(bt){ bt.setAttribute('aria-pressed', String(bt.getAttribute('data-valor') === v)); });
+  };
+  pintar(valor);
+  botoes.forEach(function(bt){ bt.disabled = true; });
+
+  chamar('ehsAutorizar', { data: DATA_NA_TELA, parque: parque, valor: valor })
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
+      var quem = grupo.querySelector('.autoriz-quem');
+      if(quem) quem.textContent = 'por ' + ((SESSAO && SESSAO.nome) || 'você');
+      recado(parque + ': ' + (valor === 'SIM' ? 'autorizado' : 'não autorizado') + '.', 'ok');
+    })
+    .catch(function(err){
+      pintar(antes);
+      if(err && err.motivo === 'SESSAO') return;
+      recado(traduzirErro(err), 'erro');
+    })
+    .then(function(){ botoes.forEach(function(bt){ bt.disabled = false; }); });
+}
+
 function desenhar(res){
+  DATA_NA_TELA = res.data;
   var painel = document.getElementById('painel');
   var enviados = res.projetos.filter(function(p){ return p.estado === 'ENVIADO'; }).length;
   var faltam   = res.projetos.filter(function(p){ return p.estado === 'FALTA'; }).length;
@@ -234,6 +296,7 @@ function desenhar(res){
         '<span class="etiqueta ' + cls + '">' + rot + '</span>' +
         (p.link ? '<div class="cob-acao"><button class="btn btn--vazado btn--pequeno" type="button" ' +
                   'data-link="' + esc(p.link) + '">Abrir PDF</button></div>' : '') +
+        htmlAutoriz(p.parque, p.autorizado, p.autorizadoPor) +
       '</div>';
     });
     html += '</div>';
@@ -273,6 +336,8 @@ function desenhar(res){
         '</div>' +
         '<div class="rdo-linha">' +
           '<span class="etiqueta">' + esc(dataBonita(r.data)) + '</span>' +
+          (r.autorizado === 'SIM' ? '<span class="etiqueta etiqueta--ok">Autorizado</span>'
+           : r.autorizado === 'NAO' ? '<span class="etiqueta etiqueta--falta">Não autorizado</span>' : '') +
         '</div>' +
         (r.supervisor ? '<div class="rdo-cliente">Supervisor: ' + esc(r.supervisor) + '</div>' : '') +
         ((r.autorNome || r.autor)
@@ -295,6 +360,8 @@ function desenhar(res){
 (function(){
   var painel = document.getElementById('painel');
   painel.addEventListener('click', function(e){
+    var bt = e.target.closest('.autoriz button[data-valor]');
+    if(bt){ marcarAutoriz(bt.closest('.autoriz'), bt.getAttribute('data-valor')); return; }
     var alvo = e.target.closest('[data-link]');
     if(alvo) abrirPdf(alvo.getAttribute('data-link'));
   });
