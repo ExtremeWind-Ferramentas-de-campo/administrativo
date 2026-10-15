@@ -181,8 +181,16 @@ function acaoEhsStatus_(p) {
     return n || r.autor || '';
   };
 
+  // Autorizado (Sim/Não) é por parque + dia, marcado no portal (aba EHS_AUTORIZACOES).
+  let autorizacoes = {};
+  try { autorizacoes = lerAutorizacoesEHS_(); } catch (e) { /* sem aba ainda: tudo em branco */ }
+
+  const fCliente = chaveTexto_(p.cliente || '');
+  const fParque  = chaveTexto_(p.parque || '');
+
   const projetos = lerProjetos_()
     .filter(function (pr) { return String(pr.status || 'andamento') === 'andamento'; })
+    .filter(function (pr) { return projetoPassaFiltro_(pr, fCliente, fParque); })
     .map(function (pr) {
       const achados = porParque[chaveTexto_(pr.parque)] || [];
       const comLink = achados.filter(function (r) { return r.link; })[0] || achados[0] || null;
@@ -203,8 +211,6 @@ function acaoEhsStatus_(p) {
       };
     });
 
-  const fCliente = chaveTexto_(p.cliente || '');
-  const fParque  = chaveTexto_(p.parque || '');
   const relatorios = linhas.filter(function (r) {
     if (p.data && r.data !== data) return false;
     if (fCliente && chaveTexto_(r.cliente) !== fCliente) return false;
@@ -212,7 +218,14 @@ function acaoEhsStatus_(p) {
     return true;
   }).slice(-400);   // as mais recentes ficam no fim da aba
 
-  relatorios.forEach(function (r) { r.autorNome = quemFez(r); });
+  // Autorizado é por parque + data do PRÓPRIO report (vale também quando a
+  // consulta é sem data e a lista traz vários dias).
+  relatorios.forEach(function (r) {
+    r.autorNome = quemFez(r);
+    const a = autorizacoes[chaveAutoriz_(r.data, r.parque)] || {};
+    r.autorizado = a.valor || '';
+    r.autorizadoPor = a.valor ? (nomePorMatricula[soNumero_(a.matricula)] || a.matricula || '') : '';
+  });
   relatorios.sort(function (a, b) { return String(a.parque).localeCompare(String(b.parque)); });
 
   return {
@@ -264,6 +277,94 @@ function acaoEhsFiltrosCache_(p) {
   const seg = (typeof CACHE_FILTROS_SEG !== 'undefined') ? CACHE_FILTROS_SEG : 900;
   if (res.ok) guardarGrande_(chave, JSON.stringify(res), seg);
   return res;
+}
+
+
+/* ---------------------------------------------------------------------------
+   AUTORIZADO (Sim / Não) — por parque + dia
+   ---------------------------------------------------------------------------
+   Fica na planilha do PORTAL (não na do RDO): o portal só lê a do RDO, e a
+   marcação é uma decisão tomada aqui. A aba nasce sozinha na primeira marcação.
+   Uma linha por data + parque; marcar de novo sobrescreve; clicar de novo
+   na opção marcada desmarca (a linha sai). Quem marcou e
+   quando ficam na própria linha, e o LOG guarda o histórico de trocas.
+   Qualquer pessoa logada pode marcar (decisão de out/2026).
+   --------------------------------------------------------------------------- */
+
+const ABA_EHS_AUTORIZ = 'EHS_AUTORIZACOES';
+const COLUNAS_EHS_AUTORIZ = ['chave', 'data', 'parque', 'autorizado', 'matricula', 'atualizado_em'];
+const VALORES_AUTORIZ = ['SIM', 'NAO'];
+
+function abaAutorizEHS_(criar) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let aba = ss.getSheetByName(ABA_EHS_AUTORIZ);
+  if (!aba && criar) {
+    aba = ss.insertSheet(ABA_EHS_AUTORIZ);
+    aba.getRange(1, 1, 1, COLUNAS_EHS_AUTORIZ.length).setValues([COLUNAS_EHS_AUTORIZ]).setFontWeight('bold');
+    aba.setFrozenRows(1);
+    // data e chave como texto: sem isso o Sheets converte "2026-10-14" em Date
+    aba.getRange('A:B').setNumberFormat('@');
+  }
+  return aba;
+}
+
+function chaveAutoriz_(dataIso, parque) { return dataIso + '|' + chaveTexto_(parque); }
+
+/** -> { 'aaaa-mm-dd|parque': { valor, matricula, em } } — a aba inteira (é pequena) */
+function lerAutorizacoesEHS_() {
+  const aba = abaAutorizEHS_(false);
+  const mapa = {};
+  if (!aba || aba.getLastRow() < 2) return mapa;
+  const dados = aba.getRange(2, 1, aba.getLastRow() - 1, COLUNAS_EHS_AUTORIZ.length).getDisplayValues();
+  dados.forEach(function (l) {
+    const valor = String(l[3]).toUpperCase();
+    if (VALORES_AUTORIZ.indexOf(valor) === -1) return;
+    mapa[chaveAutoriz_(String(l[1]), l[2])] = { valor: valor, matricula: String(l[4]), em: String(l[5]) };
+  });
+  return mapa;
+}
+
+/** { data, parque, valor: 'SIM' | 'NAO' | '' } -> { ok, data, parque, autorizado }
+ *  valor vazio = desmarcar (clique sem querer): a linha sai da aba. */
+function acaoEhsAutorizar_(p) {
+  const matricula = validarSessao_(p.token);
+  if (!matricula) return { ok: false, motivo: 'SESSAO' };
+
+  const data = dataISO_(p.data);
+  const parque = String(p.parque || '').replace(/\s+/g, ' ').trim();
+  const valor = String(p.valor || '').toUpperCase();
+  if (!data || !parque || (valor && VALORES_AUTORIZ.indexOf(valor) === -1)) {
+    return { ok: false, motivo: 'DADOS_INVALIDOS' };
+  }
+
+  const trava = LockService.getScriptLock();
+  if (!trava.tryLock(20000)) return { ok: false, motivo: 'OCUPADO' };
+  try {
+    const aba = abaAutorizEHS_(true);
+    const chave = chaveAutoriz_(data, parque);
+    const agora = new Date();
+    const linhaNova = [chave, data, parque, valor, "'" + matricula, agora];
+
+    let linha = -1;
+    if (aba.getLastRow() >= 2) {
+      const chaves = aba.getRange(2, 1, aba.getLastRow() - 1, 1).getDisplayValues();
+      for (let i = 0; i < chaves.length; i++) {
+        if (String(chaves[i][0]) === chave) { linha = i + 2; break; }
+      }
+    }
+    if (!valor) {
+      if (linha > -1) aba.deleteRow(linha);
+    } else if (linha > -1) {
+      aba.getRange(linha, 1, 1, linhaNova.length).setValues([linhaNova]);
+    } else {
+      aba.appendRow(linhaNova);
+    }
+
+    registrar_(matricula, 'EHS_AUTORIZAR', 'OK', data + ' | ' + parque + ' | ' + (valor || 'DESMARCADO'));
+    return { ok: true, data: data, parque: parque, autorizado: valor };
+  } finally {
+    trava.releaseLock();
+  }
 }
 
 

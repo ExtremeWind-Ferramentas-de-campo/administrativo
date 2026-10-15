@@ -32,11 +32,14 @@
   }
   .dia-info strong{color:var(--ink)}
 
-  .cobranca{display:flex;flex-direction:column;gap:10px;margin-bottom:30px}
+  /* Cobrança: só quem FALTA enviar, em grade (2–3 por linha no computador,
+     1 no celular). Quem já enviou aparece só em "encontrados". */
+  .cobranca{display:grid;gap:10px;margin-bottom:30px;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr))}
   .cob{
-    display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--linha);
-    border-left:4px solid var(--c);border-radius:12px;padding:13px 15px;box-shadow:var(--sombra);
+    display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--linha);
+    border-left:4px solid var(--c);border-radius:10px;padding:10px 12px;box-shadow:var(--sombra);
   }
+  .cob-ok{background:var(--ok-fraco);color:var(--ok);border-radius:10px;padding:12px 15px;font-size:.9rem;font-weight:600;margin-bottom:30px}
   .cob-txt{flex:1;min-width:0}
   .cob-parque{font-weight:700;font-size:.97rem}
   .cob-meta{font-size:.8rem;color:var(--muted);margin-top:2px}
@@ -192,6 +195,7 @@ function desenhar(res){
   var painel = document.getElementById('painel');
   var enviados = res.projetos.filter(function(p){ return p.estado === 'ENVIADO'; }).length;
   var faltam   = res.projetos.filter(function(p){ return p.estado === 'FALTA'; }).length;
+  var pendentes = res.projetos.filter(function(p){ return p.estado !== 'ENVIADO'; });
 
   var html = '';
 
@@ -214,39 +218,37 @@ function desenhar(res){
         '<div class="placar-rot">' + (res.fimDeSemana ? 'Sem RDO (livre)' : 'Falta enviar') + '</div></div>' +
     '</div>';
 
-    html += '<h2 class="secao-tit">Cobrança do dia</h2>';
-    html += '<div class="cobranca">';
+    html += '<h2 class="secao-tit">Cobrança do dia' + (pendentes.length ? ' (' + pendentes.length + ')' : '') + '</h2>';
 
-    var ordem = { FALTA:0, NAO_OBRIGATORIO:1, ENVIADO:2 };
-    res.projetos.slice().sort(function(a,b){
-      return (ordem[a.estado] - ordem[b.estado]) || String(a.parque).localeCompare(String(b.parque));
-    }).forEach(function(p){
-      // a barra lateral segue o estado; a cor do cliente fica na etiqueta
-      var cor = p.estado === 'ENVIADO' ? 'var(--ok)'
-              : p.estado === 'FALTA'   ? 'var(--erro)' : 'var(--alerta)';
-      var rot = p.estado === 'ENVIADO' ? 'Enviado'
-              : p.estado === 'FALTA'   ? 'Falta enviar' : 'Não obrigatório';
-      var cls = p.estado === 'ENVIADO' ? 'etiqueta--ok'
-              : p.estado === 'FALTA'   ? 'etiqueta--falta' : 'etiqueta--neutra';
-
-      html += '<div class="cob" style="--c:' + cor + '">' +
-        '<div class="cob-txt">' +
-          '<div class="cob-parque">' + esc(p.parque) + '</div>' +
-          '<div class="cob-meta">' +
-            esc(p.cliente || 'sem cliente') +
-            (p.tipoReparo ? ' · ' + esc(p.tipoReparo) : '') +
-            (p.autor ? ' · enviado por ' + esc(p.autor) : '') +
-            (p.avanco ? ' · avanço ' + esc(p.avanco) : '') +
+    if(!pendentes.length){
+      html += '<div class="cob-ok">' + (res.projetos.length
+        ? 'Todos os projetos enviaram o RDO desta data. Os relatórios estão em "encontrados", abaixo.'
+        : 'Nenhum projeto com esses filtros.') + '</div>';
+    }else{
+      html += '<div class="cobranca">';
+      pendentes.sort(function(a,b){
+        return (a.estado === b.estado ? 0 : (a.estado === 'FALTA' ? -1 : 1)) ||
+               String(a.parque).localeCompare(String(b.parque));
+      }).forEach(function(p){
+        var falta = p.estado === 'FALTA';
+        html += '<div class="cob" style="--c:' + (falta ? 'var(--erro)' : 'var(--alerta)') + '">' +
+          '<div class="cob-txt">' +
+            '<div class="cob-parque">' + esc(p.parque) + '</div>' +
+            '<div class="cob-meta">' +
+              esc(p.cliente || 'sem cliente') +
+              (p.tipoReparo ? ' · ' + esc(p.tipoReparo) : '') +
+            '</div>' +
           '</div>' +
-        '</div>' +
-        '<span class="etiqueta ' + cls + '">' + rot + '</span>' +
-        (p.link ? '<div class="cob-acao"><button class="btn btn--vazado btn--pequeno" type="button" ' +
-                  'data-link="' + esc(p.link) + '">Abrir PDF</button></div>' : '') +
-      '</div>';
-    });
-    html += '</div>';
+          '<span class="etiqueta ' + (falta ? 'etiqueta--falta' : 'etiqueta--neutra') + '">' +
+            (falta ? 'Falta enviar' : 'Não obrigatório') + '</span>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
   }else{
-    html += '<div class="vazio">Nenhum projeto em andamento cadastrado. ' +
+    html += (document.getElementById('f-cliente').value || document.getElementById('f-parque').value)
+      ? '<div class="vazio">Nenhum projeto em andamento com esse cliente/parque.</div>'
+      : '<div class="vazio">Nenhum projeto em andamento cadastrado. ' +
             'Cadastre em <strong>Projetos em Andamento</strong> para o sistema saber de quem cobrar o RDO.</div>';
   }
 

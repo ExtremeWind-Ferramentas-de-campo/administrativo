@@ -409,6 +409,7 @@ function doPost(e) {
       case 'supervisoresLista':      resposta = acaoSupervisoresLista_(corpo);     break;
       case 'ehsStatus':              resposta = acaoEhsStatus_(corpo);             break;
       case 'ehsFiltros':             resposta = acaoEhsFiltrosCache_(corpo);       break;
+      case 'ehsAutorizar':           resposta = acaoEhsAutorizar_(corpo);          break;
 
       default:               resposta = { ok: false, motivo: 'ACAO_DESCONHECIDA' };
     }

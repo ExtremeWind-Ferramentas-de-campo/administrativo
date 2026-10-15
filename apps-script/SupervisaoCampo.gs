@@ -310,7 +310,7 @@ function acharColuna_(norm, apelidos) {
 /** Normaliza um cabeçalho: sem acento, minúsculo, separadores virando "_". */
 function normalizarCab_(t) {
   return String(t == null ? '' : t)
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
@@ -450,8 +450,22 @@ function soNumero_(t) {
 
 function chaveTexto_(t) {
   return String(t == null ? '' : t)
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/* Filtro de cliente/parque aplicado também à COBRANÇA (projetos), não só à
+   lista de relatórios. As opções dos menus vêm da planilha do RDO/EHS e o
+   cliente do projeto pode vir mais curto ou mais longo ("SIEMENS" x
+   "SIEMENS GAMESA"): no cliente vale conter, no parque só nome igual.
+   Usado também pelo StatusEHS.gs. */
+function projetoPassaFiltro_(pr, fCliente, fParque) {
+  if (fParque && chaveTexto_(pr.parque) !== fParque) return false;
+  if (fCliente) {
+    const c = chaveTexto_(pr.cliente);
+    if (!c || (c !== fCliente && c.indexOf(fCliente) === -1 && fCliente.indexOf(c) === -1)) return false;
+  }
+  return true;
 }
 
 /** Converte para 'yyyy-MM-dd' seja Date, seja texto em vários formatos. */
@@ -474,8 +488,7 @@ function dataISO_(v) {
 
 /** Lê a planilha do RDO inteira, com cache curto. */
 function lerRDO_() {
-  const cache = CacheService.getScriptCache();
-  const guardado = cache.get('rdo_dados');
+  const guardado = lerGrande_('rdo_dados');
   if (guardado) {
     try { return JSON.parse(guardado); } catch (e) { /* cache ruim: relê */ }
   }
@@ -530,11 +543,10 @@ function lerRDO_() {
     });
   }
 
-  try {
-    cache.put('rdo_dados', JSON.stringify(linhas), CACHE_RDO_SEGUNDOS);
-  } catch (e) {
-    // passou do limite do cache: segue sem, só fica mais lento
-  }
+  // Em pedaços: numa chave só, o cache para de funcionar sem avisar assim que a
+  // aba passa de umas 500 linhas — e aí toda abertura relê a planilha inteira
+  // duas vezes (valores + exibidos).
+  guardarGrande_('rdo_dados', JSON.stringify(linhas), CACHE_RDO_SEGUNDOS);
   return linhas;
 }
 
@@ -593,8 +605,12 @@ function acaoRdoStatus_(p) {
     return n || r.autor || '';
   };
 
+  const fCliente = chaveTexto_(p.cliente || '');
+  const fParque  = chaveTexto_(p.parque || '');
+
   const projetos = lerProjetos_()
     .filter(function (pr) { return String(pr.status || 'andamento') === 'andamento'; })
+    .filter(function (pr) { return projetoPassaFiltro_(pr, fCliente, fParque); })
     .map(function (pr) {
       const achado = porParque[chaveTexto_(pr.parque)] || null;
       return {
@@ -610,8 +626,6 @@ function acaoRdoStatus_(p) {
     });
 
   // ---- lista filtrada (para consultar dias passados)
-  const fCliente = chaveTexto_(p.cliente || '');
-  const fParque  = chaveTexto_(p.parque || '');
   const relatorios = linhas.filter(function (r) {
     if (p.data && r.data !== data) return false;
     if (fCliente && chaveTexto_(r.cliente) !== fCliente) return false;
@@ -656,6 +670,21 @@ function acaoRdoFiltros_(p) {
     clientes: Object.keys(clientes).sort(),
     parques: Object.keys(parques).sort()
   };
+}
+
+/* Cliente e parque novos entram devagar — não precisam da mesma releitura de
+   2 minutos dos relatórios. Guardar a lista à parte, por 15 minutos, tira a
+   leitura da planilha do caminho de abertura da tela. */
+const CACHE_FILTROS_SEG = 900;
+
+function acaoRdoFiltrosCache_(p) {
+  const guardado = lerGrande_('rdo_filtros');
+  if (guardado) {
+    try { return JSON.parse(guardado); } catch (e) { /* cache ruim: refaz */ }
+  }
+  const res = acaoRdoFiltros_(p);
+  if (res.ok) guardarGrande_('rdo_filtros', JSON.stringify(res), CACHE_FILTROS_SEG);
+  return res;
 }
 
 
@@ -747,7 +776,7 @@ function abaInputs_() {
    decisão de quem montou a planilha. */
 function ehNao_(valor) {
   const v = String(valor == null ? '' : valor)
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().trim();
   return v === 'nao' || v === 'n' || v === 'false' || v === 'no';
 }
@@ -803,22 +832,33 @@ function lerTiposReparo_() {
    Cada projeto EM ANDAMENTO vira uma linha, para quem trabalha dentro do Banco
    de inputs enxergar quem está com o quê sem abrir o portal.
 
-   É um ESPELHO, não uma segunda base: a aba é reescrita inteira a cada
-   gravação de projeto. Editar essas células à mão não volta para o portal e
-   se perde na próxima gravação. A linha 1 (cabeçalho) nunca é tocada.
+   Os dois lados escrevem: o portal grava as colunas que são dele e lê de volta
+   o que for editado na planilha. Como isso funciona está explicado no
+   InputsSync.gs. A linha 1 (cabeçalho) nunca é tocada.
    =========================================================================== */
 
 const ABA_SUP_INPUTS = 'SUPERVISORES';
 
 const COLUNAS_SUP_INPUTS = {
-  supervisor: ['supervisor'],
-  cliente:    ['cliente'],
-  parque:     ['parque'],
-  tipo:       ['tipo_de_reparo', 'tipo_reparo', 'tiporeparo', 'tipo'],
-  matricula:  ['matricula', 'matriculas', 'matricula_tecnicos'],
-  turbina:    ['turbina', 'turbinas'],
-  blade:      ['blade', 'blades', 'pa', 'pas']
+  supervisor:  ['supervisor'],
+  cliente:     ['cliente'],
+  parque:      ['parque'],
+  tipo:        ['tipo_de_reparo', 'tipo_reparo', 'tiporeparo', 'tipo'],
+  matricula:   ['matricula', 'matriculas', 'matricula_tecnicos'],
+  turbina:     ['turbina', 'turbinas'],
+  blade:       ['blade', 'blades', 'pa', 'pas'],
+  // Apelidos específicos de propósito: acharColuna_ cai para busca por pedaço
+  // quando não acha exato, e um apelido solto como 'data' casaria com
+  // qualquer coluna de data que já exista na aba.
+  inicio:      ['inicio', 'data_inicio', 'data_de_inicio', 'inicio_obra'],
+  fimPrevisto: ['previsao_de_termino', 'previsao_termino', 'previsao',
+                'fim_previsto', 'termino_previsto', 'fim_prox']
 };
+
+/* Colunas de data: lidas e gravadas como data de verdade, não como texto.
+   Importa porque o Sheets converte "2026-10-15" digitado numa célula em Date, e
+   aí a comparação com o retrato (texto) acusaria alteração em toda passada. */
+const CAMPOS_DATA_INPUTS = ['inicio', 'fimPrevisto'];
 
 /* Estas o espelho grava SE a coluna existir. Ficam de fora da conferência
    obrigatória para quem ainda não criou os cabeçalhos continuar com o espelho
@@ -858,112 +898,11 @@ function equipeVigenteDoProjeto_(pr) {
   return achada.tecnicos || [];
 }
 
-/**
- * Reescreve a aba SUPERVISORES com os projetos em andamento.
- * Devolve quantas linhas gravou.
- */
-function espelharSupervisores_() {
-  const aba = abaSupervisoresInputs_();
-  const larg = Math.max(aba.getLastColumn(), 7);
-  const cab = aba.getRange(1, 1, 1, larg).getValues()[0];
-  const norm = cab.map(normalizarCab_);
-
-  const col = {};
-  Object.keys(COLUNAS_SUP_INPUTS).forEach(function (campo) {
-    col[campo] = acharColuna_(norm, COLUNAS_SUP_INPUTS[campo]);
-  });
-  const faltando = Object.keys(col).filter(function (c) {
-    return col[c] === -1 && COLUNAS_SUP_OPCIONAIS.indexOf(c) === -1;
-  });
-  if (faltando.length) {
-    throw new Error('Colunas não encontradas na aba "' + ABA_SUP_INPUTS + '": ' +
-                    faltando.join(', ') + '. Cabeçalho lido: ' + cab.filter(String).join(' | '));
-  }
-
-  const emAndamento = lerProjetos_().filter(function (pr) {
-    return String(pr.status || 'andamento') === 'andamento';
-  });
-  emAndamento.sort(function (a, b) {
-    return String(a.parque || '').localeCompare(String(b.parque || ''));
-  });
-
-  const linhas = emAndamento.map(function (pr) {
-    const linha = new Array(larg).fill('');
-    linha[col.supervisor] = (pr.supervisor && pr.supervisor.nome) ? pr.supervisor.nome : '';
-    linha[col.cliente]    = pr.cliente || '';
-    linha[col.parque]     = pr.parque || '';
-    linha[col.tipo]       = pr.tipoReparo || '';
-    // Todas as matrículas numa célula só. O apóstrofo à frente força texto:
-    // sem ele o Sheets come o zero à esquerda quando sobra uma matrícula só.
-    const mats = equipeVigenteDoProjeto_(pr)
-      .map(function (t) { return String(t.matricula || '').trim(); })
-      .filter(String);
-    linha[col.matricula] = mats.length ? "'" + mats.join(', ') : '';
-
-    // Turbina e blade só entram se o cabeçalho existir na aba.
-    // "Sem turbina" é escrito por extenso: célula vazia diria apenas que
-    // ninguém preencheu, e é justamente essa dúvida que o check resolve.
-    const turbs = pr.semTurbina ? [] : (pr.turbinas || []);
-    if (col.turbina > -1) {
-      linha[col.turbina] = pr.semTurbina
-        ? 'Sem turbina'
-        : turbs.map(function (t) { return t.nome; }).filter(String).join(', ');
-    }
-    if (col.blade > -1) {
-      if (pr.semTurbina) {
-        // Serviço em solo: blade sem turbina para prefixar. A coluna TURBINA
-        // já diz "Sem turbina", então a lista crua não fica ambígua.
-        linha[col.blade] = (pr.bladesSoltas || [])
-          .map(function (b) { return String(b || '').trim(); })
-          .filter(String).join(', ');
-      } else {
-        // Prefixo com o nome da turbina sempre, mesmo com uma só: sem ele, uma
-        // aba com projetos de 1 e de 2 turbinas teria dois formatos na mesma coluna.
-        linha[col.blade] = turbs.map(function (t) {
-          const bl = (t.blades || []).map(function (b) { return String(b || '').trim(); }).filter(String);
-          return bl.length ? t.nome + ': ' + bl.join(', ') : '';
-        }).filter(String).join(' | ');
-      }
-    }
-    return linha;
-  });
-
-  // Limpa da linha 2 para baixo e regrava. Reescrever inteiro é o que mantém
-  // o espelho fiel quando um projeto é concluído ou excluído.
-  const ultima = aba.getLastRow();
-  if (ultima > 1) aba.getRange(2, 1, ultima - 1, larg).clearContent();
-  if (linhas.length) aba.getRange(2, 1, linhas.length, larg).setValues(linhas);
-
-  return linhas.length;
-}
-
-/**
- * Chamada depois de cada gravação de projeto. Nunca derruba o salvamento:
- * se a planilha de inputs estiver fora do ar ou sem permissão, o projeto já
- * está gravado na base do portal e o espelho fica para a próxima.
- */
-function espelharSupervisoresSeguro_(matricula) {
-  try {
-    const n = espelharSupervisores_();
-    return { ok: true, linhas: n };
-  } catch (e) {
-    registrar_(matricula || '', 'ESPELHO_SUP', 'FALHA', String(e.message));
-    return { ok: false, detalhe: e.message };
-  }
-}
-
-/** Menu: Portal > Atualizar aba SUPERVISORES. Também serve para gatilho por tempo. */
-function atualizarAbaSupervisores() {
-  try {
-    const n = espelharSupervisores_();
-    Logger.log('Aba SUPERVISORES atualizada: ' + n + ' projetos em andamento.');
-    avisar_('Aba SUPERVISORES atualizada.\n\n' + n + ' projetos em andamento gravados.');
-  } catch (e) {
-    Logger.log('ERRO ao atualizar SUPERVISORES: ' + e.message);
-    avisar_('Não deu certo:\n\n' + e.message);
-  }
-}
-
+/* O que era espelharSupervisores_ virou sincronizarInputs_, no InputsSync.gs.
+   A diferença não é de nome: o espelho apagava a aba da linha 2 para baixo e
+   regravava, o que destruía qualquer coisa digitada lá. A sincronia compara
+   com um retrato do que o portal gravou da última vez e só regrava o que
+   reconhece como seu — o resto é dele e volta para os cards. */
 
 /* ===========================================================================
    PROJETOS EM ANDAMENTO
@@ -1026,9 +965,32 @@ function acaoProjetosCarregar_(p) {
   };
 }
 
+/* O perfil é consultado em TODA requisição de projeto, inclusive no polling de
+   20 s que não traz dado nenhum — e cada consulta lia a aba USUARIOS inteira.
+   Com 5 minutos de cache, o polling deixa de tocar na planilha.
+
+   Por que 5 minutos e não 6 horas: perfil é permissão. Quem for rebaixado na
+   planilha continua editando por até 5 minutos. Esse é o preço, e é curto o
+   bastante para não virar problema. Para derrubar na hora, rode
+   limparCachePerfil('<matricula>'). */
+const CACHE_PERFIL_SEG = 300;
+
 function perfilDe_(matricula) {
+  const chave = 'perfil_' + String(matricula);
+  const cache = CacheService.getScriptCache();
+
+  const guardado = cache.get(chave);
+  if (guardado) return guardado;
+
   const achado = acharPorMatricula_(abaUsuarios_(), matricula);
-  return achado ? String(achado.dados.perfil).toUpperCase() : 'DIRETORIA';
+  const perfil = achado ? String(achado.dados.perfil).toUpperCase() : 'DIRETORIA';
+  try { cache.put(chave, perfil, CACHE_PERFIL_SEG); } catch (e) { /* segue sem */ }
+  return perfil;
+}
+
+/** Derruba na hora o perfil guardado de alguém (use depois de mexer na aba USUARIOS). */
+function limparCachePerfil(matricula) {
+  CacheService.getScriptCache().remove('perfil_' + String(matricula));
 }
 
 /* Quem cria e edita projeto: ADMIN (setor administrativo) e SUPERVISOR.
@@ -1156,7 +1118,11 @@ function acaoProjetosSalvar_(p) {
 
     // Espelho na aba SUPERVISORES do Banco de inputs. Fica dentro da trava
     // para duas gravações simultâneas não escreverem por cima uma da outra.
-    const espelho = espelharSupervisoresSeguro_(matricula);
+    /* Sincroniza a aba SUPERVISORES dentro da trava. Roda DEPOIS de gravar, e
+       a passada traz junto o que a outra pessoa tiver editado na planilha
+       desde a última vez — por isso uma gravação do portal não atropela a
+       edição dela que ainda não tinha sido lida. */
+    const espelho = sincronizarInputsSeguro_(matricula);
 
     return { ok: true, rev: rev, aceitos: aceitos, conflitos: conflitos, espelho: espelho.ok };
 

@@ -270,26 +270,92 @@ function acaoMateriaisAnexar_(p) {
  * Em lote de propósito: o quadro pede todas as miniaturas de uma vez ao abrir.
  * Uma chamada por imagem estouraria a cota do Apps Script num quadro cheio.
  */
+/* ---------------------------------------------------------------------------
+   MINIATURAS
+
+   Era aqui que a tela de materiais perdia a maior parte do tempo. Por
+   miniatura eram DUAS idas ao Drive — getFileById e depois percorrer
+   getParents() para conferir a pasta — mais o download e o base64. Nada era
+   guardado, então um quadro com 20 anexos fazia 40 viagens ao Drive toda vez
+   que a tela abria.
+
+   Duas mudanças:
+
+   1. Cada miniatura vai para o cache por 6 horas, numa chave própria. Miniatura
+      não muda: o arquivo é gerado uma vez no upload e nunca mais é tocado.
+      Da segunda abertura em diante o Drive não é consultado.
+
+   2. A conferência de pasta saiu. No lugar, o id é comparado com os anexos que
+      os próprios cards declaram. É uma ida à aba MAT_CARDS (pequena e também
+      cacheada) em vez de uma ida ao Drive por arquivo — e é mais restrito que
+      antes: agora só passa arquivo que algum card realmente referencia, não
+      qualquer arquivo largado na pasta.
+   --------------------------------------------------------------------------- */
+
+const CACHE_MINIATURA_SEG = 21600;   // 6 h, o teto do CacheService
+const CACHE_IDS_ANEXOS_SEG = 300;
+
+/** Conjunto dos ids de anexo citados pelos cards. */
+function idsDeAnexosConhecidos_() {
+  const guardado = lerGrande_('mat_ids_anexos');
+  if (guardado) {
+    try { return JSON.parse(guardado); } catch (e) { /* cache ruim: refaz */ }
+  }
+
+  const aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_MAT_CARDS);
+  const dados = aba.getDataRange().getValues();
+  const ids = {};
+
+  for (let l = 1; l < dados.length; l++) {
+    if (!dados[l][0]) continue;
+    try {
+      const card = JSON.parse(dados[l][4]);
+      (card.attachments || []).forEach(function (a) {
+        if (a.thumbId) ids[String(a.thumbId)] = true;
+        if (a.driveId) ids[String(a.driveId)] = true;
+      });
+    } catch (e) { /* linha corrompida: ignora */ }
+  }
+
+  guardarGrande_('mat_ids_anexos', JSON.stringify(ids), CACHE_IDS_ANEXOS_SEG);
+  return ids;
+}
+
 function acaoMateriaisMiniaturas_(p) {
   const matricula = validarSessao_(p.token);
   if (!matricula) return { ok: false, motivo: 'SESSAO' };
 
-  const ids = (p.ids || []).slice(0, 60);
-  const mapa = {};
-  const alvo = pastaAnexos_().getId();
+  const ids = (p.ids || []).slice(0, 60).map(String);
+  if (!ids.length) return { ok: true, mapa: {} };
 
+  const cache = CacheService.getScriptCache();
+  const mapa = {};
+
+  // 1. o que já está no cache sai sem tocar no Drive
+  const faltando = [];
   ids.forEach(function (id) {
+    const guardado = lerGrande_('thumb_' + id);
+    if (guardado) mapa[id] = guardado; else faltando.push(id);
+  });
+  if (!faltando.length) return { ok: true, mapa: mapa };
+
+  // 2. o resto é baixado, uma ida ao Drive por arquivo
+  const conhecidos = idsDeAnexosConhecidos_();
+  faltando.forEach(function (id) {
+    if (!conhecidos[id]) return;
     try {
-      const f = DriveApp.getFileById(String(id));
-      let dentro = false;
-      const pais = f.getParents();
-      while (pais.hasNext()) { if (pais.next().getId() === alvo) { dentro = true; break; } }
-      if (!dentro) return;
-      mapa[id] = Utilities.base64Encode(f.getBlob().getBytes());
+      const b64 = Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes());
+      mapa[id] = b64;
+      guardarGrande_('thumb_' + id, b64, CACHE_MINIATURA_SEG);
     } catch (e) { /* miniatura sumiu: o card cai no ícone */ }
   });
 
   return { ok: true, mapa: mapa };
+}
+
+/** Menu/manutenção: esquece a lista de ids de anexo (use se um card sumir do quadro). */
+function limparCacheAnexos() {
+  CacheService.getScriptCache().remove('mat_ids_anexos_n');
 }
 
 
@@ -399,6 +465,115 @@ function bumparMeta_(valores) {
  * Apaga anexos do Drive que nenhum card referencia mais — sobras de remoções
  * que falharam no meio do caminho. Rode de vez em quando, ou num acionador mensal.
  */
+/* ---------------------------------------------------------------------------
+   ANEXO FANTASMA
+
+   Sintoma: o card mostra o anexo com nome, tamanho e autor, mas ao baixar dá
+   "versão antiga do quadro e não pode ser baixado". O que falta é o driveId —
+   o endereço do arquivo no Drive.
+
+   Como nasce: toda chamada do portal é POST, e o /exec do Apps Script responde
+   com um redirecionamento. Redirecionamento de POST vira GET e perde o corpo.
+   Com arquivo grande, o GET de repetição podia cair no doGet, que antes
+   respondia ok:true. O servidor TINHA rodado — o arquivo foi criado no Drive e
+   a linha ficou no LOG — mas o navegador leu outra resposta, sem o driveId, e
+   gravou a ficha do anexo sem endereço.
+
+   A causa está corrigida (doGet responde ok:false e a tela exige o driveId).
+   Esta função é só para consertar o que já aconteceu: procura, entre os
+   arquivos da pasta que nenhum card usa, um com o mesmo nome do anexo
+   fantasma, e devolve o endereço para o card.
+
+   Religa só quando há UM candidato. Dois arquivos com o mesmo nome viram
+   relatório, não chute: ligar o card ao arquivo errado é pior que deixar
+   quebrado.
+   --------------------------------------------------------------------------- */
+function repararAnexosFantasma() {
+  const aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_MAT_CARDS);
+  const dados = aba.getDataRange().getValues();
+
+  // ---- 1. endereços que algum card já usa
+  const usados = {};
+  for (let l = 1; l < dados.length; l++) {
+    if (!dados[l][0]) continue;
+    try {
+      const card = JSON.parse(dados[l][4]);
+      (card.attachments || []).forEach(function (a) {
+        if (a.driveId) usados[a.driveId] = true;
+        if (a.thumbId) usados[a.thumbId] = true;
+      });
+    } catch (e) { /* linha corrompida: ignora */ }
+  }
+
+  // ---- 2. arquivos da pasta que ninguém usa, agrupados por nome
+  const porNome = {};
+  const arquivos = pastaAnexos_().getFiles();
+  while (arquivos.hasNext()) {
+    const f = arquivos.next();
+    if (usados[f.getId()]) continue;
+    if (f.getName().indexOf('thumb_') === 0) continue;
+    const n = f.getName();
+    if (!porNome[n]) porNome[n] = [];
+    porNome[n].push(f);
+  }
+
+  // ---- 3. religa o que der
+  const religados = [], ambiguos = [], semArquivo = [];
+
+  for (let l = 1; l < dados.length; l++) {
+    if (!dados[l][0]) continue;
+    let card;
+    try { card = JSON.parse(dados[l][4]); } catch (e) { continue; }
+
+    let mudou = false;
+    (card.attachments || []).forEach(function (a) {
+      if (a.driveId) return;                       // esse está inteiro
+      const cand = porNome[a.name] || [];
+      const onde = card.code + ' · ' + a.name;
+
+      if (cand.length === 1) {
+        a.driveId = cand[0].getId();
+        usados[a.driveId] = true;
+        porNome[a.name] = [];                      // não serve para outro card
+        religados.push(onde);
+        mudou = true;
+      } else if (cand.length > 1) {
+        ambiguos.push(onde + ' (' + cand.length + ' arquivos com esse nome)');
+      } else {
+        semArquivo.push(onde);
+      }
+    });
+
+    if (mudou) {
+      aba.getRange(l + 1, 5).setValue(JSON.stringify(card));
+      aba.getRange(l + 1, 4).setValue((Number(dados[l][3]) || 0) + 1);   // rev
+    }
+  }
+
+  if (religados.length) bumparMeta_(null);   // a tela recarrega sozinha no próximo ciclo
+
+  const linhas = [];
+  linhas.push(religados.length + ' anexo(s) religado(s).');
+  religados.forEach(function (t) { linhas.push('  OK   ' + t); });
+  if (ambiguos.length) {
+    linhas.push('');
+    linhas.push(ambiguos.length + ' com mais de um arquivo de mesmo nome — religue à mão:');
+    ambiguos.forEach(function (t) { linhas.push('  ?    ' + t); });
+  }
+  if (semArquivo.length) {
+    linhas.push('');
+    linhas.push(semArquivo.length + ' sem arquivo correspondente na pasta:');
+    semArquivo.forEach(function (t) { linhas.push('  --   ' + t); });
+    linhas.push('(confira a lixeira do Drive — limparAnexosOrfaos pode ter levado)');
+  }
+
+  const texto = linhas.join('\n');
+  Logger.log(texto);
+  try { avisar_(texto); } catch (e) { /* rodando sem interface */ }
+  return texto;
+}
+
+
 function limparAnexosOrfaos() {
   const aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_MAT_CARDS);
   const dados = aba.getDataRange().getValues();
@@ -415,11 +590,28 @@ function limparAnexosOrfaos() {
     } catch (e) { /* linha corrompida: ignora, não apaga nada por causa dela */ }
   }
 
-  let apagados = 0;
+  // Nome citado por algum anexo SEM driveId. Um arquivo desses parece órfão mas
+  // é o arquivo de um anexo fantasma — mandar para a lixeira destruiria a única
+  // chance de religar o card. Veja repararAnexosFantasma, acima.
+  const nomesFantasma = {};
+  for (let l = 1; l < dados.length; l++) {
+    if (!dados[l][0]) continue;
+    try {
+      const card = JSON.parse(dados[l][4]);
+      (card.attachments || []).forEach(function (a) {
+        if (!a.driveId && a.name) nomesFantasma[a.name] = true;
+      });
+    } catch (e) { /* linha corrompida: ignora */ }
+  }
+
+  let apagados = 0, poupados = 0;
   const arquivos = pastaAnexos_().getFiles();
   while (arquivos.hasNext()) {
     const f = arquivos.next();
-    if (!usados[f.getId()]) { f.setTrashed(true); apagados++; }
+    if (usados[f.getId()]) continue;
+    if (nomesFantasma[f.getName()]) { poupados++; continue; }
+    f.setTrashed(true); apagados++;
   }
-  Logger.log(apagados + ' anexo(s) órfão(s) mandado(s) para a lixeira.');
+  Logger.log(apagados + ' anexo(s) órfão(s) mandado(s) para a lixeira. ' +
+             poupados + ' poupado(s) por serem de anexo fantasma.');
 }

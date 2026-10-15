@@ -32,19 +32,21 @@
   }
   .dia-info strong{color:var(--ink)}
 
-  .cobranca{display:flex;flex-direction:column;gap:10px;margin-bottom:30px}
+  /* Cobrança: só quem FALTA enviar, em grade (2–3 por linha no computador,
+     1 no celular). Quem já enviou aparece só em "encontrados". */
+  .cobranca{display:grid;gap:10px;margin-bottom:30px;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr))}
   .cob{
-    display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--linha);
-    border-left:4px solid var(--c);border-radius:12px;padding:13px 15px;box-shadow:var(--sombra);
+    display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--linha);
+    border-left:4px solid var(--c);border-radius:10px;padding:10px 12px;box-shadow:var(--sombra);
   }
+  .cob-ok{background:var(--ok-fraco);color:var(--ok);border-radius:10px;padding:12px 15px;font-size:.9rem;font-weight:600;margin-bottom:30px}
   .cob-txt{flex:1;min-width:0}
   .cob-parque{font-weight:700;font-size:.97rem}
   .cob-meta{font-size:.8rem;color:var(--muted);margin-top:2px}
   .cob-acao{flex:none}
-  .cob{flex-wrap:wrap}
 
   /* Autorizado: Sim / Não — um par de botões por parque + dia */
-  .autoriz{display:flex;align-items:center;gap:8px;flex-basis:100%;padding-top:9px;margin-top:2px;border-top:1px dashed var(--linha)}
+  .autoriz{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:9px;margin-top:2px;border-top:1px dashed var(--linha);cursor:default}
   .autoriz-rot{font-size:.74rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
   .autoriz-par{display:inline-flex;border:1px solid var(--linha);border-radius:999px;overflow:hidden}
   .autoriz-par button{
@@ -195,46 +197,52 @@ function buscar(){
   });
 }
 
-/* Data que está na tela: o Sim/Não grava nesta data, não na do campo de
-   filtro (que a pessoa pode ter mexido sem clicar em Buscar). */
-var DATA_NA_TELA = '';
-
-function htmlAutoriz(parque, valor, quem){
+/* Autorizado (Sim / Não) — só no card de report que tem PDF.
+   Vale para parque + data DO REPORT (não a do filtro). Clicar de novo na
+   opção marcada desmarca: serve para o clique sem querer. */
+function htmlAutoriz(parque, data, valor, quem){
   var b = function(v, rot){
-    return '<button type="button" data-valor="' + v + '" aria-pressed="' + (valor === v) + '">' + rot + '</button>';
+    return '<button type="button" data-valor="' + v + '" aria-pressed="' + (valor === v) + '"' +
+           ' title="' + (valor === v ? 'Clique de novo para desmarcar' : rot) + '">' + rot + '</button>';
   };
-  return '<div class="autoriz" data-parque="' + esc(parque) + '">' +
+  return '<div class="autoriz" data-parque="' + esc(parque) + '" data-data="' + esc(data) + '">' +
     '<span class="autoriz-rot">Autorizado</span>' +
     '<span class="autoriz-par" role="group" aria-label="Autorizado">' + b('SIM','Sim') + b('NAO','Não') + '</span>' +
     '<span class="autoriz-quem">' + (valor && quem ? 'por ' + esc(quem) : '') + '</span>' +
   '</div>';
 }
 
-function marcarAutoriz(grupo, valor){
+function marcarAutoriz(grupo, clicado){
   var parque = grupo.getAttribute('data-parque');
+  var data   = grupo.getAttribute('data-data');
   var botoes = grupo.querySelectorAll('button');
-  var antes = null;
+  var quem   = grupo.querySelector('.autoriz-quem');
+  var antes = '';
   botoes.forEach(function(bt){
     if(bt.getAttribute('aria-pressed') === 'true') antes = bt.getAttribute('data-valor');
   });
-  if(antes === valor) return;
+  var valor = (antes === clicado) ? '' : clicado;    // mesma opção de novo = desmarcar
+  var quemAntes = quem ? quem.textContent : '';
 
-  // marca na hora; desfaz se o servidor recusar
   var pintar = function(v){
-    botoes.forEach(function(bt){ bt.setAttribute('aria-pressed', String(bt.getAttribute('data-valor') === v)); });
+    botoes.forEach(function(bt){
+      var marcado = bt.getAttribute('data-valor') === v;
+      bt.setAttribute('aria-pressed', String(marcado));
+      bt.title = marcado ? 'Clique de novo para desmarcar' : bt.textContent;
+    });
   };
-  pintar(valor);
+  pintar(valor);                                     // marca na hora; desfaz se o servidor recusar
   botoes.forEach(function(bt){ bt.disabled = true; });
 
-  chamar('ehsAutorizar', { data: DATA_NA_TELA, parque: parque, valor: valor })
+  chamar('ehsAutorizar', { data: data, parque: parque, valor: valor })
     .then(function(res){
       if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
-      var quem = grupo.querySelector('.autoriz-quem');
-      if(quem) quem.textContent = 'por ' + ((SESSAO && SESSAO.nome) || 'você');
-      recado(parque + ': ' + (valor === 'SIM' ? 'autorizado' : 'não autorizado') + '.', 'ok');
+      if(quem) quem.textContent = valor ? 'por ' + ((SESSAO && SESSAO.nome) || 'você') : '';
+      recado(parque + ': ' + (valor === 'SIM' ? 'autorizado' : valor === 'NAO' ? 'não autorizado' : 'marcação removida') + '.', 'ok');
     })
     .catch(function(err){
       pintar(antes);
+      if(quem) quem.textContent = quemAntes;
       if(err && err.motivo === 'SESSAO') return;
       recado(traduzirErro(err), 'erro');
     })
@@ -242,10 +250,10 @@ function marcarAutoriz(grupo, valor){
 }
 
 function desenhar(res){
-  DATA_NA_TELA = res.data;
   var painel = document.getElementById('painel');
   var enviados = res.projetos.filter(function(p){ return p.estado === 'ENVIADO'; }).length;
   var faltam   = res.projetos.filter(function(p){ return p.estado === 'FALTA'; }).length;
+  var pendentes = res.projetos.filter(function(p){ return p.estado !== 'ENVIADO'; });
 
   var html = '';
 
@@ -268,45 +276,42 @@ function desenhar(res){
         '<div class="placar-rot">' + (res.fimDeSemana ? 'Sem EHS (livre)' : 'Falta enviar') + '</div></div>' +
     '</div>';
 
-    html += '<h2 class="secao-tit">Cobrança do dia</h2>';
-    html += '<div class="cobranca">';
+    html += '<h2 class="secao-tit">Cobrança do dia' + (pendentes.length ? ' (' + pendentes.length + ')' : '') + '</h2>';
 
-    var ordem = { FALTA:0, NAO_OBRIGATORIO:1, ENVIADO:2 };
-    res.projetos.slice().sort(function(a,b){
-      return (ordem[a.estado] - ordem[b.estado]) || String(a.parque).localeCompare(String(b.parque));
-    }).forEach(function(p){
-      // a barra lateral segue o estado; a cor do cliente fica na etiqueta
-      var cor = p.estado === 'ENVIADO' ? 'var(--ok)'
-              : p.estado === 'FALTA'   ? 'var(--erro)' : 'var(--alerta)';
-      var rot = p.estado === 'ENVIADO' ? 'Enviado'
-              : p.estado === 'FALTA'   ? 'Falta enviar' : 'Não obrigatório';
-      var cls = p.estado === 'ENVIADO' ? 'etiqueta--ok'
-              : p.estado === 'FALTA'   ? 'etiqueta--falta' : 'etiqueta--neutra';
-
-      html += '<div class="cob" style="--c:' + cor + '">' +
-        '<div class="cob-txt">' +
-          '<div class="cob-parque">' + esc(p.parque) + '</div>' +
-          '<div class="cob-meta">' +
-            esc(p.cliente || 'sem cliente') +
-            (p.supervisor ? ' · sup. ' + esc(p.supervisor) : '') +
-            (p.autor ? ' · enviado por ' + esc(p.autor) : '') +
-            (p.qtd > 1 ? ' (' + p.qtd + ' reports)' : '') +
+    if(!pendentes.length){
+      html += '<div class="cob-ok">' + (res.projetos.length
+        ? 'Todos os projetos enviaram o report de EHS desta data. Os relatórios estão em "encontrados", abaixo.'
+        : 'Nenhum projeto com esses filtros.') + '</div>';
+    }else{
+      html += '<div class="cobranca">';
+      pendentes.sort(function(a,b){
+        return (a.estado === b.estado ? 0 : (a.estado === 'FALTA' ? -1 : 1)) ||
+               String(a.parque).localeCompare(String(b.parque));
+      }).forEach(function(p){
+        var falta = p.estado === 'FALTA';
+        html += '<div class="cob" style="--c:' + (falta ? 'var(--erro)' : 'var(--alerta)') + '">' +
+          '<div class="cob-txt">' +
+            '<div class="cob-parque">' + esc(p.parque) + '</div>' +
+            '<div class="cob-meta">' +
+              esc(p.cliente || 'sem cliente') +
+              (p.supervisor ? ' · sup. ' + esc(p.supervisor) : '') +
+            '</div>' +
           '</div>' +
-        '</div>' +
-        '<span class="etiqueta ' + cls + '">' + rot + '</span>' +
-        (p.link ? '<div class="cob-acao"><button class="btn btn--vazado btn--pequeno" type="button" ' +
-                  'data-link="' + esc(p.link) + '">Abrir PDF</button></div>' : '') +
-        htmlAutoriz(p.parque, p.autorizado, p.autorizadoPor) +
-      '</div>';
-    });
-    html += '</div>';
+          '<span class="etiqueta ' + (falta ? 'etiqueta--falta' : 'etiqueta--neutra') + '">' +
+            (falta ? 'Falta enviar' : 'Não obrigatório') + '</span>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
   }else{
-    html += '<div class="vazio">Nenhum projeto em andamento cadastrado. ' +
+    html += (document.getElementById('f-cliente').value || document.getElementById('f-parque').value)
+      ? '<div class="vazio">Nenhum projeto em andamento com esse cliente/parque.</div>'
+      : '<div class="vazio">Nenhum projeto em andamento cadastrado. ' +
             'Cadastre em <strong>Projetos em Andamento</strong> para o sistema saber de quem cobrar o EHS.</div>';
   }
 
   html += '<h2 class="secao-tit">Reportes encontrados (' + res.total + ')</h2>';
-  html += '<p class="secao-sub">Clique no card para abrir o PDF.</p>';
+  html += '<p class="secao-sub">Clique no card para abrir o PDF. Em Autorizado, clique de novo na opção marcada para desmarcar.</p>';
   // legenda das cores fica FORA da grade: dentro dela ocupava uma célula
   // e empurrava o primeiro card para a segunda coluna
   var clientes = [];
@@ -336,8 +341,6 @@ function desenhar(res){
         '</div>' +
         '<div class="rdo-linha">' +
           '<span class="etiqueta">' + esc(dataBonita(r.data)) + '</span>' +
-          (r.autorizado === 'SIM' ? '<span class="etiqueta etiqueta--ok">Autorizado</span>'
-           : r.autorizado === 'NAO' ? '<span class="etiqueta etiqueta--falta">Não autorizado</span>' : '') +
         '</div>' +
         (r.supervisor ? '<div class="rdo-cliente">Supervisor: ' + esc(r.supervisor) + '</div>' : '') +
         ((r.autorNome || r.autor)
@@ -346,6 +349,7 @@ function desenhar(res){
           ? '<div class="rdo-abrir">Abrir PDF ' +
             '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></div>'
           : '<div class="rdo-cliente" style="color:var(--faint)">Sem link de PDF nesta linha</div>') +
+        (temLink ? htmlAutoriz(r.parque, r.data, r.autorizado, r.autorizadoPor) : '') +
       '</div>';
     });
   }
@@ -362,11 +366,13 @@ function desenhar(res){
   painel.addEventListener('click', function(e){
     var bt = e.target.closest('.autoriz button[data-valor]');
     if(bt){ marcarAutoriz(bt.closest('.autoriz'), bt.getAttribute('data-valor')); return; }
+    if(e.target.closest('.autoriz')) return;          // clique na faixa do Autorizado não abre o PDF
     var alvo = e.target.closest('[data-link]');
     if(alvo) abrirPdf(alvo.getAttribute('data-link'));
   });
   painel.addEventListener('keydown', function(e){
     if(e.key !== 'Enter' && e.key !== ' ') return;
+    if(e.target.closest('.autoriz')) return;          // Enter no botão Sim/Não é do botão, não do card
     var alvo = e.target.closest('[data-link]');
     if(alvo){ e.preventDefault(); abrirPdf(alvo.getAttribute('data-link')); }
   });
