@@ -104,6 +104,8 @@ var MENSAGENS_MODULO = {
   EHS_INDISPONIVEL:'Não consegui ler a planilha do EHS.',
   MINIMASTER_INDISPONIVEL:'Não consegui ler a planilha MINI MASTER.',
   RDO_INDISPONIVEL:'Não consegui ler a planilha do RDO.',
+  SEM_ARQUIVO:     'Não achei o PDF deste report na pasta do Dropbox.',
+  DROPBOX:         'O Dropbox não respondeu. Tente de novo em instantes.',
   DADOS_INVALIDOS: 'Dados incompletos para salvar (data ou parque faltando).',
   OCUPADO:         'Outra pessoa está salvando agora. Tente de novo em instantes.',
   DEMO:            'Modo demonstração: esta tela precisa do servidor configurado.',
