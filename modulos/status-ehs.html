@@ -84,7 +84,6 @@
   .zap[hidden]{display:none}
   .zap .btn{background:#1f8f4e;border-color:#1f8f4e}
   .zap-info{font-size:.74rem;color:var(--faint)}
-  .zap-sep{font:inherit;font-size:.74rem;background:none;border:0;padding:0;color:var(--azul);text-decoration:underline;cursor:pointer}
 
   .rdo{
     border-left:5px solid var(--c,var(--azul));cursor:pointer;display:flex;flex-direction:column;gap:9px;
@@ -364,12 +363,14 @@ function prepararZap(caixa){
       var arquivos = (res.arquivos || []).map(function(a){ return base64ParaFile(a.base64, a.nome, a.tipo); });
       if(!arquivos.length) throw { motivo: 'SEM_ARQUIVO' };
       ZAP_PRONTOS[chaveZap(data, parque)] = { arquivos: arquivos, texto: res.texto || '' };
-      bt.disabled = false;
-      bt.setAttribute('data-zap', 'compartilhar');
-      bt.textContent = 'Compartilhar no WhatsApp (' + arquivos.length + ')';
-      info.innerHTML = esc('PDF + ' + (arquivos.length - 1) + ' foto(s)' + (res.incompleto ? ' — parte ficou de fora pelo tamanho' : '')) +
-        ' · <button type="button" class="zap-sep" data-zap-so="pdf">Só PDF</button>' +
-        ' <button type="button" class="zap-sep" data-zap-so="fotos">Só fotos</button>';
+      var nPdf = arquivos.filter(function(f){ return f.type === 'application/pdf'; }).length;
+      var nFotos = arquivos.length - nPdf;
+      // Dois envios separados: o WhatsApp não aceita PDF e fotos no mesmo
+      // compartilhamento (testado: o envio misturado não manda nada).
+      caixa.innerHTML =
+        (nPdf ? '<button class="btn btn--pequeno" type="button" data-zap-so="pdf">Enviar PDF no WhatsApp</button>' : '') +
+        (nFotos ? '<button class="btn btn--pequeno" type="button" data-zap-so="fotos">Enviar fotos no WhatsApp (' + nFotos + ')</button>' : '') +
+        '<span class="zap-info">' + (res.incompleto ? 'Parte das fotos ficou de fora pelo tamanho.' : '') + '</span>';
     })
     .catch(function(err){
       bt.disabled = false; bt.textContent = 'Preparar envio no WhatsApp';
@@ -378,12 +379,9 @@ function prepararZap(caixa){
     });
 }
 
-/* O WhatsApp do Android, quando recebe arquivos E texto no mesmo
-   compartilhamento, costuma mandar só o texto e descartar os anexos (foi o
-   que aconteceu no 1º teste). Por isso os arquivos vão SEM texto; o texto do
-   report é copiado para a área de transferência, para colar no grupo.
-   "Só PDF" e "Só fotos" ficam de reserva para aparelho que não aceite PDF e
-   imagem misturados num envio só. */
+/* Testado no celular: com arquivos + texto o WhatsApp manda só o texto, e
+   com PDF + fotos juntos não manda nada. Por isso são dois envios (PDF e
+   fotos), cada um só com arquivos do mesmo tipo e sem texto. */
 function compartilharZap(caixa, qual){
   var parque = caixa.getAttribute('data-zap-parque'), data = caixa.getAttribute('data-zap-data');
   var pronto = ZAP_PRONTOS[chaveZap(data, parque)];
@@ -395,16 +393,12 @@ function compartilharZap(caixa, qual){
   });
   if(!arquivos.length){ recado(qual === 'fotos' ? 'Este report não tem fotos na pasta.' : 'Este report não tem PDF na pasta.', 'erro'); return; }
 
-  // copiar não consome o toque; o share sim — por isso o texto vai primeiro
-  try{ if(navigator.clipboard && pronto.texto) navigator.clipboard.writeText(pronto.texto).catch(function(){}); }catch(e){}
-
   if(navigator.canShare && navigator.canShare({ files: arquivos })){
     navigator.share({ files: arquivos }).then(function(){
-      recado('Arquivos compartilhados. O texto do report foi copiado: cole no grupo se quiser.', 'ok');
+      recado(qual === 'pdf' ? 'PDF compartilhado. Agora envie as fotos.' : 'Fotos compartilhadas.', 'ok');
     }).catch(function(e){
       if(e && e.name === 'AbortError') return;          // a pessoa fechou a folha
-      recado('O compartilhamento falhou: ' + (e && e.message ? e.message : 'erro') +
-             '. Tente "Só PDF" e depois "Só fotos".', 'erro');
+      recado('O compartilhamento falhou: ' + (e && e.message ? e.message : 'erro'), 'erro');
     });
     return;
   }
@@ -571,7 +565,7 @@ function desenhar(res){
     var zb = e.target.closest('.zap button[data-zap]');
     if(zb){
       var cx = zb.closest('.zap');
-      if(zb.getAttribute('data-zap') === 'compartilhar') compartilharZap(cx, 'tudo'); else prepararZap(cx);
+      prepararZap(cx);
       return;
     }
     if(e.target.closest('.zap')) return;
