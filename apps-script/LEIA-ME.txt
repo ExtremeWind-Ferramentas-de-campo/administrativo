@@ -1,0 +1,18 @@
+CÓPIA DO APPS SCRIPT DO PORTAL (out/2026)
+=========================================
+Esta pasta é só para guardar a versão certa de cada arquivo. O site no
+GitHub não usa nada daqui; quem roda é o editor do Apps Script.
+
+  Codigo.gs          login, sessão, menu, doPost, cache em pedaços (lerGrande_)
+  SupervisaoCampo.gs Status RDO, projetos, técnicos, tipos de reparo
+  InputsSync.gs      sincronia com a aba SUPERVISORES (Banco de inputs),
+                     incluindo DATA DE FINALIZAÇÃO e SITUAÇÃO
+  StatusEHS.gs       Status RD EHS (aba "Reports EHS" da planilha do RDO)
+  Materiais.gs       Solicitação de materiais  <- COPIAR DO EDITOR
+
+Materiais.gs não veio neste pacote: a cópia que havia aqui era antiga (sem
+repararAnexosFantasma e sem o cache de miniaturas). Abra o Materiais no
+editor do Apps Script, copie tudo e salve aqui com esse nome.
+
+Regra para não repetir o erro de out/2026: sempre que mudar algo no editor,
+copie o arquivo para cá também. Esta pasta só vale se estiver igual ao editor.

@@ -25,7 +25,7 @@
    =========================================================================== */
 
 const ABA_EHS_PADRAO = 'Reports EHS';
-const CACHE_EHS_CHAVE = 'ehs_reports_v2';   // chave nova: o cache da planilha antiga não volta
+const CACHE_EHS_CHAVE = 'ehs_reports_v3';   // v3: entrou o caminho do PDF (botão WhatsApp)
 
 function idPlanilhaEHS_() { return idPlanilhaRDO_(); }
 function abaNomeEHS_() { return prop_('ABA_EHS_REPORTS', ABA_EHS_PADRAO); }
@@ -43,7 +43,8 @@ const COLUNAS_EHS = {
   link:       ['link_pdf', 'link_do_pdf', 'linkpdf', 'url_pdf'],
   autor:      ['matricula_login', 'matricula'],
   supervisor: ['supervisor'],
-  recebido:   ['recebido_em']
+  recebido:   ['recebido_em'],
+  caminho:    ['caminho_pdf']
 };
 
 /* Só data, parque e link seguram o funcionamento. Os outros podem faltar
@@ -124,7 +125,8 @@ function lerEHS_() {
       link:       txt(l, mapa.link),
       autor:      txt(l, mapa.autor),
       supervisor: txt(l, mapa.supervisor),
-      recebido:   txt(l, mapa.recebido)
+      recebido:   txt(l, mapa.recebido),
+      caminho:    txt(l, mapa.caminho)
     });
   }
 
@@ -188,6 +190,10 @@ function acaoEhsStatus_(p) {
   const fCliente = chaveTexto_(p.cliente || '');
   const fParque  = chaveTexto_(p.parque || '');
 
+  // Stand by: parque que não precisava enviar no dia, marcado com motivo no portal.
+  let standby = {};
+  try { standby = lerStandbyEHS_(data); } catch (e) { /* sem aba ainda */ }
+
   const projetos = lerProjetos_()
     .filter(function (pr) { return String(pr.status || 'andamento') === 'andamento'; })
     .filter(function (pr) { return projetoPassaFiltro_(pr, fCliente, fParque); })
@@ -204,10 +210,16 @@ function acaoEhsStatus_(p) {
         tipoReparo: pr.tipoReparo,
         supervisor: (pr.supervisor && pr.supervisor.nome) ? pr.supervisor.nome
                   : (comLink ? comLink.supervisor : ''),
-        estado: achados.length ? 'ENVIADO' : (fds ? 'NAO_OBRIGATORIO' : 'FALTA'),
+        estado: achados.length ? 'ENVIADO'
+              : standby[chaveTexto_(pr.parque)] ? 'STANDBY'
+              : (fds ? 'NAO_OBRIGATORIO' : 'FALTA'),
         link: comLink ? comLink.link : '',
         autor: autores.join(', '),
-        qtd: achados.length
+        qtd: achados.length,
+        standbyMotivo: achados.length ? '' : ((standby[chaveTexto_(pr.parque)] || {}).motivo || ''),
+        standbyPor: achados.length ? '' : (function (sb) {
+          return sb ? (nomePorMatricula[soNumero_(sb.matricula)] || sb.matricula || '') : '';
+        })(standby[chaveTexto_(pr.parque)])
       };
     });
 
@@ -225,6 +237,8 @@ function acaoEhsStatus_(p) {
     const a = autorizacoes[chaveAutoriz_(r.data, r.parque)] || {};
     r.autorizado = a.valor || '';
     r.autorizadoPor = a.valor ? (nomePorMatricula[soNumero_(a.matricula)] || a.matricula || '') : '';
+    r.temArquivos = !!r.caminho;
+    delete r.caminho;          // o caminho do Dropbox não precisa ir para o navegador
   });
   relatorios.sort(function (a, b) { return String(a.parque).localeCompare(String(b.parque)); });
 
@@ -365,6 +379,271 @@ function acaoEhsAutorizar_(p) {
   } finally {
     trava.releaseLock();
   }
+}
+
+
+/* ---------------------------------------------------------------------------
+   STAND BY — parque que não precisava enviar o report no dia
+   ---------------------------------------------------------------------------
+   Mesmo esquema do Autorizado: aba EHS_STANDBY na planilha do portal, uma
+   linha por data + parque, criada sozinha. Marcar exige motivo; desfazer
+   apaga a linha. Se o report chegar depois, ele vence: o parque aparece como
+   enviado e a marcação é ignorada.
+   --------------------------------------------------------------------------- */
+
+const ABA_EHS_STANDBY = 'EHS_STANDBY';
+const COLUNAS_EHS_STANDBY = ['chave', 'data', 'parque', 'motivo', 'matricula', 'atualizado_em'];
+const STANDBY_MOTIVO_MAX = 300;
+
+function abaStandbyEHS_(criar) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let aba = ss.getSheetByName(ABA_EHS_STANDBY);
+  if (!aba && criar) {
+    aba = ss.insertSheet(ABA_EHS_STANDBY);
+    aba.getRange(1, 1, 1, COLUNAS_EHS_STANDBY.length).setValues([COLUNAS_EHS_STANDBY]).setFontWeight('bold');
+    aba.setFrozenRows(1);
+    aba.getRange('A:B').setNumberFormat('@');
+  }
+  return aba;
+}
+
+/** -> { chaveTexto(parque): { motivo, matricula, em } } da data pedida */
+function lerStandbyEHS_(dataIso) {
+  const aba = abaStandbyEHS_(false);
+  const mapa = {};
+  if (!aba || aba.getLastRow() < 2) return mapa;
+  aba.getRange(2, 1, aba.getLastRow() - 1, COLUNAS_EHS_STANDBY.length).getDisplayValues()
+    .forEach(function (l) {
+      if (String(l[1]) !== dataIso || !String(l[3]).trim()) return;
+      mapa[chaveTexto_(l[2])] = { motivo: String(l[3]), matricula: String(l[4]), em: String(l[5]) };
+    });
+  return mapa;
+}
+
+/** { data, parque, motivo } -> { ok }   motivo vazio = desfazer o stand by */
+function acaoEhsStandby_(p) {
+  const matricula = validarSessao_(p.token);
+  if (!matricula) return { ok: false, motivo: 'SESSAO' };
+
+  const data = dataISO_(p.data);
+  const parque = String(p.parque || '').replace(/\s+/g, ' ').trim();
+  const motivo = String(p.motivo || '').replace(/\s+/g, ' ').trim().slice(0, STANDBY_MOTIVO_MAX);
+  if (!data || !parque) return { ok: false, motivo: 'DADOS_INVALIDOS' };
+
+  const trava = LockService.getScriptLock();
+  if (!trava.tryLock(20000)) return { ok: false, motivo: 'OCUPADO' };
+  try {
+    const aba = abaStandbyEHS_(true);
+    const chave = chaveAutoriz_(data, parque);
+    let linha = -1;
+    if (aba.getLastRow() >= 2) {
+      const chaves = aba.getRange(2, 1, aba.getLastRow() - 1, 1).getDisplayValues();
+      for (let i = 0; i < chaves.length; i++) {
+        if (String(chaves[i][0]) === chave) { linha = i + 2; break; }
+      }
+    }
+    if (!motivo) {
+      if (linha > -1) aba.deleteRow(linha);
+    } else {
+      const nova = [chave, data, parque, motivo, "'" + matricula, new Date()];
+      if (linha > -1) aba.getRange(linha, 1, 1, nova.length).setValues([nova]);
+      else aba.appendRow(nova);
+    }
+    registrar_(matricula, 'EHS_STANDBY', 'OK', data + ' | ' + parque + ' | ' + (motivo || 'DESFEITO'));
+    return { ok: true, data: data, parque: parque, motivo: motivo };
+  } finally {
+    trava.releaseLock();
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+   ARQUIVOS DO REPORT (botão "Enviar no WhatsApp")
+   ---------------------------------------------------------------------------
+   Devolve o PDF e as fotos da pasta do dia (em base64) para o navegador
+   montar o compartilhamento do celular — a pessoa escolhe o grupo e envia.
+   Nada é enviado daqui: o portal só busca os arquivos.
+
+   O caminho vem da coluna Caminho_PDF da aba Reports EHS (nunca do
+   navegador) e precisa estar dentro de EHS_PASTA, para este botão não virar
+   leitor do Dropbox inteiro.
+     - pasta do dia (…/W42/14-10-2026/): manda tudo o que tem nela;
+     - report antigo, direto na pasta da semana: manda só o PDF.
+
+   PROPRIEDADES DO SCRIPT (copie do projeto do RDO, mesmos valores):
+     DROPBOX_APP_KEY, DROPBOX_APP_SECRET, DROPBOX_REFRESH_TOKEN
+   Opcional:
+     EHS_PASTA    padrão igual ao do RDO (16 - CONTROLE DE DOCUMENTAÇÃO DIÁRIA)
+   Diagnóstico à mão: testarArquivosEHS()
+   --------------------------------------------------------------------------- */
+
+const EHS_PASTA_PADRAO_PORTAL = '/02 - EXTREME WIND/5 - SEGURANCA E MEIO AMBIENTE/16 - CONTROLE DE DOCUMENTAÇÃO DIÁRIA';
+const EHS_ARQ_MAX_BYTES = 25 * 1024 * 1024;   // soma de tudo que volta numa resposta
+const EHS_ARQ_MAX_QTD = 30;
+
+function ehsPastaPortal_() {
+  let pasta = String(prop_('EHS_PASTA', EHS_PASTA_PADRAO_PORTAL)).replace(/\\/g, '/').trim();
+  if (pasta.charAt(0) !== '/') pasta = '/' + pasta;
+  return pasta.replace(/\/+$/, '');
+}
+
+function dbxTokenPortal_() {
+  const props = PropertiesService.getScriptProperties();
+  const cache = CacheService.getScriptCache();
+  const guardado = cache.get('dbx_token_portal');
+  if (guardado) return guardado;
+  const faltam = ['DROPBOX_APP_KEY', 'DROPBOX_APP_SECRET', 'DROPBOX_REFRESH_TOKEN']
+    .filter(function (k) { return !props.getProperty(k); });
+  if (faltam.length) throw new Error('Faltam as propriedades do Dropbox no portal: ' + faltam.join(', '));
+  const r = UrlFetchApp.fetch('https://api.dropbox.com/oauth2/token', {
+    method: 'post', muteHttpExceptions: true,
+    payload: {
+      grant_type: 'refresh_token',
+      refresh_token: props.getProperty('DROPBOX_REFRESH_TOKEN'),
+      client_id: props.getProperty('DROPBOX_APP_KEY'),
+      client_secret: props.getProperty('DROPBOX_APP_SECRET')
+    }
+  });
+  const j = JSON.parse(r.getContentText());
+  if (!j.access_token) throw new Error('Dropbox recusou as credenciais: ' + r.getContentText().slice(0, 200));
+  cache.put('dbx_token_portal', j.access_token, Math.min(3000, Number(j.expires_in || 3600) - 300));
+  return j.access_token;
+}
+
+/* A pasta é do time: na 1ª chamada que der "não achado", tenta pela raiz do
+   time e lembra a escolha (mesma lógica do RDO). */
+function dbxPortal_(url, corpo, conteudo) {
+  const token = dbxTokenPortal_();
+  const props = PropertiesService.getScriptProperties();
+  const modos = props.getProperty('DBX_PORTAL_ROOT') === 'ROOT' ? ['ROOT'] : ['', 'ROOT'];
+  let ultimo = null;
+  for (let i = 0; i < modos.length; i++) {
+    const h = { Authorization: 'Bearer ' + token };
+    if (modos[i] === 'ROOT') {
+      const ns = dbxRootNsPortal_(token);
+      if (!ns) break;
+      h['Dropbox-API-Path-Root'] = JSON.stringify({ '.tag': 'root', root: String(ns) });
+    }
+    const op = { method: 'post', headers: h, muteHttpExceptions: true };
+    if (conteudo) {
+      h['Dropbox-API-Arg'] = JSON.stringify(corpo).replace(/[\u007f-\uffff]/g, function (c) {
+        return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
+      });
+    } else {
+      op.contentType = 'application/json';
+      op.payload = JSON.stringify(corpo);
+    }
+    const r = UrlFetchApp.fetch(url, op);
+    ultimo = r;
+    if (r.getResponseCode() === 200) {
+      if (modos[i] === 'ROOT') props.setProperty('DBX_PORTAL_ROOT', 'ROOT');
+      return r;
+    }
+    if (r.getResponseCode() !== 409) break;
+  }
+  throw new Error('Dropbox: ' + (ultimo ? ultimo.getResponseCode() + ' ' + ultimo.getContentText().slice(0, 200) : 'sem resposta'));
+}
+
+function dbxRootNsPortal_(token) {
+  const c = CacheService.getScriptCache();
+  const g = c.get('dbx_root_ns_portal');
+  if (g) return g;
+  const r = UrlFetchApp.fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+    method: 'post', headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true
+  });
+  if (r.getResponseCode() !== 200) return null;
+  const ns = (JSON.parse(r.getContentText()).root_info || {}).root_namespace_id;
+  if (ns) c.put('dbx_root_ns_portal', String(ns), 21600);
+  return ns;
+}
+
+function tipoArquivo_(nome) {
+  const n = String(nome).toLowerCase();
+  if (/\.pdf$/.test(n)) return 'application/pdf';
+  if (/\.jpe?g$/.test(n)) return 'image/jpeg';
+  if (/\.png$/.test(n)) return 'image/png';
+  return '';
+}
+
+/** { data, parque } -> { ok, arquivos:[{nome, tipo, base64}], texto } */
+function acaoEhsArquivos_(p) {
+  const matricula = validarSessao_(p.token);
+  if (!matricula) return { ok: false, motivo: 'SESSAO' };
+
+  const data = dataISO_(p.data);
+  const alvo = chaveTexto_(p.parque || '');
+  if (!data || !alvo) return { ok: false, motivo: 'DADOS_INVALIDOS' };
+
+  let linhas;
+  try { linhas = lerEHS_(); }
+  catch (e) { return { ok: false, motivo: 'EHS_INDISPONIVEL', detalhe: e.message }; }
+
+  // a linha mais recente do parque/dia (o RDO substitui, mas por garantia)
+  const achadas = linhas.filter(function (r) { return r.data === data && chaveTexto_(r.parque) === alvo && r.caminho; });
+  const r = achadas[achadas.length - 1];
+  if (!r) return { ok: false, motivo: 'SEM_ARQUIVO', detalhe: 'Este report não tem o caminho do PDF na planilha.' };
+
+  const raiz = ehsPastaPortal_().toLowerCase();
+  const caminho = String(r.caminho).replace(/\\/g, '/');
+  if (caminho.toLowerCase().indexOf(raiz + '/') !== 0 || caminho.indexOf('..') > -1) {
+    registrar_(matricula, 'EHS_ARQUIVOS', 'NEGADO', caminho);
+    return { ok: false, motivo: 'SEM_ARQUIVO', detalhe: 'O PDF está fora da pasta do EHS.' };
+  }
+
+  try {
+    const pasta = caminho.slice(0, caminho.lastIndexOf('/'));
+    let lista;
+    if (/\/\d{2}-\d{2}-\d{4}$/.test(pasta)) {
+      const lf = JSON.parse(dbxPortal_('https://api.dropboxapi.com/2/files/list_folder',
+                                       { path: pasta, recursive: false }).getContentText());
+      lista = (lf.entries || []).filter(function (e) { return e['.tag'] === 'file' && tipoArquivo_(e.name); });
+    } else {
+      lista = [{ name: caminho.slice(caminho.lastIndexOf('/') + 1), path_display: caminho, size: 0 }];
+    }
+    // PDF primeiro, depois as fotos em ordem de nome (DDS 1, DDS 2, ...)
+    lista.sort(function (a, b) {
+      const pa = /\.pdf$/i.test(a.name) ? 0 : 1, pb = /\.pdf$/i.test(b.name) ? 0 : 1;
+      return (pa - pb) || a.name.localeCompare(b.name, 'pt-BR', { numeric: true });
+    });
+
+    const arquivos = [];
+    let total = 0;
+    lista.slice(0, EHS_ARQ_MAX_QTD).forEach(function (e) {
+      if (total > EHS_ARQ_MAX_BYTES) return;
+      const resp = dbxPortal_('https://content.dropboxapi.com/2/files/download', { path: e.path_display || e.path_lower }, true);
+      const bytes = resp.getBlob().getBytes();
+      total += bytes.length;
+      if (total > EHS_ARQ_MAX_BYTES) return;
+      arquivos.push({ nome: e.name, tipo: tipoArquivo_(e.name), base64: Utilities.base64Encode(bytes) });
+    });
+
+    registrar_(matricula, 'EHS_ARQUIVOS', 'OK', data + ' | ' + r.parque + ' | ' + arquivos.length + ' arquivo(s)');
+    return {
+      ok: true,
+      arquivos: arquivos,
+      incompleto: arquivos.length < lista.length,
+      texto: 'Report diário de EHS — ' + r.parque + ' — ' + data.split('-').reverse().join('/')
+    };
+  } catch (e) {
+    registrar_(matricula, 'EHS_ARQUIVOS', 'FALHA', String(e.message).slice(0, 300));
+    return { ok: false, motivo: 'DROPBOX', detalhe: e.message };
+  }
+}
+
+/** Rode à mão: confere credenciais, pasta e o report mais recente com PDF. */
+function testarArquivosEHS() {
+  Logger.log('Pasta do EHS: ' + ehsPastaPortal_());
+  try { dbxTokenPortal_(); Logger.log('Dropbox: credenciais OK'); }
+  catch (e) { Logger.log('Dropbox: ' + e.message); return; }
+  const linhas = lerEHS_().filter(function (r) { return r.caminho; });
+  if (!linhas.length) { Logger.log('Nenhum report com Caminho_PDF na planilha.'); return; }
+  const u = linhas[linhas.length - 1];
+  Logger.log('Último report: ' + u.data + ' — ' + u.parque + ' — ' + u.caminho);
+  const pasta = u.caminho.slice(0, u.caminho.lastIndexOf('/'));
+  try {
+    const lf = JSON.parse(dbxPortal_('https://api.dropboxapi.com/2/files/list_folder', { path: pasta }).getContentText());
+    Logger.log('Arquivos na pasta: ' + (lf.entries || []).map(function (e) { return e.name; }).join(' | '));
+  } catch (e) { Logger.log('Não consegui listar a pasta: ' + e.message); }
 }
 
 

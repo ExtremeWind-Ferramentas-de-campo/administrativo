@@ -410,6 +410,8 @@ function doPost(e) {
       case 'ehsStatus':              resposta = acaoEhsStatus_(corpo);             break;
       case 'ehsFiltros':             resposta = acaoEhsFiltrosCache_(corpo);       break;
       case 'ehsAutorizar':           resposta = acaoEhsAutorizar_(corpo);          break;
+      case 'ehsStandby':             resposta = acaoEhsStandby_(corpo);            break;
+      case 'ehsArquivos':            resposta = acaoEhsArquivos_(corpo);           break;
 
       default:               resposta = { ok: false, motivo: 'ACAO_DESCONHECIDA' };
     }
