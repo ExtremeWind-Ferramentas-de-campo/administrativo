@@ -84,6 +84,7 @@
   .zap[hidden]{display:none}
   .zap .btn{background:#1f8f4e;border-color:#1f8f4e}
   .zap-info{font-size:.74rem;color:var(--faint)}
+  .zap-sep{font:inherit;font-size:.74rem;background:none;border:0;padding:0;color:var(--azul);text-decoration:underline;cursor:pointer}
 
   .rdo{
     border-left:5px solid var(--c,var(--azul));cursor:pointer;display:flex;flex-direction:column;gap:9px;
@@ -366,7 +367,9 @@ function prepararZap(caixa){
       bt.disabled = false;
       bt.setAttribute('data-zap', 'compartilhar');
       bt.textContent = 'Compartilhar no WhatsApp (' + arquivos.length + ')';
-      info.textContent = 'PDF + ' + (arquivos.length - 1) + ' foto(s)' + (res.incompleto ? ' — parte ficou de fora pelo tamanho' : '');
+      info.innerHTML = esc('PDF + ' + (arquivos.length - 1) + ' foto(s)' + (res.incompleto ? ' — parte ficou de fora pelo tamanho' : '')) +
+        ' · <button type="button" class="zap-sep" data-zap-so="pdf">Só PDF</button>' +
+        ' <button type="button" class="zap-sep" data-zap-so="fotos">Só fotos</button>';
     })
     .catch(function(err){
       bt.disabled = false; bt.textContent = 'Preparar envio no WhatsApp';
@@ -375,27 +378,45 @@ function prepararZap(caixa){
     });
 }
 
-function compartilharZap(caixa){
+/* O WhatsApp do Android, quando recebe arquivos E texto no mesmo
+   compartilhamento, costuma mandar só o texto e descartar os anexos (foi o
+   que aconteceu no 1º teste). Por isso os arquivos vão SEM texto; o texto do
+   report é copiado para a área de transferência, para colar no grupo.
+   "Só PDF" e "Só fotos" ficam de reserva para aparelho que não aceite PDF e
+   imagem misturados num envio só. */
+function compartilharZap(caixa, qual){
   var parque = caixa.getAttribute('data-zap-parque'), data = caixa.getAttribute('data-zap-data');
   var pronto = ZAP_PRONTOS[chaveZap(data, parque)];
   if(!pronto){ prepararZap(caixa); return; }
-  var pacote = { files: pronto.arquivos, text: pronto.texto };
-  if(navigator.canShare && navigator.canShare({ files: pronto.arquivos })){
-    navigator.share(pacote).catch(function(e){
+  var arquivos = pronto.arquivos.filter(function(f){
+    if(qual === 'pdf') return f.type === 'application/pdf';
+    if(qual === 'fotos') return f.type.indexOf('image/') === 0;
+    return true;
+  });
+  if(!arquivos.length){ recado(qual === 'fotos' ? 'Este report não tem fotos na pasta.' : 'Este report não tem PDF na pasta.', 'erro'); return; }
+
+  // copiar não consome o toque; o share sim — por isso o texto vai primeiro
+  try{ if(navigator.clipboard && pronto.texto) navigator.clipboard.writeText(pronto.texto).catch(function(){}); }catch(e){}
+
+  if(navigator.canShare && navigator.canShare({ files: arquivos })){
+    navigator.share({ files: arquivos }).then(function(){
+      recado('Arquivos compartilhados. O texto do report foi copiado: cole no grupo se quiser.', 'ok');
+    }).catch(function(e){
       if(e && e.name === 'AbortError') return;          // a pessoa fechou a folha
-      recado('O compartilhamento falhou: ' + (e && e.message ? e.message : 'erro'), 'erro');
+      recado('O compartilhamento falhou: ' + (e && e.message ? e.message : 'erro') +
+             '. Tente "Só PDF" e depois "Só fotos".', 'erro');
     });
     return;
   }
   // Navegador sem compartilhamento de arquivos (comum no computador): baixa tudo
-  pronto.arquivos.forEach(function(f, i){
+  arquivos.forEach(function(f, i){
     setTimeout(function(){
       var url = URL.createObjectURL(f), a = document.createElement('a');
       a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
     }, i * 350);
   });
-  recado('Este navegador não compartilha arquivos direto. Baixei os ' + pronto.arquivos.length +
+  recado('Este navegador não compartilha arquivos direto. Baixei os ' + arquivos.length +
          ' arquivos: anexe no grupo pelo WhatsApp. No celular, o botão abre o WhatsApp direto.', 'ok');
 }
 
@@ -545,10 +566,12 @@ function desenhar(res){
     if(sb){ abrirStandby(sb.getAttribute('data-standby')); return; }
     var dsb = e.target.closest('[data-desfazer-sb]');
     if(dsb){ gravarStandby(dsb.getAttribute('data-desfazer-sb'), '', dsb); return; }
+    var so = e.target.closest('.zap [data-zap-so]');
+    if(so){ compartilharZap(so.closest('.zap'), so.getAttribute('data-zap-so')); return; }
     var zb = e.target.closest('.zap button[data-zap]');
     if(zb){
       var cx = zb.closest('.zap');
-      if(zb.getAttribute('data-zap') === 'compartilhar') compartilharZap(cx); else prepararZap(cx);
+      if(zb.getAttribute('data-zap') === 'compartilhar') compartilharZap(cx, 'tudo'); else prepararZap(cx);
       return;
     }
     if(e.target.closest('.zap')) return;
