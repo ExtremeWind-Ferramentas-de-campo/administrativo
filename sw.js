@@ -21,7 +21,7 @@
    Ao publicar mudanças, incremente o número abaixo.
    ───────────────────────────────────────────────────────────── */
 const PREFIXO = 'ew-portal-';
-const CACHE = PREFIXO + 'v1';
+const CACHE = PREFIXO + 'v2';
 
 /* Melhor esforço, arquivo por arquivo: um 404 aqui não pode impedir a
    instalação do app inteiro (addAll é tudo-ou-nada). */
@@ -42,7 +42,8 @@ const ARQUIVOS = [
   'modulos/projetos-andamento.html',
   'modulos/status-rdo.html',
   'modulos/status-ehs.html',
-  'modulos/gantt-campo.html'
+  'modulos/gantt-campo.html',
+  'modulos/avaliacao.html'
 ];
 
 const NUNCA_CACHE = [
