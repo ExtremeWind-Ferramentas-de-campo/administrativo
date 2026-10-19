@@ -136,6 +136,9 @@ function onOpen() {
     .addItem('Sincronizar aba SUPERVISORES', 'atualizarAbaSupervisores')
     .addItem('Instalar gatilhos da aba SUPERVISORES', 'instalarGatilhosInputs')
     .addItem('Reparar anexos sem arquivo (materiais)', 'repararAnexosFantasma')
+    .addSeparator()
+    .addItem('Avaliação: conferir matriz', 'menuMatrizAval')
+    .addItem('Avaliação: regravar planilha no Dropbox', 'atualizarBancoAvaliacoesDropbox')
     .addToUi();
 }
 
@@ -412,6 +415,11 @@ function doPost(e) {
       case 'ehsAutorizar':           resposta = acaoEhsAutorizar_(corpo);          break;
       case 'ehsStandby':             resposta = acaoEhsStandby_(corpo);            break;
       case 'ehsArquivos':            resposta = acaoEhsArquivos_(corpo);           break;
+
+      // Avaliação de projetos — implementado em Avaliacao.gs
+      case 'avaliacaoCarregar':      resposta = acaoAvaliacaoCarregar_(corpo);     break;
+      case 'avaliacaoAbrir':         resposta = acaoAvaliacaoAbrir_(corpo);        break;
+      case 'avaliacaoSalvar':        resposta = acaoAvaliacaoSalvar_(corpo);       break;
 
       default:               resposta = { ok: false, motivo: 'ACAO_DESCONHECIDA' };
     }

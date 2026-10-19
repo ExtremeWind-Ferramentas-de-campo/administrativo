@@ -511,8 +511,10 @@ function dbxTokenPortal_() {
 }
 
 /* A pasta é do time: na 1ª chamada que der "não achado", tenta pela raiz do
-   time e lembra a escolha (mesma lógica do RDO). */
-function dbxPortal_(url, corpo, conteudo) {
+   time e lembra a escolha (mesma lógica do RDO).
+   bytes: só no upload (files/upload) — o conteúdo do arquivo a gravar.
+   Usado também pelo Avaliacao.gs. */
+function dbxPortal_(url, corpo, conteudo, bytes) {
   const token = dbxTokenPortal_();
   const props = PropertiesService.getScriptProperties();
   const modos = props.getProperty('DBX_PORTAL_ROOT') === 'ROOT' ? ['ROOT'] : ['', 'ROOT'];
@@ -529,6 +531,7 @@ function dbxPortal_(url, corpo, conteudo) {
       h['Dropbox-API-Arg'] = JSON.stringify(corpo).replace(/[\u007f-\uffff]/g, function (c) {
         return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
       });
+      if (bytes) { op.contentType = 'application/octet-stream'; op.payload = bytes; }
     } else {
       op.contentType = 'application/json';
       op.payload = JSON.stringify(corpo);
