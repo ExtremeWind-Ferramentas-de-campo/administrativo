@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Avaliação de Projetos — Extreme Wind</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#2b7fd0">
+<link rel="stylesheet" href="../assets/base.css">
+<style>
+  .faixa-setor{
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    background:var(--card);border:1px solid var(--linha);border-left:4px solid #b5179e;
+    border-radius:var(--raio);padding:14px 16px;box-shadow:var(--sombra);margin-bottom:16px;
+  }
+  .faixa-setor .rot{font-size:.76rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .faixa-setor .setor{font-size:1.05rem;font-weight:800}
+  .faixa-setor select{background:var(--card-2);color:var(--ink);border:1px solid var(--linha);border-radius:10px;padding:8px 10px;font:inherit;font-weight:700}
+  .faixa-setor .matriz-info{margin-left:auto;font-size:.78rem;color:var(--faint)}
+
+  .filtros{
+    display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    background:var(--card);border:1px solid var(--linha);border-radius:var(--raio);
+    padding:16px;box-shadow:var(--sombra);margin-bottom:22px;align-items:end;
+  }
+  .filtros .campo{margin:0}
+
+  .placar{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:22px}
+  .placar-item{background:var(--card);border:1px solid var(--linha);border-left:4px solid var(--c);border-radius:12px;padding:14px 16px;box-shadow:var(--sombra)}
+  .placar-num{font-size:1.7rem;font-weight:800;line-height:1;color:var(--c)}
+  .placar-rot{font-size:.76rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+
+  .proj{border-left:5px solid var(--c,var(--azul));display:flex;flex-direction:column;gap:10px}
+  .proj-topo{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+  .proj-cod{font-family:var(--mono);font-size:.74rem;color:var(--faint)}
+  .proj-parque{font-size:1.04rem;font-weight:700;line-height:1.25}
+  .proj-cliente{font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--c,var(--azul))}
+  .linha-etq{display:flex;gap:6px;flex-wrap:wrap}
+  .proj-tec{font-size:.82rem;color:var(--muted);line-height:1.45}
+  .proj-tec b{color:var(--ink)}
+  .setores{display:flex;gap:6px;flex-wrap:wrap;padding-top:9px;border-top:1px dashed var(--linha)}
+  .proj-acao{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .proj-acao .quem{font-size:.76rem;color:var(--faint)}
+  .proj.meu-feito{opacity:.92}
+
+  /* janela de avaliação */
+  .janela{max-width:760px}
+  .escala{display:flex;gap:10px;flex-wrap:wrap;font-size:.76rem;color:var(--muted);margin-bottom:14px}
+  .escala b{color:var(--ink)}
+  .bloco{border:1px solid var(--linha);border-radius:12px;margin-bottom:14px;overflow:hidden}
+  .bloco-cab{display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--card-2);padding:10px 14px;border-bottom:1px solid var(--linha)}
+  .bloco-tit{font-weight:800;font-size:.95rem}
+  .bloco-sub{font-size:.76rem;color:var(--muted);font-family:var(--mono)}
+  .bloco-cont{font-size:.74rem;font-weight:700;color:var(--muted)}
+  .bloco-cont.ok{color:var(--ok)}
+  .perg{padding:10px 14px;border-top:1px solid var(--linha)}
+  .perg:first-of-type{border-top:0}
+  .perg-linha{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+  .perg-txt{font-size:.9rem;font-weight:600;flex:1;min-width:180px}
+  .notas{display:inline-flex;border:1px solid var(--linha);border-radius:999px;overflow:hidden;flex:none}
+  .notas button{font:inherit;font-size:.84rem;font-weight:800;min-width:38px;min-height:36px;padding:0 8px;border:0;background:none;color:var(--muted);cursor:pointer}
+  .notas button + button{border-left:1px solid var(--linha)}
+  .notas button:focus-visible{outline:2px solid var(--azul);outline-offset:-2px}
+  .notas button[aria-pressed="true"]{background:var(--azul);color:#fff}
+  .notas button[aria-pressed="true"][data-n="1"],.notas button[aria-pressed="true"][data-n="2"]{background:var(--erro);color:#fff}
+  .notas button[aria-pressed="true"][data-n="3"]{background:var(--alerta);color:#fff}
+  .notas button[aria-pressed="true"][data-n="4"],.notas button[aria-pressed="true"][data-n="5"]{background:var(--ok);color:#fff}
+  .notas button[aria-pressed="true"][data-n="N/A"]{background:var(--faint);color:#fff}
+  .obs-bt{border:0;background:none;color:var(--azul);font:inherit;font-size:.76rem;font-weight:700;cursor:pointer;padding:4px 0}
+  .obs{margin-top:8px}
+  .obs input{width:100%;background:var(--card-2);color:var(--ink);border:1px solid var(--linha);border-radius:9px;padding:8px 10px;font:inherit;font-size:.86rem}
+  .progresso{font-size:.84rem;font-weight:700;color:var(--muted);margin-right:auto}
+  .progresso.ok{color:var(--ok)}
+
+  .carregando{text-align:center;padding:40px;color:var(--muted);font-size:.9rem}
+  @media(max-width:620px){ .perg-linha{flex-direction:column;align-items:stretch} .notas{align-self:flex-start} }
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-marca">
+    <span class="topo-titulo">Avaliação de Projetos</span>
+    <span class="topo-sub">Supervisão de Campo</span>
+  </div>
+  <div class="topo-espaco"></div>
+  <span class="topo-sub" id="quemSou"></span>
+  <a class="topo-btn" href="supervisao-campo.html">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <span class="rotulo">Voltar</span>
+  </a>
+</header>
+
+<main class="conteudo">
+  <div class="aviso" id="avisoTopo"></div>
+
+  <div class="faixa-setor" id="faixaSetor" hidden>
+    <span class="rot">Avaliando como</span>
+    <span class="setor" id="setorRot"></span>
+    <select id="setorSel" aria-label="Setor que está avaliando" hidden></select>
+    <span class="matriz-info" id="matrizInfo"></span>
+  </div>
+
+  <div class="filtros">
+    <div class="campo">
+      <label for="f-situacao">Situação</label>
+      <select id="f-situacao">
+        <option value="pendente">Pendentes do meu setor</option>
+        <option value="feito">Já avaliados pelo meu setor</option>
+        <option value="todos">Todos os concluídos</option>
+      </select>
+    </div>
+    <div class="campo">
+      <label for="f-cliente">Cliente</label>
+      <select id="f-cliente"><option value="">Todos</option></select>
+    </div>
+    <div class="campo">
+      <label for="f-busca">Buscar</label>
+      <input id="f-busca" type="search" placeholder="Parque, técnico, matrícula…">
+    </div>
+  </div>
+
+  <div class="placar" id="placar"></div>
+  <div id="painel"><div class="carregando">Carregando…</div></div>
+</main>
+
+<div class="veu" id="veu" hidden>
+  <div class="janela" role="dialog" aria-modal="true" aria-labelledby="janTit">
+    <div class="janela-cab">
+      <div>
+        <div class="janela-tit" id="janTit">Avaliação</div>
+        <div class="proj-cod" id="janSub"></div>
+      </div>
+      <button class="fechar" type="button" id="janFechar" aria-label="Fechar">×</button>
+    </div>
+    <div class="aviso" id="janAviso"></div>
+    <div class="campo" id="campoTipo" hidden>
+      <label for="f-tipo">Tipo de reparo executado</label>
+      <input id="f-tipo" list="listaTipos" maxlength="200" autocomplete="off">
+      <datalist id="listaTipos"></datalist>
+      <span class="dica">Informado pelas operações. Vai para a planilha de avaliações junto com as matrículas.</span>
+    </div>
+    <div class="escala" id="escala"></div>
+    <div id="janCorpo"></div>
+    <div class="janela-rodape">
+      <span class="progresso" id="progresso"></span>
+      <button class="btn btn--vazado" type="button" id="janCancelar">Cancelar</button>
+      <button class="btn" type="button" id="janSalvar" disabled>Salvar avaliação</button>
+    </div>
+  </div>
+</div>
+
+<div class="bloqueio" id="bloqueio" hidden>
+  <div class="bloqueio-cx">
+    <p class="bloqueio-msg" id="bloqueioMsg"></p>
+    <button class="btn" id="bloqueioAcao" type="button">Ir para o portal</button>
+  </div>
+</div>
+<div class="recado" id="recado" hidden></div>
+
+<script src="../config/config.js"></script>
+<script src="../assets/base.js"></script>
+<script>
+/* ============================================================================
+   AVALIAÇÃO DE PROJETOS
+   Projeto com data real de finalização (Projetos em Andamento) aparece aqui
+   para cada setor avaliar. As perguntas vêm da planilha
+   "Matriz avaliação de projetos.xlsx" no Dropbox, lida pelo Apps Script
+   (Avaliacao.gs) — alterou a planilha, a tela muda sozinha em até 5 minutos.
+
+   Pergunta marcada como EQUIPE: uma nota para a equipe toda.
+   Pergunta marcada como INDIVIDUAL: uma nota para cada técnico do projeto.
+   O setor OPERACIONAL informa também o tipo de reparo executado.
+   ============================================================================ */
+
+var DADOS = null;          // resposta de avaliacaoCarregar
+var SETOR = '';            // setor da matriz com que a pessoa está avaliando
+var ROTULO_NOTA = { 1:'Ruim', 2:'Regular', 3:'Bom', 4:'Muito bom', 5:'Excelente' };
+var NA = 'N/A';
+
+Object.assign(MENSAGENS_MODULO, {
+  MATRIZ_INDISPONIVEL:   'Não consegui ler a matriz de avaliação no Dropbox.',
+  SETOR_FORA_DA_MATRIZ:  'Este setor não está na matriz de avaliação.',
+  PROJETO_INEXISTENTE:   'Este projeto não existe mais.',
+  PROJETO_NAO_CONCLUIDO: 'O projeto perdeu a data de finalização e não pode mais ser avaliado.',
+  FALTA_TIPO_REPARO:     'Informe o tipo de reparo executado.',
+  AVALIACAO_INCOMPLETA:  'Faltam notas. Responda todas as perguntas (ou marque N/A).',
+  NADA_A_AVALIAR:        'Não há nada a avaliar para este setor neste projeto.',
+  SEM_PERMISSAO:         'Você só pode avaliar pelo seu próprio setor.'
+});
+
+function avisoTopo(txt, tipo){
+  var el = document.getElementById('avisoTopo');
+  if(!txt){ el.removeAttribute('data-tipo'); el.textContent = ''; return; }
+  el.textContent = txt; el.setAttribute('data-tipo', tipo || 'erro');
+}
+
+function chave(t){
+  return String(t == null ? '' : t).normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .toLowerCase().replace(/\s+/g,' ').trim();
+}
+function chaveTec(t){ return t.matricula ? 'm:' + String(t.matricula).trim() : 'n:' + chave(t.nome); }
+
+function setorDaMatriz(nome){
+  var k = chave(nome);
+  return (DADOS.matriz.setores || []).filter(function(s){ return chave(s.nome) === k; })[0] || null;
+}
+function avaliacaoDo(pid, setor){
+  var av = DADOS.avaliacoes[pid] || {};
+  for(var s in av){ if(chave(s) === chave(setor)) return av[s]; }
+  return null;
+}
+
+/* ---------- carregar ---------- */
+function carregar(){
+  return chamar('avaliacaoCarregar', {})
+    .then(function(res){
+      if(!res || !res.ok){ throw res || {}; }
+      DADOS = res;
+      montarSetor();
+      montarFiltros();
+      desenhar();
+    })
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      document.getElementById('painel').innerHTML = '';
+      avisoTopo(traduzirErro(err) + (err && err.detalhe ? ' (' + err.detalhe + ')' : ''));
+    });
+}
+
+function montarSetor(){
+  var u = DADOS.usuario;
+  var faixa = document.getElementById('faixaSetor');
+  var sel = document.getElementById('setorSel');
+  var rot = document.getElementById('setorRot');
+  faixa.hidden = false;
+
+  var m = DADOS.matriz;
+  document.getElementById('matrizInfo').textContent =
+    (m.desatualizada ? 'Dropbox fora do ar — perguntas da última leitura' : 'Perguntas da matriz') +
+    (m.modificada ? ' · alterada em ' + m.modificada : '');
+
+  var guardado = '';
+  try{ guardado = localStorage.getItem('ew_aval_setor') || ''; }catch(e){}
+
+  if(u.qualquerSetor){
+    sel.innerHTML = '';
+    m.setores.forEach(function(s){
+      var o = document.createElement('option'); o.value = s.nome; o.textContent = s.nome; sel.appendChild(o);
+    });
+    SETOR = (guardado && setorDaMatriz(guardado)) ? setorDaMatriz(guardado).nome
+          : (u.setorMatriz || (m.setores[0] && m.setores[0].nome) || '');
+    sel.value = SETOR;
+    sel.hidden = false; rot.hidden = true;
+  } else {
+    SETOR = u.setorMatriz || '';
+    sel.hidden = true; rot.hidden = false;
+    rot.textContent = SETOR || '—';
+    if(!SETOR){
+      avisoTopo('Seu setor no cadastro ("' + (u.setor || 'em branco') + '") não corresponde a nenhum setor da ' +
+                'matriz de avaliação. Você pode ver os projetos, mas não avaliar. Peça ao administrativo ' +
+                'para ajustar o setor no seu cadastro.', 'info');
+      document.getElementById('f-situacao').value = 'todos';
+    }
+  }
+}
+
+function montarFiltros(){
+  var sc = document.getElementById('f-cliente');
+  var atual = sc.value;
+  sc.innerHTML = '<option value="">Todos</option>';
+  var clientes = [];
+  DADOS.projetos.forEach(function(p){ if(p.cliente && clientes.indexOf(p.cliente) === -1) clientes.push(p.cliente); });
+  clientes.sort().forEach(function(c){
+    var o = document.createElement('option'); o.value = c; o.textContent = c; sc.appendChild(o);
+  });
+  sc.value = atual;
+}
+
+/* ---------- lista ---------- */
+function desenhar(){
+  if(!DADOS) return;
+  var sit = document.getElementById('f-situacao').value;
+  var cli = document.getElementById('f-cliente').value;
+  var busca = chave(document.getElementById('f-busca').value);
+  var setores = DADOS.matriz.setores;
+
+  var pendMeu = 0, completos = 0;
+  DADOS.projetos.forEach(function(p){
+    if(SETOR && !avaliacaoDo(p.id, SETOR)) pendMeu++;
+    if(setores.every(function(s){ return avaliacaoDo(p.id, s.nome); })) completos++;
+  });
+  document.getElementById('placar').innerHTML =
+    placarItem(DADOS.projetos.length, 'Projetos concluídos', '#0e7c7b') +
+    (SETOR ? placarItem(pendMeu, 'Pendentes · ' + SETOR, '#c26a12') : '') +
+    placarItem(completos, 'Avaliados por todos', '#15803d');
+
+  var lista = DADOS.projetos.filter(function(p){
+    var feito = SETOR ? !!avaliacaoDo(p.id, SETOR) : false;
+    if(sit === 'pendente' && (feito || !SETOR)) return false;
+    if(sit === 'feito' && !feito) return false;
+    if(cli && p.cliente !== cli) return false;
+    if(busca){
+      var alvo = chave([p.parque, p.cliente, p.codigo, p.tipoReparo, p.supervisor]
+        .concat(p.tecnicos.map(function(t){ return t.nome + ' ' + t.matricula; })).join(' '));
+      if(alvo.indexOf(busca) === -1) return false;
+    }
+    return true;
+  });
+
+  var painel = document.getElementById('painel');
+  if(!lista.length){
+    painel.innerHTML = '<div class="grade"><div class="vazio">' +
+      (sit === 'pendente' ? 'Nenhum projeto concluído pendente de avaliação do seu setor.' : 'Nenhum projeto encontrado.') +
+      '</div></div>';
+    return;
+  }
+  painel.innerHTML = '<div class="grade">' + lista.map(cartao).join('') + '</div>';
+}
+
+function placarItem(n, rot, cor){
+  return '<div class="placar-item" style="--c:' + cor + '"><div class="placar-num">' + n +
+         '</div><div class="placar-rot">' + esc(rot) + '</div></div>';
+}
+
+function cartao(p){
+  var meu = SETOR ? avaliacaoDo(p.id, SETOR) : null;
+  var tipoOp = '';
+  var chips = DADOS.matriz.setores.map(function(s){
+    var a = avaliacaoDo(p.id, s.nome);
+    if(a && a.tipoReparo) tipoOp = a.tipoReparo;
+    return a
+      ? '<span class="etiqueta etiqueta--ok" title="' + esc(a.avaliador + ' · ' + a.em) + '">✓ ' + esc(s.nome) +
+          (a.media != null ? ' · ' + String(a.media).replace('.', ',') : '') + '</span>'
+      : '<span class="etiqueta etiqueta--neutra">' + esc(s.nome) + '</span>';
+  }).join('');
+
+  var tecs = p.tecnicos.length
+    ? '<div class="proj-tec"><b>Técnicos (' + p.tecnicos.length + '):</b> ' +
+        p.tecnicos.map(function(t){ return esc(t.nome) + (t.matricula ? ' <span class="mono">(' + esc(t.matricula) + ')</span>' : ''); }).join(', ') +
+      '</div>'
+    : '<div class="proj-tec">Sem técnicos cadastrados no projeto.</div>';
+
+  var acao = '';
+  if(SETOR){
+    acao = '<div class="proj-acao">' +
+      '<span class="quem">' + (meu ? 'Avaliado por ' + esc(meu.avaliador || meu.matricula) + ' em ' + esc(meu.em) : 'Aguardando ' + esc(SETOR)) + '</span>' +
+      '<button class="btn btn--pequeno' + (meu ? ' btn--vazado' : '') + '" type="button" data-avaliar="' + esc(p.id) + '">' +
+        (meu ? 'Revisar avaliação' : 'Avaliar') + '</button></div>';
+  }
+
+  return '<div class="cartao proj' + (meu ? ' meu-feito' : '') + '" style="--c:' + corDoCliente(p.cliente) + '">' +
+    '<div class="proj-topo"><div>' +
+      '<div class="proj-cod">' + esc(p.codigo) + '</div>' +
+      '<div class="proj-parque">' + esc(p.parque || '(sem parque)') + '</div>' +
+      '<div class="proj-cliente">' + esc(p.cliente || 'sem cliente') + '</div>' +
+    '</div></div>' +
+    '<div class="linha-etq">' +
+      (p.tipoReparo ? '<span class="etiqueta etiqueta--azul">' + esc(p.tipoReparo) + '</span>' : '') +
+      (tipoOp && chave(tipoOp) !== chave(p.tipoReparo) ? '<span class="etiqueta etiqueta--azul" title="Tipo de reparo informado pelas operações">Op.: ' + esc(tipoOp) + '</span>' : '') +
+      (p.inicio ? '<span class="etiqueta">Início ' + esc(dataBonita(p.inicio)) + '</span>' : '') +
+      '<span class="etiqueta etiqueta--ok">Fim ' + esc(dataBonita(p.fim)) + '</span>' +
+      (p.supervisor ? '<span class="etiqueta">Sup. ' + esc(p.supervisor) + '</span>' : '') +
+    '</div>' +
+    tecs +
+    '<div class="setores">' + chips + '</div>' +
+    acao +
+  '</div>';
+}
+
+/* ---------- janela de avaliação ---------- */
+var ATUAL = null;   // { projeto, setor, respostas:{chave:{nota, obs}} }
+
+function abrirAvaliacao(pid){
+  var p = DADOS.projetos.filter(function(x){ return String(x.id) === String(pid); })[0];
+  var s = setorDaMatriz(SETOR);
+  if(!p || !s) return;
+
+  ATUAL = { projeto:p, setor:s, respostas:{} };
+  document.getElementById('janTit').textContent = 'Avaliação — ' + s.nome;
+  document.getElementById('janSub').textContent = (p.codigo ? p.codigo + ' · ' : '') + (p.parque || '') +
+    (p.cliente ? ' · ' + p.cliente : '') + ' · fim ' + dataBonita(p.fim);
+  janAviso('');
+
+  var ehOp = chave(s.nome) === chave(DADOS.setorTipoReparo);
+  document.getElementById('campoTipo').hidden = !ehOp;
+  document.getElementById('f-tipo').value = ehOp ? (p.tipoReparo || '') : '';
+  if(ehOp) carregarTipos();
+
+  document.getElementById('escala').innerHTML = DADOS.notas.map(function(n){
+    return '<span><b>' + n + '</b> ' + esc(ROTULO_NOTA[n] || '') + '</span>';
+  }).join(' · ') + ' · <span><b>N/A</b> não se aplica</span>';
+
+  desenharFormulario();
+  document.getElementById('veu').hidden = false;
+  document.body.style.overflow = 'hidden';
+
+  // avaliação já feita: traz as notas para revisar
+  if(avaliacaoDo(p.id, s.nome)){
+    document.getElementById('janCorpo').style.opacity = '.5';
+    chamar('avaliacaoAbrir', { projetoId:p.id, setor:s.nome })
+      .then(function(res){
+        document.getElementById('janCorpo').style.opacity = '';
+        if(!res || !res.ok || ATUAL == null || ATUAL.projeto !== p) return;
+        res.respostas.forEach(function(r){
+          var k = String(r.tipo).toUpperCase() === 'EQUIPE'
+            ? 'EQUIPE||' + r.criterio
+            : 'INDIVIDUAL|' + chaveTec(r) + '|' + r.criterio;
+          ATUAL.respostas[k] = { nota: String(r.nota), obs: r.obs || '' };
+        });
+        if(ehOp && res.tipoReparo) document.getElementById('f-tipo').value = res.tipoReparo;
+        desenharFormulario();
+      })
+      .catch(function(){ document.getElementById('janCorpo').style.opacity = ''; });
+  }
+}
+
+var TIPOS_CARREGADOS = false;
+function carregarTipos(){
+  if(TIPOS_CARREGADOS) return;
+  chamar('tiposReparoLista', {}).then(function(res){
+    if(!res || !res.ok) return;
+    TIPOS_CARREGADOS = true;
+    var dl = document.getElementById('listaTipos');
+    dl.innerHTML = (res.tipos || []).map(function(t){ return '<option value="' + esc(t) + '">'; }).join('');
+  }).catch(function(){ /* campo continua aceitando texto livre */ });
+}
+
+/* Itens a responder: perguntas de equipe uma vez; individuais, uma por técnico. */
+function blocosDoFormulario(){
+  var s = ATUAL.setor, p = ATUAL.projeto, blocos = [];
+  var eq = s.criterios.filter(function(c){ return c.equipe; });
+  if(eq.length){
+    blocos.push({ titulo:'Equipe', sub:p.tecnicos.length + ' técnico(s)', itens: eq.map(function(c){
+      return { k:'EQUIPE||' + c.id, c:c };
+    }) });
+  }
+  var ind = s.criterios.filter(function(c){ return c.individual; });
+  if(ind.length){
+    p.tecnicos.forEach(function(t){
+      blocos.push({ titulo:t.nome, sub:(t.matricula ? 'Matrícula ' + t.matricula : 'sem matrícula') + (t.nivel ? ' · ' + t.nivel : ''),
+        itens: ind.map(function(c){ return { k:'INDIVIDUAL|' + chaveTec(t) + '|' + c.id, c:c, t:t }; }) });
+    });
+  }
+  return blocos;
+}
+
+function desenharFormulario(){
+  var blocos = blocosDoFormulario();
+  var corpo = document.getElementById('janCorpo');
+  var avisoInd = (!ATUAL.projeto.tecnicos.length && ATUAL.setor.criterios.some(function(c){ return c.individual; }))
+    ? '<div class="aviso" data-tipo="info">O projeto não tem técnicos cadastrados: as perguntas individuais ficam de fora.</div>' : '';
+
+  if(!blocos.length){
+    corpo.innerHTML = avisoInd + '<div class="vazio">Nada a avaliar para ' + esc(ATUAL.setor.nome) + ' neste projeto.</div>';
+    atualizarProgresso(); return;
+  }
+
+  corpo.innerHTML = avisoInd + blocos.map(function(b, ib){
+    return '<div class="bloco"><div class="bloco-cab"><div><div class="bloco-tit">' + esc(b.titulo) + '</div>' +
+      '<div class="bloco-sub">' + esc(b.sub) + '</div></div><span class="bloco-cont" data-bloco="' + ib + '"></span></div>' +
+      b.itens.map(function(it){
+        var r = ATUAL.respostas[it.k] || {};
+        var opcoes = DADOS.notas.map(String).concat([NA]);
+        return '<div class="perg" data-k="' + esc(it.k) + '">' +
+          '<div class="perg-linha"><span class="perg-txt">' + esc(it.c.texto) + '</span>' +
+          '<span class="notas" role="group" aria-label="Nota para ' + esc(it.c.texto) + '">' +
+            opcoes.map(function(n){
+              return '<button type="button" data-n="' + n + '" aria-pressed="' + (String(r.nota) === n) + '"' +
+                     ' title="' + esc(ROTULO_NOTA[n] || 'Não se aplica') + '">' + n + '</button>';
+            }).join('') +
+          '</span></div>' +
+          (r.obs ? '' : '<button type="button" class="obs-bt">+ comentário</button>') +
+          '<div class="obs"' + (r.obs ? '' : ' hidden') + '><input type="text" maxlength="500" placeholder="Comentário (opcional)" value="' + esc(r.obs || '') + '"></div>' +
+        '</div>';
+      }).join('') + '</div>';
+  }).join('');
+  atualizarProgresso();
+}
+
+function atualizarProgresso(){
+  var blocos = blocosDoFormulario();
+  var total = 0, feitas = 0;
+  blocos.forEach(function(b, ib){
+    var f = b.itens.filter(function(it){ return ATUAL.respostas[it.k] && ATUAL.respostas[it.k].nota; }).length;
+    total += b.itens.length; feitas += f;
+    var el = document.querySelector('[data-bloco="' + ib + '"]');
+    if(el){ el.textContent = f + '/' + b.itens.length; el.classList.toggle('ok', f === b.itens.length); }
+  });
+  var pr = document.getElementById('progresso');
+  pr.textContent = total ? feitas + ' de ' + total + ' respondidas' : '';
+  pr.classList.toggle('ok', total > 0 && feitas === total);
+  document.getElementById('janSalvar').disabled = !(total > 0 && feitas === total);
+}
+
+function janAviso(txt, tipo){
+  var el = document.getElementById('janAviso');
+  if(!txt){ el.removeAttribute('data-tipo'); el.textContent = ''; return; }
+  el.textContent = txt; el.setAttribute('data-tipo', tipo || 'erro');
+}
+
+function fecharJanela(){
+  document.getElementById('veu').hidden = true;
+  document.body.style.overflow = '';
+  ATUAL = null;
+}
+
+function salvar(){
+  if(!ATUAL) return;
+  var ehOp = !document.getElementById('campoTipo').hidden;
+  var tipo = document.getElementById('f-tipo').value.trim();
+  if(ehOp && !tipo){ janAviso(MENSAGENS_MODULO.FALTA_TIPO_REPARO); document.getElementById('f-tipo').focus(); return; }
+
+  var respostas = [];
+  blocosDoFormulario().forEach(function(b){
+    b.itens.forEach(function(it){
+      var r = ATUAL.respostas[it.k] || {};
+      respostas.push({
+        tipo: it.t ? 'INDIVIDUAL' : 'EQUIPE',
+        matricula: it.t ? it.t.matricula : '', nome: it.t ? it.t.nome : '',
+        criterio: it.c.id, nota: r.nota, obs: r.obs || ''
+      });
+    });
+  });
+
+  var bt = document.getElementById('janSalvar');
+  bt.disabled = true; bt.textContent = 'Salvando…';
+  var pid = ATUAL.projeto.id;
+  chamar('avaliacaoSalvar', { projetoId:pid, setor:ATUAL.setor.nome, tipoReparo:tipo, respostas:respostas })
+    .then(function(res){
+      bt.textContent = 'Salvar avaliação';
+      if(!res || !res.ok){
+        janAviso(traduzirErro(res) + (res && res.faltam ? ' (' + res.faltam + ' em aberto)' : ''));
+        atualizarProgresso();
+        return;
+      }
+      fecharJanela();
+      recado(res.espelho ? 'Avaliação salva.' : 'Avaliação salva. A planilha do Dropbox será atualizada na próxima gravação.');
+      carregar();
+    })
+    .catch(function(err){
+      bt.textContent = 'Salvar avaliação';
+      if(err && err.motivo === 'SESSAO') return;
+      janAviso(traduzirErro(err));
+      atualizarProgresso();
+    });
+}
+
+/* ---------- eventos ---------- */
+function iniciar(){
+  if(!iniciarModulo()) return;
+
+  ['f-situacao','f-cliente'].forEach(function(id){ document.getElementById(id).addEventListener('change', desenhar); });
+  document.getElementById('f-busca').addEventListener('input', desenhar);
+  document.getElementById('setorSel').addEventListener('change', function(){
+    SETOR = this.value;
+    try{ localStorage.setItem('ew_aval_setor', SETOR); }catch(e){}
+    desenhar();
+  });
+
+  document.getElementById('painel').addEventListener('click', function(e){
+    var b = e.target.closest('[data-avaliar]');
+    if(b) abrirAvaliacao(b.getAttribute('data-avaliar'));
+  });
+
+  var corpo = document.getElementById('janCorpo');
+  corpo.addEventListener('click', function(e){
+    var perg = e.target.closest('.perg');
+    if(!perg || !ATUAL) return;
+    var k = perg.getAttribute('data-k');
+    var bt = e.target.closest('.notas button');
+    if(bt){
+      var r = ATUAL.respostas[k] = ATUAL.respostas[k] || {};
+      r.nota = bt.getAttribute('data-n');
+      perg.querySelectorAll('.notas button').forEach(function(x){ x.setAttribute('aria-pressed', String(x === bt)); });
+      atualizarProgresso();
+      return;
+    }
+    if(e.target.closest('.obs-bt')){
+      e.target.closest('.obs-bt').remove();
+      var o = perg.querySelector('.obs'); o.hidden = false; o.querySelector('input').focus();
+    }
+  });
+  corpo.addEventListener('input', function(e){
+    var perg = e.target.closest('.perg');
+    if(!perg || !ATUAL || e.target.tagName !== 'INPUT') return;
+    var k = perg.getAttribute('data-k');
+    (ATUAL.respostas[k] = ATUAL.respostas[k] || {}).obs = e.target.value;
+  });
+
+  document.getElementById('janFechar').addEventListener('click', fecharJanela);
+  document.getElementById('janCancelar').addEventListener('click', fecharJanela);
+  document.getElementById('janSalvar').addEventListener('click', salvar);
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && !document.getElementById('veu').hidden) fecharJanela();
+  });
+
+  carregar();
+}
+iniciar();
+</script>
+</body>
+</html>
