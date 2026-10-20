@@ -362,15 +362,20 @@ function prepararZap(caixa){
       if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
       var arquivos = (res.arquivos || []).map(function(a){ return base64ParaFile(a.base64, a.nome, a.tipo); });
       if(!arquivos.length) throw { motivo: 'SEM_ARQUIVO' };
-      ZAP_PRONTOS[chaveZap(data, parque)] = { arquivos: arquivos, texto: res.texto || '' };
-      var nPdf = arquivos.filter(function(f){ return f.type === 'application/pdf'; }).length;
-      var nFotos = arquivos.length - nPdf;
+      var pdfs = arquivos.filter(function(f){ return f.type === 'application/pdf'; });
+      var fotos = arquivos.filter(function(f){ return f.type.indexOf('image/') === 0; });
       // Dois envios separados: o WhatsApp não aceita PDF e fotos no mesmo
       // compartilhamento (testado: o envio misturado não manda nada).
+      // E cada envio vai em lotes: o Chrome recusa mais de 10 arquivos ou
+      // mais de 50 MB por compartilhamento ("Permission denied").
+      var lotesPdf = lotesZap(pdfs), lotesFotos = lotesZap(fotos);
+      ZAP_PRONTOS[chaveZap(data, parque)] = { pdf: lotesPdf, fotos: lotesFotos, texto: res.texto || '' };
       caixa.innerHTML =
-        (nPdf ? '<button class="btn btn--pequeno" type="button" data-zap-so="pdf">Enviar PDF no WhatsApp</button>' : '') +
-        (nFotos ? '<button class="btn btn--pequeno" type="button" data-zap-so="fotos">Enviar fotos no WhatsApp (' + nFotos + ')</button>' : '') +
-        '<span class="zap-info">' + (res.incompleto ? 'Parte das fotos ficou de fora pelo tamanho.' : '') + '</span>';
+        botoesZap('pdf', lotesPdf, 'Enviar PDF no WhatsApp') +
+        botoesZap('fotos', lotesFotos, 'Enviar fotos no WhatsApp') +
+        '<span class="zap-info">' +
+          (lotesFotos.length > 1 ? 'O WhatsApp aceita até ' + ZAP_MAX_ARQ + ' fotos por vez: envie um lote de cada vez. ' : '') +
+          (res.incompleto ? 'Parte das fotos ficou de fora pelo tamanho.' : '') + '</span>';
     })
     .catch(function(err){
       bt.disabled = false; bt.textContent = 'Preparar envio no WhatsApp';
@@ -382,20 +387,54 @@ function prepararZap(caixa){
 /* Testado no celular: com arquivos + texto o WhatsApp manda só o texto, e
    com PDF + fotos juntos não manda nada. Por isso são dois envios (PDF e
    fotos), cada um só com arquivos do mesmo tipo e sem texto. */
-function compartilharZap(caixa, qual){
+/* Limites do Chrome para navigator.share (share_service): 10 arquivos e
+   50 MB por chamada. Passou disso, recusa com "Permission denied" — e o
+   canShare() não avisa antes. Margem no tamanho por segurança. */
+var ZAP_MAX_ARQ = 10;
+var ZAP_MAX_BYTES = 45 * 1024 * 1024;
+
+function lotesZap(arquivos){
+  var lotes = [], atual = [], soma = 0;
+  arquivos.forEach(function(f){
+    if(atual.length && (atual.length >= ZAP_MAX_ARQ || soma + f.size > ZAP_MAX_BYTES)){
+      lotes.push(atual); atual = []; soma = 0;
+    }
+    atual.push(f); soma += f.size;
+  });
+  if(atual.length) lotes.push(atual);
+  return lotes;
+}
+
+function botoesZap(qual, lotes, rotulo){
+  if(lotes.length === 1){
+    return '<button class="btn btn--pequeno" type="button" data-zap-so="' + qual + '" data-zap-lote="0">' +
+      rotulo + (qual === 'fotos' ? ' (' + lotes[0].length + ')' : '') + '</button>';
+  }
+  var ini = 1;
+  return lotes.map(function(l, i){
+    var txt = rotulo + ' — ' + (qual !== 'fotos' ? 'parte ' + (i + 1)
+              : l.length === 1 ? 'foto ' + ini : 'fotos ' + ini + ' a ' + (ini + l.length - 1));
+    ini += l.length;
+    return '<button class="btn btn--pequeno" type="button" data-zap-so="' + qual + '" data-zap-lote="' + i + '">' + esc(txt) + '</button>';
+  }).join('');
+}
+
+function compartilharZap(caixa, qual, lote){
   var parque = caixa.getAttribute('data-zap-parque'), data = caixa.getAttribute('data-zap-data');
   var pronto = ZAP_PRONTOS[chaveZap(data, parque)];
   if(!pronto){ prepararZap(caixa); return; }
-  var arquivos = pronto.arquivos.filter(function(f){
-    if(qual === 'pdf') return f.type === 'application/pdf';
-    if(qual === 'fotos') return f.type.indexOf('image/') === 0;
-    return true;
-  });
+  var lotes = qual === 'pdf' ? pronto.pdf : pronto.fotos;
+  var i = Number(lote) || 0;
+  var arquivos = (lotes && lotes[i]) || [];
   if(!arquivos.length){ recado(qual === 'fotos' ? 'Este report não tem fotos na pasta.' : 'Este report não tem PDF na pasta.', 'erro'); return; }
+  var botao = caixa.querySelector('[data-zap-so="' + qual + '"][data-zap-lote="' + i + '"]');
 
   if(navigator.canShare && navigator.canShare({ files: arquivos })){
     navigator.share({ files: arquivos }).then(function(){
-      recado(qual === 'pdf' ? 'PDF compartilhado. Agora envie as fotos.' : 'Fotos compartilhadas.', 'ok');
+      if(botao){ botao.classList.add('btn--vazado'); botao.textContent = '✓ ' + botao.textContent.replace(/^✓ /, ''); }
+      var faltam = qual === 'fotos' ? lotes.length - 1 - i : 0;
+      recado(qual === 'pdf' ? 'PDF compartilhado. Agora envie as fotos.'
+           : faltam > 0 ? 'Lote enviado. Agora envie o próximo lote de fotos.' : 'Fotos compartilhadas.', 'ok');
     }).catch(function(e){
       if(e && e.name === 'AbortError') return;          // a pessoa fechou a folha
       recado('O compartilhamento falhou: ' + (e && e.message ? e.message : 'erro'), 'erro');
@@ -561,7 +600,7 @@ function desenhar(res){
     var dsb = e.target.closest('[data-desfazer-sb]');
     if(dsb){ gravarStandby(dsb.getAttribute('data-desfazer-sb'), '', dsb); return; }
     var so = e.target.closest('.zap [data-zap-so]');
-    if(so){ compartilharZap(so.closest('.zap'), so.getAttribute('data-zap-so')); return; }
+    if(so){ compartilharZap(so.closest('.zap'), so.getAttribute('data-zap-so'), so.getAttribute('data-zap-lote')); return; }
     var zb = e.target.closest('.zap button[data-zap]');
     if(zb){
       var cx = zb.closest('.zap');
