@@ -162,7 +162,17 @@ function uid(pre){
 }
 
 function hojeISO(){
+  return dataLocalISO(new Date());
+}
+
+/* Ontem pelo calendário local (setDate cuida da virada de mês e de ano). */
+function ontemISO(){
   var d = new Date();
+  d.setDate(d.getDate() - 1);
+  return dataLocalISO(d);
+}
+
+function dataLocalISO(d){
   return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
 }
 
