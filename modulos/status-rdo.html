@@ -107,6 +107,7 @@
     </div>
     <div class="acoes">
       <button class="btn" id="btBuscar" type="button">Buscar</button>
+      <button class="btn btn--vazado" id="btOntem" type="button">Ontem</button>
       <button class="btn btn--vazado" id="btHoje" type="button">Hoje</button>
     </div>
   </div>
@@ -342,6 +343,11 @@ document.getElementById('btHoje').addEventListener('click', function(){
   document.getElementById('f-data').value = hojeISO();
   document.getElementById('f-cliente').value = '';
   document.getElementById('f-parque').value = '';
+  buscar();
+});
+/* Ontem troca só a data: cliente e parque escolhidos continuam valendo. */
+document.getElementById('btOntem').addEventListener('click', function(){
+  document.getElementById('f-data').value = ontemISO();
   buscar();
 });
 ['f-cliente','f-parque'].forEach(function(id){
