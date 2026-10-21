@@ -197,6 +197,39 @@
   }
   .aviso-demo b{color:var(--alerta)}
 
+  /* ---------- setas para mudar a ordem das linhas ---------- */
+  .ordem{display:flex;flex-direction:column;gap:3px;align-items:center}
+  .ordem button{
+    display:grid;place-items:center;width:26px;height:19px;padding:0;cursor:pointer;
+    background:var(--card-2);color:var(--muted);border:1px solid var(--linha);border-radius:6px;
+  }
+  .ordem button:hover:not(:disabled){color:var(--ink);border-color:var(--azul)}
+  .ordem button:focus-visible{outline:2px solid var(--azul);outline-offset:1px}
+  .ordem button:disabled{opacity:.3;cursor:default}
+
+  /* ---------- placar do dia ---------- */
+  .placar-gantt{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:14px}
+  .placar-gantt .item{
+    background:var(--card);border:1px solid var(--linha);border-left:4px solid var(--c);
+    border-radius:12px;padding:12px 15px;box-shadow:var(--sombra);
+  }
+  .placar-gantt .num{font-size:1.6rem;font-weight:800;line-height:1;color:var(--c);font-variant-numeric:tabular-nums}
+  .placar-gantt .rot{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+  .placar-gantt .sub{font-size:.74rem;color:var(--faint);margin-top:2px}
+
+  /* ---------- totais no pé da tabela ---------- */
+  table.gantt tfoot td{background:var(--card-2);font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+  table.gantt tfoot td.tot-rot{
+    position:sticky;left:0;z-index:5;text-align:left;padding:8px 12px;background:var(--card-2);
+    border-right:2px solid var(--linha);font-size:.74rem;letter-spacing:.04em;
+  }
+  table.gantt tfoot td.tot-rot .tot-hoje{float:right;font-size:.95rem;color:var(--azul)}
+  table.gantt tfoot td.tot-sem{height:34px;font-size:.92rem}
+  table.gantt tfoot td.tot-sem.vazio{color:var(--faint);font-weight:400}
+  table.gantt tfoot tr.tot-1 td{border-top:2px solid var(--linha)}
+  table.gantt tfoot tr.tot-media td{font-size:.95rem;height:32px}
+  table.gantt tfoot tr.tot-media td.tot-rot{font-size:.74rem}
+
   @media(max-width:760px){
     .conteudo--largo{padding-left:10px;padding-right:10px}
     table.gantt td.sem{min-width:132px;width:132px;max-width:132px}
@@ -249,7 +282,8 @@
     <div class="campo">
       <label for="fStatus">Situação</label>
       <select id="fStatus">
-        <option value="">Todas</option>
+        <option value="">Ativas (sem concluídos)</option>
+        <option value="todas">Todas</option>
         <option value="andamento">Em andamento</option>
         <option value="aIniciar">A iniciar</option>
         <option value="concluido">Concluído</option>
@@ -286,7 +320,10 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
         </button>
       </div>
+      <button class="btn btn--vazado btn--pequeno" id="btOrdem" type="button" hidden
+              title="Volta para a ordem por cliente e parque">Ordem original</button>
       <button class="btn btn--vazado btn--pequeno" id="btLimpar" type="button">Limpar filtros</button>
+      <button class="btn btn--pequeno" id="btPdf" type="button">Baixar PDF</button>
     </div>
   </div>
   </details>
@@ -301,6 +338,7 @@
     <span class="item"><span class="sai">NOME</span> = última semana do técnico na frente.</span>
   </div>
 
+  <div class="placar-gantt" id="placar"></div>
   <div class="quadro" id="quadro"></div>
 </main>
 
@@ -478,8 +516,14 @@ var ROTULO_SIT = {
    O trecho depois de hoje é previsão e aparece mais claro na barra. */
 function fimDesenho(p){
   if(p.fim) return dataDe(p.fim);
-  if(p.fimPrevisto) return dataDe(p.fimPrevisto);
   var s = situacao(p);
+  if(p.fimPrevisto){
+    var prev = dataDe(p.fimPrevisto);
+    // Previsão vencida com o projeto ainda rodando: a equipe continua em campo,
+    // então a barra vai até hoje (senão a frente some do Gantt e dos totais).
+    if(s === 'andamento' && prev && prev < new Date()) return new Date();
+    return prev;
+  }
   if(s === 'concluido') return dataDe(p.inicio);
   return new Date();
 }
@@ -558,7 +602,9 @@ function filtrar(){
     if(fc  && p.cliente !== fc) return false;
     if(fp  && p.parque !== fp) return false;
     if(fs  && nomeSupervisor(p) !== fs) return false;
-    if(fst && situacao(p) !== fst) return false;
+    // Padrão (vazio) esconde os concluídos: eles só aparecem pedindo no filtro.
+    if(!fst && situacao(p) === 'concluido') return false;
+    if(fst && fst !== 'todas' && situacao(p) !== fst) return false;
 
     if(de || ate){
       if(!p.inicio && !p.fim) return false;          // sem data não dá para posicionar
@@ -639,6 +685,7 @@ function recentrar(){
    para o gráfico — que é o motivo da tela existir. Abaixo de 760px as seis
    viram uma só, empilhada, e o Gantt ganha o espaço de volta. */
 var COLS_LARGAS = [
+  { rot:'',           largura:44,  ordem:true },
   { rot:'CLIENTE',    largura:104 },
   { rot:'PARQUE',     largura:172 },
   { rot:'SUPERVISOR', largura:132 },
@@ -646,10 +693,11 @@ var COLS_LARGAS = [
   { rot:'FIM',        largura:140 },
   { rot:'SITUAÇÃO',   largura:128 }
 ];
-var COLS_ESTREITAS = [ { rot:'PROJETO', largura:172 } ];
+var COLS_ESTREITAS = [ { rot:'', largura:40, ordem:true }, { rot:'PROJETO', largura:172 } ];
 
 function compacto(){ return window.innerWidth <= 760; }
 function colunas(){ return compacto() ? COLS_ESTREITAS : COLS_LARGAS; }
+function larguraFixa(){ return colunas().reduce(function(a, c){ return a + c.largura; }, 0); }
 
 function estiloFixa(i){
   var cols = colunas(), esq = 0;
@@ -661,8 +709,194 @@ function classeFixa(i){
   return 'col-fixa' + (i === colunas().length - 1 ? ' borda-fixa' : '');
 }
 
+/* ---------------------------------------------------------------------------
+   ORDEM DAS LINHAS
+   As setas de cada linha trocam a posição com a vizinha de cima/baixo. A ordem
+   fica guardada neste navegador (localStorage), é de quem está olhando — não
+   muda a tela de ninguém. Projeto novo, que ainda não tem posição, entra no
+   fim. "Ordem original" volta para cliente + parque.
+   --------------------------------------------------------------------------- */
+var CHAVE_ORDEM = 'ew_gantt_ordem';
+var ordemSalva = [];
+try{ ordemSalva = JSON.parse(localStorage.getItem(CHAVE_ORDEM) || '[]') || []; }catch(e){ ordemSalva = []; }
+
+function guardarOrdem(){
+  try{
+    if(ordemSalva.length) localStorage.setItem(CHAVE_ORDEM, JSON.stringify(ordemSalva));
+    else localStorage.removeItem(CHAVE_ORDEM);
+  }catch(e){ /* sem armazenamento: vale só até recarregar */ }
+}
+
+function ordemPadrao(a, b){
+  var ca = String(a.cliente||''), cb = String(b.cliente||'');
+  if(ca !== cb) return ca.localeCompare(cb, 'pt-BR');
+  return String(a.parque||'').localeCompare(String(b.parque||''), 'pt-BR');
+}
+
+function ordenados(lista){
+  var pos = {};
+  ordemSalva.forEach(function(id, i){ pos[String(id)] = i; });
+  return lista.slice().sort(function(a, b){
+    var pa = pos[String(a.id)], pb = pos[String(b.id)];
+    var sa = pa === undefined, sb = pb === undefined;
+    if(!sa && !sb) return pa - pb;
+    if(sa !== sb) return sa ? 1 : -1;
+    return ordemPadrao(a, b);
+  });
+}
+
+/* Troca com a vizinha VISÍVEL (com filtro ligado, a de cima na tela pode não
+   ser a de cima na lista completa) e grava a ordem da lista completa. */
+function moverLinha(id, dir){
+  var vis = ordenados(filtrar());
+  var i = vis.findIndex(function(p){ return String(p.id) === String(id); });
+  var j = i + dir;
+  if(i < 0 || j < 0 || j >= vis.length) return;
+  var todos = ordenados(projetos).map(function(p){ return String(p.id); });
+  var a = todos.indexOf(String(vis[i].id)), b = todos.indexOf(String(vis[j].id));
+  todos[a] = String(vis[j].id); todos[b] = String(vis[i].id);
+  ordemSalva = todos;
+  guardarOrdem();
+  desenhar();
+  var bt = document.querySelector('[data-mover="' + CSS.escape(String(id)) + '"][data-dir="' + dir + '"]');
+  if(bt && !bt.disabled) bt.focus();
+}
+
+/* ---------------------------------------------------------------------------
+   TOTAIS
+   Cada linha do Gantt é uma equipe (uma frente).
+     planejadas na semana  = frentes com barra naquela semana
+     em andamento na semana = frentes já iniciadas com barra naquela semana;
+                              só até a semana atual (futuro ainda é plano)
+     hoje: planejadas = em andamento + a iniciar
+   Tudo sai da lista FILTRADA: o filtro muda os números junto com as linhas.
+   --------------------------------------------------------------------------- */
+function intervalo(p){
+  if(situacao(p) === 'semData' || !p.inicio) return null;
+  var ini = segundaDe(dataDe(p.inicio));
+  var fim = fimDesenho(p); fim = fim ? segundaDe(fim) : ini;
+  if(fim < ini) fim = ini;
+  return { ini: ini, fim: fim };
+}
+
+function totaisSemana(lista, s){
+  var hoje = segundaDe(new Date());
+  var plan = 0, and = 0;
+  lista.forEach(function(p){
+    var it = intervalo(p);
+    if(!it || s < it.ini || s > it.fim) return;
+    plan++;
+    if(situacao(p) !== 'aIniciar') and++;
+  });
+  return { planejadas: plan, andamento: s <= hoje ? and : null };
+}
+
+function semanasDoMes(chave){
+  var p = chave.split('-');
+  var d = maisSemanas(segundaDe(new Date(+p[0], +p[1] - 1, 1)), -1);
+  var r = [];
+  for(var i = 0; i < 7; i++){ var s = maisSemanas(d, i); if(chaveMes(s) === chave) r.push(s); }
+  return r;
+}
+
+/* Média do mês inteiro (todas as semanas dele, mesmo as que estão fora da
+   tela). Em andamento: só as semanas do mês que já chegaram. */
+function mediaMes(lista, chave){
+  var sp = 0, np = 0, sa = 0, na = 0;
+  semanasDoMes(chave).forEach(function(s){
+    var t = totaisSemana(lista, s);
+    sp += t.planejadas; np++;
+    if(t.andamento !== null){ sa += t.andamento; na++; }
+  });
+  return { planejadas: np ? sp / np : null, andamento: na ? sa / na : null };
+}
+
+function resumoHoje(lista){
+  var and = 0, ai = 0, sd = 0;
+  lista.forEach(function(p){
+    var s = situacao(p);
+    if(s === 'andamento') and++;
+    else if(s === 'aIniciar') ai++;
+    else if(s === 'semData') sd++;
+  });
+  return { andamento: and, aIniciar: ai, semData: sd, planejadas: and + ai };
+}
+
+function fmtMedia(v){
+  if(v === null || v === undefined) return '—';
+  return String(Math.round(v * 10) / 10).replace('.', ',');
+}
+
+/* ---------------------------------------------------------------------------
+   MODELO — o que a tela e o PDF desenham. Calculado num lugar só para o PDF
+   sair exatamente igual ao que está filtrado na tela.
+   --------------------------------------------------------------------------- */
+function montarModelo(){
+  var lista = ordenados(filtrar());
+  var modelo = { lista: lista, semanas: [], blocos: [], linhas: [], totais: [], medias: [] };
+  if(!lista.length) return modelo;
+
+  var j = janelaAtual(lista);
+  for(var i = 0; i < j.qtd; i++) modelo.semanas.push(maisSemanas(j.ini, i));
+  var semanaHoje = segundaDe(new Date()).getTime();
+  modelo.semanaHoje = semanaHoje;
+
+  modelo.semanas.forEach(function(s){
+    var k = chaveMes(s);
+    var u = modelo.blocos[modelo.blocos.length - 1];
+    if(u && u.chave === k) u.qtd++;
+    else modelo.blocos.push({ chave:k, rot:rotuloMes(s), qtd:1 });
+  });
+
+  lista.forEach(function(p){
+    var sit = situacao(p);
+    var hist = historicoEquipe(p);
+    var previsto = soPrevisao(p);
+    var it = intervalo(p);
+    var cels = modelo.semanas.map(function(s){
+      var ehHoje = s.getTime() === semanaHoje;
+      if(!it || s < it.ini || s > it.fim) return { dentro:false, ehHoje:ehHoje, semData: sit === 'semData' };
+
+      var atual = equipeNaSemana(hist, s);
+      var anterior = equipeNaSemana(hist, maisSemanas(s, -1));
+      var proxDentro = maisSemanas(s, 1) <= it.fim;
+      var proxima = proxDentro ? equipeNaSemana(hist, maisSemanas(s, 1)) : atual;
+      var primeira = s.getTime() === it.ini.getTime();
+      var entrou = primeira || !mesmaEquipe(atual, anterior);
+      var saiAlguem = proxDentro && !mesmaEquipe(atual, proxima);
+
+      return {
+        dentro: true, ehHoje: ehHoje,
+        ini: primeira, fim: s.getTime() === it.fim.getTime(),
+        // Semana futura de barra que só tem previsão: é plano, não é fato.
+        previsto: previsto && s.getTime() > semanaHoje,
+        mostra: atual.length && (entrou || saiAlguem || ehHoje),
+        tecs: atual.map(function(t){ return { rot: rotuloTec(t), sai: proxDentro && !temTec(proxima, t) }; }),
+        semana: numeroSemana(s)
+      };
+    });
+    modelo.linhas.push({ p: p, sit: sit, cor: corDoCliente(p.cliente), cels: cels });
+  });
+
+  modelo.totais = modelo.semanas.map(function(s){ return totaisSemana(lista, s); });
+  modelo.medias = modelo.blocos.map(function(b){ return mediaMes(lista, b.chave); });
+  modelo.hoje = resumoHoje(lista);
+  modelo.mediaMesAtual = mediaMes(lista, chaveMes(new Date()));
+  return modelo;
+}
+
 /* Devolve as células fixas da linha, na largura certa para a tela. */
-function celulasFixas(p, sit, cor){
+function celulasFixas(p, sit, cor, pos, total){
+  var setas = '<td class="' + classeFixa(0) + ' cel-txt" style="' + estiloFixa(0) + ';padding:4px">' +
+    '<div class="ordem">' +
+      '<button type="button" data-mover="' + esc(p.id) + '" data-dir="-1"' + (pos === 0 ? ' disabled' : '') +
+        ' title="Subir linha" aria-label="Subir ' + esc(p.parque || 'linha') + '">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>' +
+      '<button type="button" data-mover="' + esc(p.id) + '" data-dir="1"' + (pos === total - 1 ? ' disabled' : '') +
+        ' title="Descer linha" aria-label="Descer ' + esc(p.parque || 'linha') + '">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' +
+    '</div></td>';
+
   var tag  = '<span class="tag-cliente" style="background:' + cor + '">' + esc(p.cliente || '—') + '</span>';
   var pill = '<span class="pilula ' + sit + '">' + ROTULO_SIT[sit] + '</span>';
   var ini  = p.inicio ? dataBonita(p.inicio) : '—';
@@ -672,7 +906,7 @@ function celulasFixas(p, sit, cor){
   var fimIncerto = !p.fim;
 
   if(compacto()){
-    return '<td class="' + classeFixa(0) + ' cel-txt" style="' + estiloFixa(0) + '">' +
+    return setas + '<td class="' + classeFixa(1) + ' cel-txt" style="' + estiloFixa(1) + '">' +
       '<div class="cel-compacta">' + tag +
         '<span class="lin-parque">' + esc(p.parque || '(sem parque)') + '</span>' +
         '<span class="lin-sub">' + esc(nomeSupervisor(p) || 'sem supervisor') + '</span>' +
@@ -680,29 +914,43 @@ function celulasFixas(p, sit, cor){
       '</div></td>';
   }
 
-  var td = '';
-  td += '<td class="' + classeFixa(0) + ' cel-txt" style="' + estiloFixa(0) + '">' + tag + '</td>';
-  td += '<td class="' + classeFixa(1) + ' cel-txt" style="' + estiloFixa(1) + '">' +
+  var td = setas;
+  td += '<td class="' + classeFixa(1) + ' cel-txt" style="' + estiloFixa(1) + '">' + tag + '</td>';
+  td += '<td class="' + classeFixa(2) + ' cel-txt" style="' + estiloFixa(2) + '">' +
           '<div class="lin-parque">' + esc(p.parque || '(sem parque)') + '</div>' +
           (p.tipoReparo ? '<div class="lin-sub">' + esc(p.tipoReparo) + '</div>' : '') + '</td>';
-  td += '<td class="' + classeFixa(2) + ' cel-txt" style="' + estiloFixa(2) + '">' +
+  td += '<td class="' + classeFixa(3) + ' cel-txt" style="' + estiloFixa(3) + '">' +
           esc(nomeSupervisor(p) || '—') + '</td>';
-  td += '<td class="' + classeFixa(3) + ' cel-txt lin-data' + (p.inicio ? '' : ' vazio') + '" style="' + estiloFixa(3) + '">' + ini + '</td>';
-  td += '<td class="' + classeFixa(4) + ' cel-txt lin-data' + (fimIncerto ? ' incerto' : '') + '" style="' + estiloFixa(4) + '">' + fim + '</td>';
-  td += '<td class="' + classeFixa(5) + ' cel-txt" style="' + estiloFixa(5) + '">' + pill + '</td>';
+  td += '<td class="' + classeFixa(4) + ' cel-txt lin-data' + (p.inicio ? '' : ' vazio') + '" style="' + estiloFixa(4) + '">' + ini + '</td>';
+  td += '<td class="' + classeFixa(5) + ' cel-txt lin-data' + (fimIncerto ? ' incerto' : '') + '" style="' + estiloFixa(5) + '">' + fim + '</td>';
+  td += '<td class="' + classeFixa(6) + ' cel-txt" style="' + estiloFixa(6) + '">' + pill + '</td>';
   return td;
 }
 
+function desenharPlacar(m){
+  var el = document.getElementById('placar');
+  if(!m.lista.length){ el.innerHTML = ''; return; }
+  var h = m.hoje, mm = m.mediaMesAtual;
+  var item = function(num, rot, sub, cor){
+    return '<div class="item" style="--c:' + cor + '"><div class="num">' + num + '</div>' +
+           '<div class="rot">' + esc(rot) + '</div>' + (sub ? '<div class="sub">' + esc(sub) + '</div>' : '') + '</div>';
+  };
+  el.innerHTML =
+    item(h.planejadas, 'Equipes planejadas hoje', 'em andamento + a iniciar', 'var(--azul)') +
+    item(h.andamento, 'Em andamento hoje', 'W ' + numeroSemana(new Date()) + ' · ' + dataBonita(hojeISO()), 'var(--ok)') +
+    item(h.aIniciar, 'A iniciar', h.semData ? h.semData + ' sem data (fora da conta)' : '', 'var(--alerta)') +
+    item(fmtMedia(mm.planejadas) + ' / ' + fmtMedia(mm.andamento), 'Média do mês', rotuloMes(new Date()) + ' · planejadas / em andamento', '#6a4fc4');
+}
+
 function desenhar(){
-  var lista = filtrar().sort(function(a,b){
-    var ca = String(a.cliente||''), cb = String(b.cliente||'');
-    if(ca !== cb) return ca.localeCompare(cb, 'pt-BR');
-    return String(a.parque||'').localeCompare(String(b.parque||''), 'pt-BR');
-  });
+  var m = montarModelo();
+  var lista = m.lista;
 
   document.getElementById('conta').textContent =
     lista.length + (lista.length === 1 ? ' projeto' : ' projetos') +
     (lista.length === projetos.length ? '' : ' de ' + projetos.length);
+  document.getElementById('btOrdem').hidden = !ordemSalva.length;
+  desenharPlacar(m);
 
   var quadro = document.getElementById('quadro');
   if(!lista.length){
@@ -712,30 +960,17 @@ function desenhar(){
     return;
   }
 
-  var j = janelaAtual(lista);
-  var semanas = [];
-  for(var i = 0; i < j.qtd; i++) semanas.push(maisSemanas(j.ini, i));
-  var semanaHoje = segundaDe(new Date()).getTime();
-
   /* ---- cabeçalho ---- */
   var h1 = '', h2 = '', h3 = '';
   colunas().forEach(function(c, i){
     h1 += '<th rowspan="3" class="' + classeFixa(i) + '" style="' + estiloFixa(i) + '">' +
           esc(c.rot) + '</th>';
   });
-
-  var blocos = [];
-  semanas.forEach(function(s){
-    var k = chaveMes(s);
-    if(blocos.length && blocos[blocos.length-1].chave === k) blocos[blocos.length-1].qtd++;
-    else blocos.push({ chave:k, rot:rotuloMes(s), qtd:1 });
-  });
-  blocos.forEach(function(b){
+  m.blocos.forEach(function(b){
     h1 += '<th colspan="' + b.qtd + '">' + esc(b.rot) + '</th>';
   });
-
-  semanas.forEach(function(s, i){
-    var ehHoje = s.getTime() === semanaHoje;
+  m.semanas.forEach(function(s){
+    var ehHoje = s.getTime() === m.semanaHoje;
     var cls = (ehHoje ? ' semana-hoje hoje-ini hoje-fim' : '');
     h2 += '<th class="' + cls + '">' + dois(s.getDate()) + '/' + dois(s.getMonth()+1) + '/' + s.getFullYear() + '</th>';
     h3 += '<th class="' + cls + '">W ' + numeroSemana(s) + '</th>';
@@ -743,68 +978,190 @@ function desenhar(){
 
   /* ---- linhas ---- */
   var corpo = '';
-  lista.forEach(function(p){
-    var sit = situacao(p);
-    var cor = corDoCliente(p.cliente);
-    var hist = historicoEquipe(p);
-    var previsto = soPrevisao(p);
-    var ini = p.inicio ? segundaDe(dataDe(p.inicio)) : null;
-    var fim = fimDesenho(p); fim = fim ? segundaDe(fim) : null;
-    if(ini && fim && fim < ini) fim = ini;
-
-    var td = celulasFixas(p, sit, cor);
-
-    semanas.forEach(function(s){
-      var ehHoje = s.getTime() === semanaHoje;
-      var marca = ehHoje ? ' hoje-ini hoje-fim' : '';
-
-      if(sit === 'semData'){
+  m.linhas.forEach(function(l, pos){
+    var td = celulasFixas(l.p, l.sit, l.cor, pos, m.linhas.length);
+    l.cels.forEach(function(c){
+      var marca = c.ehHoje ? ' hoje-ini hoje-fim' : '';
+      if(!c.dentro){
         td += '<td class="sem fora' + marca + '">' +
-              (ehHoje ? '<span class="faixa-sem-data"></span>' : '') +
-              '</td>';
+              (c.semData && c.ehHoje ? '<span class="faixa-sem-data"></span>' : '') + '</td>';
         return;
       }
-      var dentro = ini && fim && s >= ini && s <= fim;
-      if(!dentro){ td += '<td class="sem fora' + marca + '"></td>'; return; }
-
-      var classes = 'sem dentro st-' + sit + marca;
-      if(s.getTime() === ini.getTime()) classes += ' ini';
-      if(s.getTime() === fim.getTime()) classes += ' fim';
-      // Semana futura de barra que só tem previsão: é plano, não é fato.
-      if(previsto && s.getTime() > semanaHoje) classes += ' previsto';
-
-      var atual = equipeNaSemana(hist, s);
-      var anterior = equipeNaSemana(hist, maisSemanas(s, -1));
-      var proxDentro = maisSemanas(s, 1) <= fim;
-      var proxima = proxDentro ? equipeNaSemana(hist, maisSemanas(s, 1)) : atual;
-
-      var primeira = s.getTime() === ini.getTime();
-      var entrou = primeira || !mesmaEquipe(atual, anterior);
-      var saiAlguem = proxDentro && !mesmaEquipe(atual, proxima);
-      var mostra = atual.length && (entrou || saiAlguem || ehHoje);
-
-      var html = '';
-      if(mostra){
-        html = '<div class="tecs">' + atual.map(function(t){
-          var sai = proxDentro && !temTec(proxima, t);
-          return '<span class="t' + (sai ? ' sai' : '') + '">' + esc(rotuloTec(t)) + '</span>';
-        }).join('') + '</div>';
-      }
-
-      var dica = atual.length
-        ? 'W ' + numeroSemana(s) + ' — ' + atual.map(rotuloTec).join(', ')
-        : 'W ' + numeroSemana(s);
-
-      td += '<td class="' + classes + '" style="--barra:' + cor + '" title="' + esc(dica) + '">' + html + '</td>';
+      var classes = 'sem dentro st-' + l.sit + marca + (c.ini ? ' ini' : '') + (c.fim ? ' fim' : '') +
+                    (c.previsto ? ' previsto' : '');
+      var html = c.mostra
+        ? '<div class="tecs">' + c.tecs.map(function(t){
+            return '<span class="t' + (t.sai ? ' sai' : '') + '">' + esc(t.rot) + '</span>';
+          }).join('') + '</div>'
+        : '';
+      var dica = 'W ' + c.semana + (c.tecs.length ? ' — ' + c.tecs.map(function(t){ return t.rot; }).join(', ') : '');
+      td += '<td class="' + classes + '" style="--barra:' + l.cor + '" title="' + esc(dica) + '">' + html + '</td>';
     });
-
     corpo += '<tr>' + td + '</tr>';
   });
+
+  /* ---- totais ---- */
+  var nFixas = colunas().length;
+  var rotTot = function(txt, hoje){
+    return '<td class="tot-rot" colspan="' + nFixas + '" style="min-width:' + larguraFixa() + 'px;max-width:' + larguraFixa() + 'px">' +
+           esc(txt) + (hoje !== undefined ? '<span class="tot-hoje" title="Hoje">' + hoje + '</span>' : '') + '</td>';
+  };
+  var celTot = function(v, s){
+    var marca = s.getTime() === m.semanaHoje ? ' hoje-ini hoje-fim' : '';
+    return '<td class="tot-sem' + marca + (v === null ? ' vazio' : '') + '">' + (v === null ? '' : v) + '</td>';
+  };
+  var pe = '';
+  pe += '<tr class="tot-1">' + rotTot('TOTAL DE EQUIPES PLANEJADAS', m.hoje.planejadas) +
+        m.totais.map(function(t, i){ return celTot(t.planejadas, m.semanas[i]); }).join('') + '</tr>';
+  pe += '<tr>' + rotTot('TOTAL DE EQUIPES EM ANDAMENTO', m.hoje.andamento) +
+        m.totais.map(function(t, i){ return celTot(t.andamento, m.semanas[i]); }).join('') + '</tr>';
+  pe += '<tr class="tot-media">' + rotTot('MÉDIA DO MÊS — PLANEJADAS') +
+        m.blocos.map(function(b, i){ return '<td colspan="' + b.qtd + '">' + fmtMedia(m.medias[i].planejadas) + '</td>'; }).join('') + '</tr>';
+  pe += '<tr class="tot-media">' + rotTot('MÉDIA DO MÊS — EM ANDAMENTO') +
+        m.blocos.map(function(b, i){ return '<td colspan="' + b.qtd + '">' + fmtMedia(m.medias[i].andamento) + '</td>'; }).join('') + '</tr>';
 
   quadro.innerHTML =
     '<table class="gantt"><thead>' +
       '<tr>' + h1 + '</tr><tr>' + h2 + '</tr><tr>' + h3 + '</tr>' +
-    '</thead><tbody>' + corpo + '</tbody></table>';
+    '</thead><tbody>' + corpo + '</tbody><tfoot>' + pe + '</tfoot></table>';
+}
+
+/* ---------------------------------------------------------------------------
+   PDF — a mesma tabela que está na tela (mesmos filtros, ordem e semanas),
+   gerada no navegador com jsPDF + AutoTable. As bibliotecas só são baixadas
+   no primeiro clique em "Baixar PDF".
+   --------------------------------------------------------------------------- */
+var LIBS_PDF = [
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'
+];
+function carregarScript(src){
+  return new Promise(function(ok, falha){
+    if(document.querySelector('script[src="' + src + '"]')) return ok();
+    var s = document.createElement('script');
+    s.src = src; s.onload = ok; s.onerror = function(){ falha(new Error('não carregou ' + src)); };
+    document.head.appendChild(s);
+  });
+}
+
+/* As fontes padrão do PDF só têm o alfabeto latino básico (acentos ok);
+   travessão e seta viram equivalentes simples. */
+function txtPdf(t){
+  return String(t == null ? '' : t).replace(/[—–]/g, '-').replace(/→/g, 'a').replace(/[^\x00-\xFF]/g, '');
+}
+function rgbDe(cor, clarear){
+  var h = String(cor).replace('#', '');
+  if(!/^[0-9a-f]{6}$/i.test(h)) h = '8798a8';
+  var c = [0, 2, 4].map(function(i){ return parseInt(h.substr(i, 2), 16); });
+  return c.map(function(v){ return Math.round(v + (255 - v) * (clarear || 0)); });
+}
+
+function resumoFiltrosTxt(){
+  var partes = [];
+  [['fCliente','Cliente'],['fParque','Parque'],['fSupervisor','Supervisor'],['fStatus','Situação']].forEach(function(x){
+    var el = document.getElementById(x[0]);
+    if(el.value) partes.push(x[1] + ': ' + el.options[el.selectedIndex].textContent);
+  });
+  if(!val('fStatus')) partes.push('Situação: ativas (sem concluídos)');
+  if(val('fDe') || val('fAte')) partes.push('Período: ' + (val('fDe') ? dataBonita(val('fDe')) : '...') + ' a ' + (val('fAte') ? dataBonita(val('fAte')) : '...'));
+  return partes.join('  |  ');
+}
+
+function baixarPdf(){
+  var m = montarModelo();
+  if(!m.lista.length){ recado('Nada para exportar com esses filtros.', 'erro'); return; }
+  var bt = document.getElementById('btPdf');
+  bt.disabled = true; bt.textContent = 'Gerando PDF…';
+
+  carregarScript(LIBS_PDF[0])
+    .then(function(){ return carregarScript(LIBS_PDF[1]); })
+    .then(function(){ gerarPdf(m).save('gantt-campo-' + hojeISO() + '.pdf'); })
+    .catch(function(e){ recado('Não consegui gerar o PDF: ' + e.message, 'erro'); })
+    .then(function(){ bt.disabled = false; bt.textContent = 'Baixar PDF'; });
+}
+
+function gerarPdf(m){
+  var fixas = [['CLIENTE', 20], ['PARQUE', 34], ['SUPERVISOR', 24], ['INÍCIO', 16], ['FIM', 21], ['SITUAÇÃO', 19]];
+  var largSem = 24, margem = 8;
+  var largFixas = fixas.reduce(function(a, f){ return a + f[1]; }, 0);
+  var w = Math.max(297, margem * 2 + largFixas + m.semanas.length * largSem);
+  var h = Math.max(210, Math.round(w * 0.62));
+
+  var doc = new window.jspdf.jsPDF({ orientation:'landscape', unit:'mm', format:[w, h] });
+  doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+  doc.text('Gantt de Campo - Extreme Wind', margem, 11);
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  doc.text(txtPdf('Gerado em ' + dataBonita(hojeISO()) + ' ' + new Date().toTimeString().slice(0, 5) +
+    '   |   ' + resumoFiltrosTxt()), margem, 16);
+  doc.text(txtPdf('Hoje: ' + m.hoje.planejadas + ' equipes planejadas (' + m.hoje.andamento + ' em andamento + ' +
+    m.hoje.aIniciar + ' a iniciar)   |   Média de ' + rotuloMes(new Date()) + ': ' +
+    fmtMedia(m.mediaMesAtual.planejadas) + ' planejadas / ' + fmtMedia(m.mediaMesAtual.andamento) + ' em andamento' +
+    '   |   * = última semana do técnico na frente'), margem, 20.5);
+
+  var cab = { fillColor:[234, 240, 246], textColor:[14, 32, 51], fontStyle:'bold', halign:'center' };
+  var vermelho = { fillColor:[217, 44, 32], textColor:[255, 255, 255], fontStyle:'bold', halign:'center' };
+
+  var head = [
+    fixas.map(function(f){ return { content: txtPdf(f[0]), rowSpan: 3, styles: { valign:'middle', halign:'left' } }; })
+      .concat(m.blocos.map(function(b){ return { content: txtPdf(b.rot), colSpan: b.qtd }; })),
+    m.semanas.map(function(s){
+      return { content: dois(s.getDate()) + '/' + dois(s.getMonth()+1) + '/' + s.getFullYear(),
+               styles: s.getTime() === m.semanaHoje ? vermelho : { fontSize: 6 } };
+    }),
+    m.semanas.map(function(s){
+      return { content: 'W ' + numeroSemana(s), styles: s.getTime() === m.semanaHoje ? vermelho : {} };
+    })
+  ];
+
+  var body = m.linhas.map(function(l){
+    var p = l.p;
+    var fim = p.fim ? dataBonita(p.fim) : (p.fimPrevisto ? 'prev. ' + dataBonita(p.fimPrevisto) : '-');
+    var linha = [
+      { content: txtPdf(p.cliente || '-'), styles: { fillColor: rgbDe(l.cor), textColor:[255, 255, 255], fontStyle:'bold' } },
+      txtPdf((p.parque || '(sem parque)') + (p.tipoReparo ? '\n' + p.tipoReparo : '')),
+      txtPdf(nomeSupervisor(p) || '-'),
+      p.inicio ? dataBonita(p.inicio) : '-',
+      txtPdf(fim),
+      txtPdf(ROTULO_SIT[l.sit])
+    ];
+    l.cels.forEach(function(c){
+      if(!c.dentro){ linha.push({ content:'' }); return; }
+      // mesma lógica de tom da tela: a iniciar e previsto mais claros, concluído apagado
+      var clarear = l.sit === 'aIniciar' ? 0.78 : l.sit === 'concluido' ? 0.6 : c.previsto ? 0.4 : 0.15;
+      linha.push({
+        content: c.mostra ? txtPdf(c.tecs.map(function(t){ return t.rot + (t.sai ? ' *' : ''); }).join('\n')) : '',
+        styles: { fillColor: rgbDe(l.cor, clarear), fontSize: 5.6, halign:'center', valign:'middle' }
+      });
+    });
+    return linha;
+  });
+
+  var rotFoot = function(txt, hoje){
+    return { content: txtPdf(txt) + (hoje !== undefined ? '   (hoje: ' + hoje + ')' : ''), colSpan: fixas.length,
+             styles: { halign:'left' } };
+  };
+  var foot = [
+    [rotFoot('TOTAL DE EQUIPES PLANEJADAS', m.hoje.planejadas)].concat(m.totais.map(function(t){ return String(t.planejadas); })),
+    [rotFoot('TOTAL DE EQUIPES EM ANDAMENTO', m.hoje.andamento)].concat(m.totais.map(function(t){ return t.andamento === null ? '' : String(t.andamento); })),
+    [rotFoot('MÉDIA DO MÊS - PLANEJADAS')].concat(m.blocos.map(function(b, i){ return { content: fmtMedia(m.medias[i].planejadas), colSpan: b.qtd }; })),
+    [rotFoot('MÉDIA DO MÊS - EM ANDAMENTO')].concat(m.blocos.map(function(b, i){ return { content: fmtMedia(m.medias[i].andamento), colSpan: b.qtd }; }))
+  ];
+
+  var estilosColuna = {};
+  fixas.forEach(function(f, i){ estilosColuna[i] = { cellWidth: f[1] }; });
+  m.semanas.forEach(function(s, i){ estilosColuna[fixas.length + i] = { cellWidth: largSem }; });
+
+  doc.autoTable({
+    head: head, body: body, foot: foot, startY: 24, margin: { left: margem, right: margem },
+    theme: 'grid', showFoot: 'lastPage',
+    styles: { font:'helvetica', fontSize: 7, cellPadding: 1.2, lineColor:[219, 230, 240], lineWidth: 0.2,
+              textColor:[18, 34, 47], overflow:'linebreak' },
+    headStyles: cab,
+    footStyles: { fillColor:[245, 249, 253], textColor:[14, 32, 51], fontStyle:'bold', halign:'center', fontSize: 8 },
+    columnStyles: estilosColuna
+  });
+
+  return doc;
 }
 
 /* ---------------------------------------------------------------------------
@@ -883,6 +1240,17 @@ document.getElementById('btLimpar').addEventListener('click', function(){
   atualizarResumo();
   desenhar();
 });
+
+document.getElementById('quadro').addEventListener('click', function(e){
+  var bt = e.target.closest('[data-mover]');
+  if(bt && !bt.disabled) moverLinha(bt.getAttribute('data-mover'), Number(bt.getAttribute('data-dir')));
+});
+document.getElementById('btOrdem').addEventListener('click', function(){
+  ordemSalva = [];
+  guardarOrdem();
+  desenhar();
+});
+document.getElementById('btPdf').addEventListener('click', baixarPdf);
 
 document.getElementById('btAnterior').addEventListener('click', function(){
   if(val('fJanela') === 'tudo') return;
