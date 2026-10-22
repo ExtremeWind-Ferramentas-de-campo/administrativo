@@ -414,6 +414,7 @@ function doPost(e) {
       case 'ehsFiltros':             resposta = acaoEhsFiltrosCache_(corpo);       break;
       case 'ehsAutorizar':           resposta = acaoEhsAutorizar_(corpo);          break;
       case 'ehsStandby':             resposta = acaoEhsStandby_(corpo);            break;
+      case 'ehsAutorizadoManual':    resposta = acaoEhsAutorizadoManual_(corpo);   break;
       case 'ehsArquivos':            resposta = acaoEhsArquivos_(corpo);           break;
 
       // Avaliação de projetos — implementado em Avaliacao.gs

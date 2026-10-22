@@ -194,6 +194,10 @@ function acaoEhsStatus_(p) {
   let standby = {};
   try { standby = lerStandbyEHS_(data); } catch (e) { /* sem aba ainda */ }
 
+  // Autorizado sem report no sistema (modelo do cliente), marcado no portal.
+  let manuais = {};
+  try { manuais = lerAutorizadosEHS_(data); } catch (e) { /* sem aba ainda */ }
+
   const projetos = lerProjetos_()
     .filter(function (pr) { return cobravelNaData_(pr, data); })   // início depois da data não é cobrado
     .filter(function (pr) { return projetoPassaFiltro_(pr, fCliente, fParque); })
@@ -211,6 +215,7 @@ function acaoEhsStatus_(p) {
         supervisor: (pr.supervisor && pr.supervisor.nome) ? pr.supervisor.nome
                   : (comLink ? comLink.supervisor : ''),
         estado: achados.length ? 'ENVIADO'
+              : manuais[chaveTexto_(pr.parque)] ? 'AUTORIZADO'
               : standby[chaveTexto_(pr.parque)] ? 'STANDBY'
               : (fds ? 'NAO_OBRIGATORIO' : 'FALTA'),
         link: comLink ? comLink.link : '',
@@ -239,6 +244,29 @@ function acaoEhsStatus_(p) {
     r.autorizadoPor = a.valor ? (nomePorMatricula[soNumero_(a.matricula)] || a.matricula || '') : '';
     r.temArquivos = !!r.caminho;
     delete r.caminho;          // o caminho do Dropbox não precisa ir para o navegador
+  });
+
+  // Autorizados sem report no sistema entram em "Reportes encontrados" como um
+  // card próprio (manual: true), sem PDF. Se o report do nosso modelo também
+  // chegou para o parque, ele já está na lista e a marcação não se repete.
+  const temReport = {};
+  relatorios.forEach(function (r) { temReport[chaveTexto_(r.parque)] = true; });
+  const cliDoParque = {}, supDoParque = {};
+  lerProjetos_().forEach(function (pr) {
+    cliDoParque[chaveTexto_(pr.parque)] = pr.cliente || '';
+    supDoParque[chaveTexto_(pr.parque)] = (pr.supervisor && pr.supervisor.nome) || '';
+  });
+  Object.keys(manuais).forEach(function (k) {
+    if (temReport[k]) return;
+    const a = manuais[k];
+    const cliente = cliDoParque[k] || '';
+    if (fParque && k !== fParque) return;
+    if (fCliente && !projetoPassaFiltro_({ cliente: cliente, parque: a.parque }, fCliente, '')) return;
+    relatorios.push({
+      manual: true, data: data, parque: a.parque, cliente: cliente, supervisor: supDoParque[k] || '',
+      observacao: a.observacao, autorizado: 'SIM',
+      autorizadoPor: nomePorMatricula[soNumero_(a.matricula)] || a.matricula || '', em: a.em
+    });
   });
   relatorios.sort(function (a, b) { return String(a.parque).localeCompare(String(b.parque)); });
 
@@ -443,6 +471,83 @@ function acaoEhsStandby_(p) {
     }
     registrar_(matricula, 'EHS_STANDBY', 'OK', data + ' | ' + parque + ' | ' + (motivo || 'DESFEITO'));
     return { ok: true, data: data, parque: parque, motivo: motivo };
+  } finally {
+    trava.releaseLock();
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+   AUTORIZADO SEM REPORT NO SISTEMA — parque que mandou o report no modelo do
+   CLIENTE (fora do nosso app), então nada chegou na aba Reports EHS.
+   ---------------------------------------------------------------------------
+   Mesmo esquema do Stand by: aba EHS_AUTORIZADOS na planilha do portal, uma
+   linha por data + parque, criada sozinha. Marcar exige observação; desfazer
+   apaga a linha. O parque sai da cobrança e aparece em "Reportes
+   encontrados" como autorizado. Se o report do nosso modelo chegar depois,
+   ele vence e a marcação deixa de aparecer.
+   (Não confundir com EHS_AUTORIZACOES, que é o Sim/Não do report que chegou.)
+   --------------------------------------------------------------------------- */
+
+const ABA_EHS_AUTORIZADOS = 'EHS_AUTORIZADOS';
+const COLUNAS_EHS_AUTORIZADOS = ['chave', 'data', 'parque', 'observacao', 'matricula', 'atualizado_em'];
+
+function abaAutorizadosEHS_(criar) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let aba = ss.getSheetByName(ABA_EHS_AUTORIZADOS);
+  if (!aba && criar) {
+    aba = ss.insertSheet(ABA_EHS_AUTORIZADOS);
+    aba.getRange(1, 1, 1, COLUNAS_EHS_AUTORIZADOS.length).setValues([COLUNAS_EHS_AUTORIZADOS]).setFontWeight('bold');
+    aba.setFrozenRows(1);
+    aba.getRange('A:B').setNumberFormat('@');
+  }
+  return aba;
+}
+
+/** -> { chaveTexto(parque): { observacao, matricula, em } } da data pedida */
+function lerAutorizadosEHS_(dataIso) {
+  const aba = abaAutorizadosEHS_(false);
+  const mapa = {};
+  if (!aba || aba.getLastRow() < 2) return mapa;
+  aba.getRange(2, 1, aba.getLastRow() - 1, COLUNAS_EHS_AUTORIZADOS.length).getDisplayValues()
+    .forEach(function (l) {
+      if (String(l[1]) !== dataIso || !String(l[3]).trim()) return;
+      mapa[chaveTexto_(l[2])] = { parque: String(l[2]), observacao: String(l[3]), matricula: String(l[4]), em: String(l[5]) };
+    });
+  return mapa;
+}
+
+/** { data, parque, observacao } -> { ok }   observação vazia = desfazer */
+function acaoEhsAutorizadoManual_(p) {
+  const matricula = validarSessao_(p.token);
+  if (!matricula) return { ok: false, motivo: 'SESSAO' };
+
+  const data = dataISO_(p.data);
+  const parque = String(p.parque || '').replace(/\s+/g, ' ').trim();
+  const obs = String(p.observacao || '').replace(/\s+/g, ' ').trim().slice(0, STANDBY_MOTIVO_MAX);
+  if (!data || !parque) return { ok: false, motivo: 'DADOS_INVALIDOS' };
+
+  const trava = LockService.getScriptLock();
+  if (!trava.tryLock(20000)) return { ok: false, motivo: 'OCUPADO' };
+  try {
+    const aba = abaAutorizadosEHS_(true);
+    const chave = chaveAutoriz_(data, parque);
+    let linha = -1;
+    if (aba.getLastRow() >= 2) {
+      const chaves = aba.getRange(2, 1, aba.getLastRow() - 1, 1).getDisplayValues();
+      for (let i = 0; i < chaves.length; i++) {
+        if (String(chaves[i][0]) === chave) { linha = i + 2; break; }
+      }
+    }
+    if (!obs) {
+      if (linha > -1) aba.deleteRow(linha);
+    } else {
+      const nova = [chave, data, parque, obs, "'" + matricula, new Date()];
+      if (linha > -1) aba.getRange(linha, 1, 1, nova.length).setValues([nova]);
+      else aba.appendRow(nova);
+    }
+    registrar_(matricula, 'EHS_AUTORIZADO_MANUAL', 'OK', data + ' | ' + parque + ' | ' + (obs || 'DESFEITO'));
+    return { ok: true, data: data, parque: parque, observacao: obs };
   } finally {
     trava.releaseLock();
   }
