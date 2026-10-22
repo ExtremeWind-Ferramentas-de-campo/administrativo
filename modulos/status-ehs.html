@@ -60,8 +60,15 @@
   .autoriz-quem{font-size:.76rem;color:var(--faint)}
 
   .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-  /* Stand by */
+  /* Stand by e Autorizado */
   .cob .btn-sb{flex:none}
+  /* Dois botões não cabem ao lado do nome sem espremer o parque: vão numa
+     linha própria, embaixo, alinhados à direita. */
+  .cob:has(.cob-botoes){flex-wrap:wrap}
+  .cob-botoes{display:flex;gap:6px;flex:1 0 100%;justify-content:flex-end;padding-top:8px;border-top:1px dashed var(--linha)}
+  .cob .btn-aut{background:var(--ok);border-color:var(--ok)}
+  .rdo.aut-manual{cursor:default;opacity:1}
+  .aut-rodape{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .standby-lista{display:grid;gap:10px;margin-bottom:30px;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr))}
   .sb{background:var(--card);border:1px solid var(--linha);border-left:4px solid var(--azul);border-radius:10px;
     padding:10px 12px;box-shadow:var(--sombra);display:flex;flex-direction:column;gap:6px}
@@ -297,17 +304,50 @@ function marcarAutoriz(grupo, clicado){
    --------------------------------------------------------------------------- */
 var DATA_NA_TELA = '';
 var SB_PARQUE = '';
+var SB_MODO = 'standby';     // 'standby' | 'autorizado' — a mesma caixa serve aos dois
 
-function abrirStandby(parque){
+/* A caixa de texto é a mesma do Stand by; muda só o título e a dica.
+   Autorizado = o report foi feito no modelo do CLIENTE (fora do nosso app),
+   então nada chegou na planilha: a pessoa confirma aqui e o parque vai para
+   "Reportes encontrados". */
+var TEXTOS_CAIXA = {
+  standby:    { tit:'Colocar em stand by', salvar:'Salvar',
+                dica:'Por que este parque não precisava enviar o report hoje? Ex.: equipe em deslocamento, parque parado por clima…' },
+  autorizado: { tit:'Marcar como autorizado', salvar:'Autorizar',
+                dica:'Observação: ex.: report enviado no modelo do cliente por e-mail / grupo, conferido por…' }
+};
+
+function abrirStandby(parque, modo){
   SB_PARQUE = parque;
+  SB_MODO = modo === 'autorizado' ? 'autorizado' : 'standby';
+  var tx = TEXTOS_CAIXA[SB_MODO];
+  document.getElementById('sbTit').textContent = tx.tit;
+  document.getElementById('sbSalvar').textContent = tx.salvar;
   document.getElementById('sbParque').textContent = parque + ' · ' + dataBonita(DATA_NA_TELA);
   var t = document.getElementById('sbMotivo');
+  t.placeholder = tx.dica;
   t.value = '';
   contarSb();
   document.getElementById('modalSb').classList.add('aberto');
   setTimeout(function(){ t.focus(); }, 30);
 }
 function fecharStandby(){ document.getElementById('modalSb').classList.remove('aberto'); SB_PARQUE = ''; }
+
+function gravarAutorizado(parque, observacao, bt){
+  if(bt){ bt.disabled = true; }
+  return chamar('ehsAutorizadoManual', { data: DATA_NA_TELA, parque: parque, observacao: observacao })
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
+      recado(parque + (observacao ? ': autorizado.' : ': voltou para a cobrança.'), 'ok');
+      fecharStandby();
+      return buscar();
+    })
+    .catch(function(err){
+      if(bt) bt.disabled = false;
+      if(err && err.motivo === 'SESSAO') return;
+      recado(traduzirErro(err), 'erro');
+    });
+}
 function contarSb(){
   var t = document.getElementById('sbMotivo');
   document.getElementById('sbCont').textContent = t.value.length + '/300';
@@ -454,9 +494,31 @@ function compartilharZap(caixa, qual, lote){
          ' arquivos: anexe no grupo pelo WhatsApp. No celular, o botão abre o WhatsApp direto.', 'ok');
 }
 
+/* Card de "Reportes encontrados" para o parque autorizado à mão: não tem PDF
+   (o report foi no modelo do cliente), mostra a observação e quem marcou. */
+function htmlAutorizadoManual(r){
+  return '<div class="cartao rdo sem-link aut-manual" style="--c:' + corDoCliente(r.cliente) + '">' +
+    '<div>' +
+      '<div class="rdo-parque">' + esc(r.parque || '(sem parque)') + '</div>' +
+      '<div class="rdo-cliente-tag">' + esc(r.cliente || 'sem cliente') + '</div>' +
+    '</div>' +
+    '<div class="rdo-linha">' +
+      '<span class="etiqueta">' + esc(dataBonita(r.data)) + '</span>' +
+      '<span class="etiqueta etiqueta--ok">Autorizado · modelo do cliente</span>' +
+    '</div>' +
+    (r.supervisor ? '<div class="rdo-cliente">Supervisor: ' + esc(r.supervisor) + '</div>' : '') +
+    '<div class="sb-motivo">' + esc(r.observacao) + '</div>' +
+    '<div class="aut-rodape">' +
+      '<span class="sb-quem">' + (r.autorizadoPor ? 'por ' + esc(r.autorizadoPor) : '') + '</span>' +
+      '<button class="btn btn--vazado btn--pequeno" type="button" data-desfazer-aut="' + esc(r.parque) + '">Desfazer</button>' +
+    '</div>' +
+  '</div>';
+}
+
 function desenhar(res){
   var painel = document.getElementById('painel');
-  var enviados = res.projetos.filter(function(p){ return p.estado === 'ENVIADO'; }).length;
+  // autorizado manualmente (modelo do cliente) conta como enviado
+  var enviados = res.projetos.filter(function(p){ return p.estado === 'ENVIADO' || p.estado === 'AUTORIZADO'; }).length;
   var faltam   = res.projetos.filter(function(p){ return p.estado === 'FALTA'; }).length;
   var pendentes = res.projetos.filter(function(p){ return p.estado === 'FALTA' || p.estado === 'NAO_OBRIGATORIO'; });
   var emStandby = res.projetos.filter(function(p){ return p.estado === 'STANDBY'; });
@@ -511,8 +573,12 @@ function desenhar(res){
           '</div>' +
           '<span class="etiqueta ' + (falta ? 'etiqueta--falta' : 'etiqueta--neutra') + '">' +
             (falta ? 'Falta enviar' : 'Não obrigatório') + '</span>' +
-          '<button class="btn btn--vazado btn--pequeno btn-sb" type="button" data-standby="' + esc(p.parque) + '"' +
-            ' title="Não precisava enviar hoje: tira da cobrança com um motivo">Stand by</button>' +
+          '<div class="cob-botoes">' +
+            '<button class="btn btn--vazado btn--pequeno btn-sb" type="button" data-standby="' + esc(p.parque) + '"' +
+              ' title="Não precisava enviar hoje: tira da cobrança com um motivo">Stand by</button>' +
+            '<button class="btn btn--pequeno btn-aut" type="button" data-autorizar="' + esc(p.parque) + '"' +
+              ' title="Report feito no modelo do cliente: marca como autorizado e manda para Reportes encontrados">Autorizado</button>' +
+          '</div>' +
         '</div>';
       });
       html += '</div>';
@@ -561,6 +627,7 @@ function desenhar(res){
     html += '<div class="vazio">Nenhum reporte com esses filtros.</div>';
   }else{
     res.relatorios.forEach(function(r){
+      if(r.manual){ html += htmlAutorizadoManual(r); return; }
       var temLink = !!r.link;
       var cor = corDoCliente(r.cliente);
 
@@ -597,7 +664,11 @@ function desenhar(res){
   var painel = document.getElementById('painel');
   painel.addEventListener('click', function(e){
     var sb = e.target.closest('[data-standby]');
-    if(sb){ abrirStandby(sb.getAttribute('data-standby')); return; }
+    if(sb){ abrirStandby(sb.getAttribute('data-standby'), 'standby'); return; }
+    var au = e.target.closest('[data-autorizar]');
+    if(au){ abrirStandby(au.getAttribute('data-autorizar'), 'autorizado'); return; }
+    var dau = e.target.closest('[data-desfazer-aut]');
+    if(dau){ gravarAutorizado(dau.getAttribute('data-desfazer-aut'), '', dau); return; }
     var dsb = e.target.closest('[data-desfazer-sb]');
     if(dsb){ gravarStandby(dsb.getAttribute('data-desfazer-sb'), '', dsb); return; }
     var so = e.target.closest('.zap [data-zap-so]');
@@ -639,7 +710,9 @@ document.getElementById('sbMotivo').addEventListener('input', contarSb);
 document.getElementById('sbCancelar').addEventListener('click', fecharStandby);
 document.getElementById('sbSalvar').addEventListener('click', function(){
   var m = document.getElementById('sbMotivo').value.trim();
-  if(m && SB_PARQUE) gravarStandby(SB_PARQUE, m, this);
+  if(!m || !SB_PARQUE) return;
+  if(SB_MODO === 'autorizado') gravarAutorizado(SB_PARQUE, m, this);
+  else gravarStandby(SB_PARQUE, m, this);
 });
 document.getElementById('modalSb').addEventListener('click', function(e){ if(e.target === this) fecharStandby(); });
 document.addEventListener('keydown', function(e){
