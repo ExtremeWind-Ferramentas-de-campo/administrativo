@@ -1196,12 +1196,12 @@
         var pos = posFoto[card.id] || 0;
         if(pos >= fotos.length) pos = posFoto[card.id] = 0;
         var atual = fotos[pos];
-        var mini = miniaturas[atual.thumbId];
+        var mini = miniaturas[chaveMini(atual)];
         fotosHtml =
           '<div class="card-fotos">' +
             (mini
               ? '<img src="' + mini + '" alt="' + escapeHtml(atual.name) + '" loading="lazy">'
-              : '<div class="vazia">carregando foto…</div>') +
+              : '<div class="vazia">' + (miniFalhou[chaveMini(atual)] ? 'foto indisponível' : 'carregando foto…') + '</div>') +
             (fotos.length > 1
               ? '<button type="button" class="foto-seta foto-ant" aria-label="Foto anterior">&#8249;</button>' +
                 '<button type="button" class="foto-seta foto-prox" aria-label="Próxima foto">&#8250;</button>' +
@@ -1522,8 +1522,13 @@
     function ehPdf(tipo, nome){
       return (tipo || '') === 'application/pdf' || /\.pdf$/i.test(nome || '');
     }
+    /* Chave da miniatura de uma foto: a miniatura gerada no envio (thumbId) ou,
+       quando ela não existe (foto HEIC do iPhone, por exemplo, que o navegador
+       não consegue reduzir), o próprio arquivo — o servidor devolve a
+       miniatura que o Drive gera dele. */
+    function chaveMini(a){ return a.thumbId || a.driveId || ''; }
     function imagensDo(card){
-      return (card.attachments || []).filter(function(a){ return ehImagem(a.type) && a.thumbId; });
+      return (card.attachments || []).filter(function(a){ return ehImagem(a.type) && chaveMini(a); });
     }
 
     // Reduz a imagem no navegador antes de subir. Sem isso a miniatura teria o
@@ -1550,31 +1555,71 @@
       });
     }
 
-    // Pede em UMA chamada todas as miniaturas que ainda não estão em memória.
+    /* Pede as miniaturas que ainda não estão em memória, em lotes.
+       Antes ia tudo numa chamada só, mas o servidor atende no máximo 60 por
+       vez: num quadro com mais fotos, o resto ficava marcado como "pedido" e
+       nunca mais era pedido — o card ficava em "carregando foto…" para
+       sempre. Agora: lotes de 30, e o que não voltar é pedido de novo
+       (até MINI_TENTATIVAS vezes); depois disso o card avisa que a foto
+       não está disponível. */
+    var MINI_LOTE = 30;
+    var MINI_TENTATIVAS = 4;
+    var miniTentativas = {};      // id -> quantas vezes já foi pedido sem voltar
+    var miniFalhou = {};          // id -> desistiu (arquivo sumido do Drive)
+    var timerMini = null;
+
     function carregarMiniaturas(){
       var faltando = [];
       boardState.cards.forEach(function(card){
         imagensDo(card).forEach(function(a){
-          if(!miniaturas[a.thumbId] && !miniaturasPedidas[a.thumbId]) faltando.push(a.thumbId);
+          var id = chaveMini(a);
+          if(!miniaturas[id] && !miniaturasPedidas[id] && !miniFalhou[id] && faltando.indexOf(id) === -1) faltando.push(id);
         });
       });
       if(!faltando.length) return;
       faltando.forEach(function(id){ miniaturasPedidas[id] = true; });
 
-      chamar('materiaisMiniaturas', { ids: faltando })
-        .then(function(res){
-          if(!res || !res.ok) return;
-          var achou = false;
-          Object.keys(res.mapa || {}).forEach(function(id){
-            miniaturas[id] = 'data:image/jpeg;base64,' + res.mapa[id];
-            achou = true;
-          });
-          if(achou) render();
-        })
-        .catch(function(){
-          // libera para tentar de novo na próxima carga
-          faltando.forEach(function(id){ delete miniaturasPedidas[id]; });
+      var lotes = [];
+      for(var i = 0; i < faltando.length; i += MINI_LOTE) lotes.push(faltando.slice(i, i + MINI_LOTE));
+
+      // Um lote por vez: em paralelo, o Apps Script enfileira e os cliques de
+      // quem está mexendo no quadro ficam esperando atrás das fotos.
+      lotes.reduce(function(fila, lote){
+        return fila.then(function(){
+          return chamar('materiaisMiniaturas', { ids: lote })
+            .then(function(res){
+              var veio = (res && res.ok && res.mapa) ? res.mapa : {};
+              var tipos = (res && res.tipos) || {};
+              var achou = false;
+              lote.forEach(function(id){
+                delete miniaturasPedidas[id];
+                if(veio[id]){
+                  miniaturas[id] = 'data:' + (tipos[id] || 'image/jpeg') + ';base64,' + veio[id];
+                  achou = true;
+                  return;
+                }
+                miniTentativas[id] = (miniTentativas[id] || 0) + 1;
+                if(miniTentativas[id] >= MINI_TENTATIVAS) { miniFalhou[id] = true; achou = true; }
+              });
+              if(achou) render();
+            })
+            .catch(function(){
+              // rede/sessão: libera para tentar de novo
+              lote.forEach(function(id){ delete miniaturasPedidas[id]; });
+            });
         });
+      }, Promise.resolve()).then(agendarNovaTentativa);
+    }
+
+    // Sobrou foto sem miniatura e ainda dá para tentar: pede de novo em 15 s
+    // (o Drive pode estar gerando a miniatura de uma foto recém-anexada).
+    function agendarNovaTentativa(){
+      if(timerMini) return;
+      var sobra = boardState.cards.some(function(card){
+        return imagensDo(card).some(function(a){ var id = chaveMini(a); return !miniaturas[id] && !miniFalhou[id]; });
+      });
+      if(!sobra) return;
+      timerMini = setTimeout(function(){ timerMini = null; carregarMiniaturas(); }, 15000);
     }
 
     // Baixa o arquivo original uma vez e guarda como blob, para abrir e baixar
@@ -1635,8 +1680,8 @@
       document.getElementById('visorNovaAba').hidden = !ehPdf(a.type, a.name);
 
       // miniatura primeiro, para não ficar tela preta enquanto o original carrega
-      if(ehImagem(a.type) && a.thumbId && miniaturas[a.thumbId]){
-        palco.innerHTML = '<img src="' + miniaturas[a.thumbId] + '" alt="' + escapeHtml(a.name) + '">';
+      if(ehImagem(a.type) && miniaturas[chaveMini(a)]){
+        palco.innerHTML = '<img src="' + miniaturas[chaveMini(a)] + '" alt="' + escapeHtml(a.name) + '">';
       }else{
         palco.innerHTML = '<div class="carregando">Abrindo ' + escapeHtml(a.name) + '…</div>';
       }
@@ -1902,7 +1947,7 @@
         return;
       }
       // Fotos primeiro, em grade. Clicar abre no visualizador.
-      var fotos = atts.filter(function(a){ return ehImagem(a.type) && a.thumbId; });
+      var fotos = atts.filter(function(a){ return ehImagem(a.type) && chaveMini(a); });
       if(fotos.length){
         var grade = document.createElement('div');
         grade.className = 'anexo-fotos';
@@ -1911,8 +1956,8 @@
           b.type = 'button';
           b.className = 'anexo-foto';
           b.title = a.name;
-          b.innerHTML = miniaturas[a.thumbId]
-            ? '<img src="' + miniaturas[a.thumbId] + '" alt="' + escapeHtml(a.name) + '">'
+          b.innerHTML = miniaturas[chaveMini(a)]
+            ? '<img src="' + miniaturas[chaveMini(a)] + '" alt="' + escapeHtml(a.name) + '">'
             : '';
           b.addEventListener('click', function(){ abrirVisor(fotos, i); });
           grade.appendChild(b);
