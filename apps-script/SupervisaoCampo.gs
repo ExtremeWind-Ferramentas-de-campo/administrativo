@@ -569,6 +569,17 @@ function ehFimDeSemana_(iso) {
  * Sábado e domingo entram como "não obrigatório" — o relatório pode existir,
  * mas a falta não é cobrada.
  */
+/* Entra na cobrança do dia (RDO e EHS): projeto em andamento que JÁ tinha
+   começado naquela data. Início depois da data do filtro = a equipe ainda
+   nem estava no parque, então não há relatório a cobrar. Projeto sem data de
+   início conta como "a iniciar" (mesma regra do Gantt) e também não é cobrado.
+   Usado também pelo StatusEHS.gs. */
+function cobravelNaData_(pr, dataIso) {
+  if (String(pr.status || 'andamento') !== 'andamento') return false;
+  const inicio = dataISO_(pr.inicio || '');
+  return !!inicio && inicio <= dataIso;
+}
+
 function acaoRdoStatus_(p) {
   const matricula = validarSessao_(p.token);
   if (!matricula) return { ok: false, motivo: 'SESSAO' };
@@ -609,7 +620,7 @@ function acaoRdoStatus_(p) {
   const fParque  = chaveTexto_(p.parque || '');
 
   const projetos = lerProjetos_()
-    .filter(function (pr) { return String(pr.status || 'andamento') === 'andamento'; })
+    .filter(function (pr) { return cobravelNaData_(pr, data); })
     .filter(function (pr) { return projetoPassaFiltro_(pr, fCliente, fParque); })
     .map(function (pr) {
       const achado = porParque[chaveTexto_(pr.parque)] || null;
@@ -659,31 +670,47 @@ function acaoRdoFiltros_(p) {
     return { ok: false, motivo: 'RDO_INDISPONIVEL', detalhe: e.message };
   }
 
-  const clientes = {}, parques = {};
-  linhas.forEach(function (r) {
-    if (r.cliente) clientes[r.cliente] = true;
-    if (r.parque) parques[r.parque] = true;
-  });
+  return opcoesDeFiltro_(linhas);
+}
 
-  return {
-    ok: true,
-    clientes: Object.keys(clientes).sort(),
-    parques: Object.keys(parques).sort()
+/* Opções dos menus Cliente e Parque: o que existe nos relatórios MAIS o que
+   está cadastrado nos projetos. Só com os relatórios, cliente que ainda não
+   mandou nenhum (ex.: GE num parque novo) sumia do filtro — justamente o que
+   se quer achar para cobrar. Grafias que só diferem em maiúscula/acento viram
+   uma opção só (o filtro já compara assim). Usado também pelo StatusEHS.gs. */
+function opcoesDeFiltro_(linhas) {
+  const clientes = {}, parques = {};
+  const add = function (mapa, v) {
+    const t = String(v || '').replace(/\s+/g, ' ').trim();
+    const k = chaveTexto_(t);
+    if (k && !mapa[k]) mapa[k] = t;
   };
+  try {
+    lerProjetos_().forEach(function (pr) { add(clientes, pr.cliente); add(parques, pr.parque); });
+  } catch (e) { /* sem projetos: fica só o que veio dos relatórios */ }
+  linhas.forEach(function (r) { add(clientes, r.cliente); add(parques, r.parque); });
+
+  const ordenar = function (mapa) {
+    return Object.keys(mapa).map(function (k) { return mapa[k]; })
+      .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+  };
+  return { ok: true, clientes: ordenar(clientes), parques: ordenar(parques) };
 }
 
 /* Cliente e parque novos entram devagar — não precisam da mesma releitura de
    2 minutos dos relatórios. Guardar a lista à parte, por 15 minutos, tira a
-   leitura da planilha do caminho de abertura da tela. */
+   leitura da planilha do caminho de abertura da tela.
+   v2: passou a incluir os clientes/parques dos projetos (chave nova para não
+   servir a lista antiga do cache). */
 const CACHE_FILTROS_SEG = 900;
 
 function acaoRdoFiltrosCache_(p) {
-  const guardado = lerGrande_('rdo_filtros');
+  const guardado = lerGrande_('rdo_filtros_v2');
   if (guardado) {
     try { return JSON.parse(guardado); } catch (e) { /* cache ruim: refaz */ }
   }
   const res = acaoRdoFiltros_(p);
-  if (res.ok) guardarGrande_('rdo_filtros', JSON.stringify(res), CACHE_FILTROS_SEG);
+  if (res.ok) guardarGrande_('rdo_filtros_v2', JSON.stringify(res), CACHE_FILTROS_SEG);
   return res;
 }
 

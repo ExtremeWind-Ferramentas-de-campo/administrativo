@@ -195,7 +195,7 @@ function acaoEhsStatus_(p) {
   try { standby = lerStandbyEHS_(data); } catch (e) { /* sem aba ainda */ }
 
   const projetos = lerProjetos_()
-    .filter(function (pr) { return String(pr.status || 'andamento') === 'andamento'; })
+    .filter(function (pr) { return cobravelNaData_(pr, data); })   // início depois da data não é cobrado
     .filter(function (pr) { return projetoPassaFiltro_(pr, fCliente, fParque); })
     .map(function (pr) {
       const achados = porParque[chaveTexto_(pr.parque)] || [];
@@ -264,17 +264,9 @@ function acaoEhsFiltros_(p) {
     return { ok: false, motivo: 'EHS_INDISPONIVEL', detalhe: e.message };
   }
 
-  const clientes = {}, parques = {};
-  linhas.forEach(function (r) {
-    if (r.cliente) clientes[r.cliente] = true;
-    if (r.parque) parques[r.parque] = true;
-  });
-
-  return {
-    ok: true,
-    clientes: Object.keys(clientes).sort(),
-    parques: Object.keys(parques).sort()
-  };
+  // reports + projetos cadastrados (opcoesDeFiltro_, no SupervisaoCampo.gs):
+  // cliente sem nenhum report ainda (ex.: GE) também aparece no menu.
+  return opcoesDeFiltro_(linhas);
 }
 
 
@@ -282,7 +274,7 @@ function acaoEhsFiltros_(p) {
    CACHE_FILTROS_SEG mora no SupervisaoCampo.gs (o mesmo do RDO). Não declarar
    de novo aqui: const repetida entre arquivos derruba o projeto inteiro. */
 function acaoEhsFiltrosCache_(p) {
-  const chave = CACHE_EHS_CHAVE + '_filtros';
+  const chave = CACHE_EHS_CHAVE + '_filtros_v2';   // v2: inclui clientes/parques dos projetos
   const guardado = lerGrande_(chave);
   if (guardado) {
     try { return JSON.parse(guardado); } catch (e) { /* cache ruim: refaz */ }
@@ -664,14 +656,14 @@ function menuConfigurarEHS() {
   if (r.getSelectedButton() !== ui.Button.OK) return;
   PropertiesService.getScriptProperties()
     .setProperty('ABA_EHS_REPORTS', r.getResponseText().trim() || ABA_EHS_PADRAO);
-  CacheService.getScriptCache().removeAll([CACHE_EHS_CHAVE + '_n', CACHE_EHS_CHAVE + '_filtros_n']);
+  CacheService.getScriptCache().removeAll([CACHE_EHS_CHAVE + '_n', CACHE_EHS_CHAVE + '_filtros_v2_n']);
   menuColunasEHS();
 }
 
 /** Menu: Portal > Conferir colunas do EHS */
 function menuColunasEHS() {
   const props = PropertiesService.getScriptProperties();
-  CacheService.getScriptCache().removeAll([CACHE_EHS_CHAVE + '_n', CACHE_EHS_CHAVE + '_filtros_n']);
+  CacheService.getScriptCache().removeAll([CACHE_EHS_CHAVE + '_n', CACHE_EHS_CHAVE + '_filtros_v2_n']);
   let txt = 'REPORTES DE EHS\n\n';
   txt += '  Planilha : a do RDO (ID_RDO = ' + (props.getProperty('ID_RDO') || '(não configurado)') + ')\n';
   txt += '  Aba      : ' + abaNomeEHS_() + '\n';
