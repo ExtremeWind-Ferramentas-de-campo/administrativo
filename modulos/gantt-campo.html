@@ -80,7 +80,7 @@
   .legenda-gantt .amostra.semData{
     background:repeating-linear-gradient(45deg,var(--faint) 0 3px,transparent 3px 6px);
   }
-  .legenda-gantt .sai{color:var(--erro);text-decoration:line-through;font-weight:600}
+  .legenda-gantt .sai{color:var(--erro);font-weight:600}
 
   /* ---------- quadro ---------- */
   .quadro{
@@ -177,7 +177,7 @@
   /* técnicos dentro da célula */
   .tecs{display:flex;flex-direction:column;gap:0;line-height:1.26;font-size:.665rem;font-weight:600;letter-spacing:-.1px}
   .tecs .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tecs .t.sai{color:#c01b10;text-decoration:line-through}
+  .tecs .t.sai{color:#c01b10}
   table.gantt td.sem.dentro.st-aIniciar .tecs{color:var(--muted)}
 
   .faixa-sem-data{
@@ -1080,14 +1080,72 @@ function baixarPdf(){
     .then(function(){ bt.disabled = false; bt.textContent = 'Baixar PDF'; });
 }
 
+function primeiroNome(n){ return String(n || '').trim().split(/\s+/)[0] || ''; }
+function dataCurta(iso){
+  var p = String(iso || '').split('-');
+  return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0].slice(2) : '';
+}
+
+/* Layout do PDF:
+   - colunas fixas estreitas (fonte menor, data dd/mm/aa, só o 1º nome do
+     supervisor) para sobrar espaço para as semanas;
+   - nomes dos técnicos desenhados à mão: quem sai na semana fica vermelho e
+     em vermelho, igual à tela (o AutoTable só pinta a célula inteira de uma cor);
+   - linha vermelha dos dois lados da semana atual, de cima a baixo;
+   - a tabela pode ocupar várias folhas (cabeçalho repete em cada uma), e o
+     quadro de totais vai sempre inteiro, no pé da última folha. */
 function gerarPdf(m){
-  var fixas = [['CLIENTE', 20], ['PARQUE', 34], ['SUPERVISOR', 24], ['INÍCIO', 16], ['FIM', 21], ['SITUAÇÃO', 19]];
+  var fixas = [['CLIENTE', 15], ['PARQUE', 27], ['SUPERV.', 14], ['INÍCIO', 12], ['FIM', 16], ['SITUAÇÃO', 15]];
   var largSem = 24, margem = 8;
   var largFixas = fixas.reduce(function(a, f){ return a + f[1]; }, 0);
   var w = Math.max(297, margem * 2 + largFixas + m.semanas.length * largSem);
   var h = Math.max(210, Math.round(w * 0.62));
+  var formato = { orientation:'landscape', unit:'mm', format:[w, h] };
 
-  var doc = new window.jspdf.jsPDF({ orientation:'landscape', unit:'mm', format:[w, h] });
+  var VERMELHO = [217, 44, 32], SAI = [192, 27, 16];
+  var iHoje = m.semanas.findIndex(function(s){ return s.getTime() === m.semanaHoje; });
+  var colHoje = iHoje > -1 ? fixas.length + iHoje : -1;
+
+  var estiloBase = { font:'helvetica', fontSize: 6, cellPadding: 1, lineColor:[219, 230, 240], lineWidth: 0.2,
+                     textColor:[18, 34, 47], overflow:'linebreak', valign:'middle' };
+  var cab = { fillColor:[234, 240, 246], textColor:[14, 32, 51], fontStyle:'bold', halign:'center' };
+  var celHoje = { fillColor: VERMELHO, textColor:[255, 255, 255], fontStyle:'bold', halign:'center' };
+  var estilosColuna = {};
+  fixas.forEach(function(f, i){ estilosColuna[i] = { cellWidth: f[1] }; });
+  m.semanas.forEach(function(s, i){ estilosColuna[fixas.length + i] = { cellWidth: largSem }; });
+
+  /* cabeçalho de semanas (usado na tabela e no quadro de totais) */
+  var linhaMeses = function(prefixo){
+    return prefixo.concat(m.blocos.map(function(b){ return { content: txtPdf(b.rot), colSpan: b.qtd }; }));
+  };
+  var linhaW = function(prefixo){
+    return prefixo.concat(m.semanas.map(function(s){
+      return { content: 'W ' + numeroSemana(s), styles: s.getTime() === m.semanaHoje ? celHoje : {} };
+    }));
+  };
+
+  /* desenho comum às duas tabelas: risco vermelho da semana atual e nomes */
+  var aoDesenhar = function(doc){
+    return {
+      willDrawCell: function(d){
+        var raw = d.cell.raw;
+        if(raw && raw.tecs){ d.cell.__tecs = raw.tecs; d.cell.text = []; }   // o texto sai à mão abaixo
+      },
+      didDrawCell: function(d){
+        var c = d.cell;
+        if(c.__tecs) desenharTecs(doc, c, c.__tecs, SAI);
+        if(d.column.index === colHoje && (c.colSpan || 1) === 1){
+          doc.setDrawColor(VERMELHO[0], VERMELHO[1], VERMELHO[2]);
+          doc.setLineWidth(0.6);
+          doc.line(c.x, c.y, c.x, c.y + c.height);
+          doc.line(c.x + c.width, c.y, c.x + c.width, c.y + c.height);
+          doc.setLineWidth(0.2);
+        }
+      }
+    };
+  };
+
+  var doc = new window.jspdf.jsPDF(formato);
   doc.setFontSize(13); doc.setFont('helvetica', 'bold');
   doc.text('Gantt de Campo - Extreme Wind', margem, 11);
   doc.setFontSize(8); doc.setFont('helvetica', 'normal');
@@ -1096,31 +1154,26 @@ function gerarPdf(m){
   doc.text(txtPdf('Hoje: ' + m.hoje.planejadas + ' equipes planejadas (' + m.hoje.andamento + ' em andamento + ' +
     m.hoje.aIniciar + ' a iniciar)   |   Média de ' + rotuloMes(new Date()) + ': ' +
     fmtMedia(m.mediaMesAtual.planejadas) + ' planejadas / ' + fmtMedia(m.mediaMesAtual.andamento) + ' em andamento' +
-    '   |   * = última semana do técnico na frente'), margem, 20.5);
-
-  var cab = { fillColor:[234, 240, 246], textColor:[14, 32, 51], fontStyle:'bold', halign:'center' };
-  var vermelho = { fillColor:[217, 44, 32], textColor:[255, 255, 255], fontStyle:'bold', halign:'center' };
+    '   |   nome em vermelho = última semana do técnico na frente'), margem, 20.5);
 
   var head = [
     fixas.map(function(f){ return { content: txtPdf(f[0]), rowSpan: 3, styles: { valign:'middle', halign:'left' } }; })
       .concat(m.blocos.map(function(b){ return { content: txtPdf(b.rot), colSpan: b.qtd }; })),
     m.semanas.map(function(s){
       return { content: dois(s.getDate()) + '/' + dois(s.getMonth()+1) + '/' + s.getFullYear(),
-               styles: s.getTime() === m.semanaHoje ? vermelho : { fontSize: 6 } };
+               styles: s.getTime() === m.semanaHoje ? celHoje : { fontSize: 5.5 } };
     }),
-    m.semanas.map(function(s){
-      return { content: 'W ' + numeroSemana(s), styles: s.getTime() === m.semanaHoje ? vermelho : {} };
-    })
+    linhaW([])
   ];
 
   var body = m.linhas.map(function(l){
     var p = l.p;
-    var fim = p.fim ? dataBonita(p.fim) : (p.fimPrevisto ? 'prev. ' + dataBonita(p.fimPrevisto) : '-');
+    var fim = p.fim ? dataCurta(p.fim) : (p.fimPrevisto ? 'prev. ' + dataCurta(p.fimPrevisto) : '-');
     var linha = [
       { content: txtPdf(p.cliente || '-'), styles: { fillColor: rgbDe(l.cor), textColor:[255, 255, 255], fontStyle:'bold' } },
       txtPdf((p.parque || '(sem parque)') + (p.tipoReparo ? '\n' + p.tipoReparo : '')),
-      txtPdf(nomeSupervisor(p) || '-'),
-      p.inicio ? dataBonita(p.inicio) : '-',
+      txtPdf(primeiroNome(nomeSupervisor(p)) || '-'),
+      p.inicio ? dataCurta(p.inicio) : '-',
       txtPdf(fim),
       txtPdf(ROTULO_SIT[l.sit])
     ];
@@ -1128,40 +1181,72 @@ function gerarPdf(m){
       if(!c.dentro){ linha.push({ content:'' }); return; }
       // mesma lógica de tom da tela: a iniciar e previsto mais claros, concluído apagado
       var clarear = l.sit === 'aIniciar' ? 0.78 : l.sit === 'concluido' ? 0.6 : c.previsto ? 0.4 : 0.15;
+      var tecs = c.mostra ? c.tecs.map(function(t){ return { rot: txtPdf(t.rot), sai: t.sai }; }) : null;
       linha.push({
-        content: c.mostra ? txtPdf(c.tecs.map(function(t){ return t.rot + (t.sai ? ' *' : ''); }).join('\n')) : '',
-        styles: { fillColor: rgbDe(l.cor, clarear), fontSize: 5.6, halign:'center', valign:'middle' }
+        // o texto fica no conteúdo só para o AutoTable calcular a altura da linha
+        content: tecs ? tecs.map(function(t){ return t.rot; }).join('\n') : '',
+        tecs: tecs,
+        styles: { fillColor: rgbDe(l.cor, clarear), fontSize: 5.6, halign:'center' }
       });
     });
     return linha;
   });
 
-  var rotFoot = function(txt, hoje){
+  doc.autoTable(Object.assign({
+    head: head, body: body, startY: 24, margin: { left: margem, right: margem, bottom: margem },
+    theme: 'grid', showHead: 'everyPage', rowPageBreak: 'avoid',
+    styles: estiloBase, headStyles: cab, columnStyles: estilosColuna
+  }, aoDesenhar(doc)));
+
+  /* ---- quadro de totais: inteiro e no pé da última folha ---- */
+  var rotTot = function(txt, hoje){
     return { content: txtPdf(txt) + (hoje !== undefined ? '   (hoje: ' + hoje + ')' : ''), colSpan: fixas.length,
-             styles: { halign:'left' } };
+             styles: { halign:'left', fontStyle:'bold' } };
   };
-  var foot = [
-    [rotFoot('TOTAL DE EQUIPES PLANEJADAS', m.hoje.planejadas)].concat(m.totais.map(function(t){ return String(t.planejadas); })),
-    [rotFoot('TOTAL DE EQUIPES EM ANDAMENTO', m.hoje.andamento)].concat(m.totais.map(function(t){ return t.andamento === null ? '' : String(t.andamento); })),
-    [rotFoot('MÉDIA DO MÊS - PLANEJADAS')].concat(m.blocos.map(function(b, i){ return { content: fmtMedia(m.medias[i].planejadas), colSpan: b.qtd }; })),
-    [rotFoot('MÉDIA DO MÊS - EM ANDAMENTO')].concat(m.blocos.map(function(b, i){ return { content: fmtMedia(m.medias[i].andamento), colSpan: b.qtd }; }))
+  var corpoTot = [
+    [rotTot('TOTAL DE EQUIPES PLANEJADAS', m.hoje.planejadas)].concat(m.totais.map(function(t){ return String(t.planejadas); })),
+    [rotTot('TOTAL DE EQUIPES EM ANDAMENTO', m.hoje.andamento)].concat(m.totais.map(function(t){ return t.andamento === null ? '' : String(t.andamento); })),
+    [rotTot('MÉDIA DO MÊS - PLANEJADAS')].concat(m.blocos.map(function(b, i){ return { content: fmtMedia(m.medias[i].planejadas), colSpan: b.qtd }; })),
+    [rotTot('MÉDIA DO MÊS - EM ANDAMENTO')].concat(m.blocos.map(function(b, i){ return { content: fmtMedia(m.medias[i].andamento), colSpan: b.qtd }; }))
   ];
+  var vazioFixas = { content:'', colSpan: fixas.length, styles: { fillColor:[255, 255, 255], lineWidth: 0 } };
+  var opTot = function(doc2, y){
+    return Object.assign({
+      head: [linhaMeses([vazioFixas]), linhaW([vazioFixas])], body: corpoTot,
+      startY: y, margin: { left: margem, right: margem, bottom: 0 }, theme: 'grid',
+      showHead: 'firstPage', pageBreak: 'avoid', rowPageBreak: 'avoid',
+      styles: Object.assign({}, estiloBase, { fontSize: 7.5, halign:'center', cellPadding: 1.4 }),
+      headStyles: cab, bodyStyles: { fillColor:[245, 249, 253], fontStyle:'bold' }, columnStyles: estilosColuna
+    }, aoDesenhar(doc2));
+  };
 
-  var estilosColuna = {};
-  fixas.forEach(function(f, i){ estilosColuna[i] = { cellWidth: f[1] }; });
-  m.semanas.forEach(function(s, i){ estilosColuna[fixas.length + i] = { cellWidth: largSem }; });
+  // mede a altura do quadro numa folha de rascunho, para encostá-lo no pé
+  var rascunho = new window.jspdf.jsPDF(formato);
+  rascunho.autoTable(opTot(rascunho, 0));
+  var altura = rascunho.lastAutoTable.finalY;
 
-  doc.autoTable({
-    head: head, body: body, foot: foot, startY: 24, margin: { left: margem, right: margem },
-    theme: 'grid', showFoot: 'lastPage',
-    styles: { font:'helvetica', fontSize: 7, cellPadding: 1.2, lineColor:[219, 230, 240], lineWidth: 0.2,
-              textColor:[18, 34, 47], overflow:'linebreak' },
-    headStyles: cab,
-    footStyles: { fillColor:[245, 249, 253], textColor:[14, 32, 51], fontStyle:'bold', halign:'center', fontSize: 8 },
-    columnStyles: estilosColuna
-  });
+  var yTot = h - margem - altura;
+  if(doc.lastAutoTable.finalY + 4 > yTot) doc.addPage(formato.format, 'landscape');
+  doc.setPage(doc.getNumberOfPages());
+  doc.autoTable(opTot(doc, yTot));
 
   return doc;
+}
+
+/* Nomes centralizados na célula; quem sai fica em vermelho (sem risco). */
+function desenharTecs(doc, cell, tecs, corSai){
+  var fs = cell.styles.fontSize;
+  var lh = fs * doc.getLineHeightFactor() * 25.4 / 72;
+  var topo = cell.y + (cell.height - lh * tecs.length) / 2;
+  var cx = cell.x + cell.width / 2;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(fs);
+  tecs.forEach(function(t, i){
+    var y = topo + lh * (i + 0.5);
+    if(t.sai) doc.setTextColor(corSai[0], corSai[1], corSai[2]); else doc.setTextColor(18, 34, 47);
+    doc.text(t.rot, cx, y, { align:'center', baseline:'middle' });
+  });
+  doc.setTextColor(18, 34, 47);
 }
 
 /* ---------------------------------------------------------------------------
