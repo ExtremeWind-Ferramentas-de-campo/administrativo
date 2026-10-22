@@ -287,7 +287,6 @@
         <option value="andamento">Em andamento</option>
         <option value="aIniciar">A iniciar</option>
         <option value="concluido">Concluído</option>
-        <option value="semData">Sem data</option>
       </select>
     </div>
     <div class="campo">
@@ -332,7 +331,7 @@
     <span class="item"><span class="amostra"></span> Em andamento</span>
     <span class="item"><span class="amostra aIniciar"></span> A iniciar</span>
     <span class="item"><span class="amostra concluido"></span> Concluído</span>
-    <span class="item"><span class="amostra semData"></span> Sem data</span>
+    <span class="item"><span class="amostra semData"></span> A iniciar sem data de início</span>
     <span class="item"><span class="amostra prevista"></span> Trecho previsto</span>
     <span class="item">A cor da barra é a do cliente.</span>
     <span class="item"><span class="sai">NOME</span> = última semana do técnico na frente.</span>
@@ -487,17 +486,18 @@ function chaveMes(d){
 /* ---------------------------------------------------------------------------
    SITUAÇÃO
    A tela mostra quatro situações, mas só duas estão gravadas no projeto
-   (andamento / concluido). "A iniciar" e "Sem data" saem das datas — assim o
-   Gantt não exige campo novo na planilha nem depende de alguém lembrar de
-   marcar. A regra:
+   (andamento / concluido). "A iniciar" sai das datas — assim o Gantt não
+   exige campo novo na planilha nem depende de alguém lembrar de marcar.
+   A regra:
      concluido -> status gravado é concluido
-     semData   -> não tem data de início
-     aIniciar  -> início ainda no futuro
+     aIniciar  -> início ainda no futuro OU sem data de início
+                  (projeto sem início ainda não começou; o Status RDO/EHS
+                  também não cobra)
      andamento -> o resto
    --------------------------------------------------------------------------- */
 function situacao(p){
   if(String(p.status || 'andamento') === 'concluido') return 'concluido';
-  if(!p.inicio) return 'semData';
+  if(!p.inicio) return 'aIniciar';
   var hoje = segundaDe(new Date());
   var ini = dataDe(p.inicio);
   if(ini && segundaDe(ini) > hoje) return 'aIniciar';
@@ -772,7 +772,7 @@ function moverLinha(id, dir){
    Tudo sai da lista FILTRADA: o filtro muda os números junto com as linhas.
    --------------------------------------------------------------------------- */
 function intervalo(p){
-  if(situacao(p) === 'semData' || !p.inicio) return null;
+  if(!p.inicio) return null;          // a iniciar sem data: sem barra para desenhar
   var ini = segundaDe(dataDe(p.inicio));
   var fim = fimDesenho(p); fim = fim ? segundaDe(fim) : ini;
   if(fim < ini) fim = ini;
@@ -816,8 +816,7 @@ function resumoHoje(lista){
   lista.forEach(function(p){
     var s = situacao(p);
     if(s === 'andamento') and++;
-    else if(s === 'aIniciar') ai++;
-    else if(s === 'semData') sd++;
+    else if(s === 'aIniciar'){ ai++; if(!p.inicio) sd++; }   // sd: a iniciar sem data de início
   });
   return { andamento: and, aIniciar: ai, semData: sd, planejadas: and + ai };
 }
@@ -855,7 +854,7 @@ function montarModelo(){
     var it = intervalo(p);
     var cels = modelo.semanas.map(function(s){
       var ehHoje = s.getTime() === semanaHoje;
-      if(!it || s < it.ini || s > it.fim) return { dentro:false, ehHoje:ehHoje, semData: sit === 'semData' };
+      if(!it || s < it.ini || s > it.fim) return { dentro:false, ehHoje:ehHoje, semData: !p.inicio };
 
       var atual = equipeNaSemana(hist, s);
       var anterior = equipeNaSemana(hist, maisSemanas(s, -1));
@@ -938,7 +937,7 @@ function desenharPlacar(m){
   el.innerHTML =
     item(h.planejadas, 'Equipes planejadas hoje', 'em andamento + a iniciar', 'var(--azul)') +
     item(h.andamento, 'Em andamento hoje', 'W ' + numeroSemana(new Date()) + ' · ' + dataBonita(hojeISO()), 'var(--ok)') +
-    item(h.aIniciar, 'A iniciar', h.semData ? h.semData + ' sem data (fora da conta)' : '', 'var(--alerta)') +
+    item(h.aIniciar, 'A iniciar', h.semData ? 'inclui ' + h.semData + ' sem data de início' : '', 'var(--alerta)') +
     item(fmtMedia(mm.planejadas) + ' / ' + fmtMedia(mm.andamento), 'Média do mês', rotuloMes(new Date()) + ' · planejadas / em andamento', '#6a4fc4');
 }
 
