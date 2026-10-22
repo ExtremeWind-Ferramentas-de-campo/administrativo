@@ -670,12 +670,12 @@ function janelaAtual(lista){
     return { ini: ini, qtd: Math.max(1, Math.min(qtd, 260)) };
   }
   var n = parseInt(op, 10) || 13;
-  if(!inicioJanela) inicioJanela = maisSemanas(hoje, -2);
+  if(!inicioJanela) inicioJanela = maisSemanas(hoje, -1);   // abre com uma semana antes da atual
   return { ini: inicioJanela, qtd: n };
 }
 
 function recentrar(){
-  inicioJanela = maisSemanas(segundaDe(new Date()), -2);
+  inicioJanela = maisSemanas(segundaDe(new Date()), -1);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1093,11 +1093,36 @@ function dataCurta(iso){
    - linha vermelha dos dois lados da semana atual, de cima a baixo;
    - a tabela pode ocupar várias folhas (cabeçalho repete em cada uma), e o
      quadro de totais vai sempre inteiro, no pé da última folha. */
+var PDF_FONTE_TECS = 5.6;     // tamanho dos nomes nas células de semana
+var PDF_SEM_ESTREITA = 9;     // mm — semana sem nenhum nome
+var PDF_SEM_LARGA_MIN = 16;   // mm — mínimo de uma semana com nomes
+var PDF_SEM_LARGA_MAX = 70;   // mm — teto (nome maior que isso é cortado)
+
+function larguraSemanasPdf(m){
+  var medidor = new window.jspdf.jsPDF({ unit:'mm' });
+  medidor.setFont('helvetica', 'normal');
+  medidor.setFontSize(PDF_FONTE_TECS);
+  return m.semanas.map(function(s, i){
+    var maior = 0;
+    m.linhas.forEach(function(l){
+      var c = l.cels[i];
+      if(!c || !c.dentro || !c.mostra) return;
+      c.tecs.forEach(function(t){ maior = Math.max(maior, medidor.getTextWidth(txtPdf(t.rot))); });
+    });
+    if(!maior) return PDF_SEM_ESTREITA;
+    return Math.min(PDF_SEM_LARGA_MAX, Math.max(PDF_SEM_LARGA_MIN, Math.ceil(maior + 3)));
+  });
+}
+
 function gerarPdf(m){
   var fixas = [['CLIENTE', 15], ['PARQUE', 27], ['SUPERV.', 14], ['INÍCIO', 12], ['FIM', 16], ['SITUAÇÃO', 15]];
-  var largSem = 24, margem = 8;
+  var margem = 8;
   var largFixas = fixas.reduce(function(a, f){ return a + f[1]; }, 0);
-  var w = Math.max(297, margem * 2 + largFixas + m.semanas.length * largSem);
+  /* Largura de cada semana: a que tem nomes de técnico ganha a largura do
+     nome mais comprido (para não vazar para a vizinha); a que não tem nome
+     nenhum fica estreita — ali só interessa ver a cor da barra. */
+  var largSem = larguraSemanasPdf(m);
+  var w = Math.max(297, margem * 2 + largFixas + largSem.reduce(function(a, x){ return a + x; }, 0));
   var h = Math.max(210, Math.round(w * 0.62));
   var formato = { orientation:'landscape', unit:'mm', format:[w, h] };
 
@@ -1111,7 +1136,7 @@ function gerarPdf(m){
   var celHoje = { fillColor: VERMELHO, textColor:[255, 255, 255], fontStyle:'bold', halign:'center' };
   var estilosColuna = {};
   fixas.forEach(function(f, i){ estilosColuna[i] = { cellWidth: f[1] }; });
-  m.semanas.forEach(function(s, i){ estilosColuna[fixas.length + i] = { cellWidth: largSem }; });
+  m.semanas.forEach(function(s, i){ estilosColuna[fixas.length + i] = { cellWidth: largSem[i] }; });
 
   /* cabeçalho de semanas (usado na tabela e no quadro de totais) */
   var linhaMeses = function(prefixo){
@@ -1158,9 +1183,11 @@ function gerarPdf(m){
   var head = [
     fixas.map(function(f){ return { content: txtPdf(f[0]), rowSpan: 3, styles: { valign:'middle', halign:'left' } }; })
       .concat(m.blocos.map(function(b){ return { content: txtPdf(b.rot), colSpan: b.qtd }; })),
-    m.semanas.map(function(s){
-      return { content: dois(s.getDate()) + '/' + dois(s.getMonth()+1) + '/' + s.getFullYear(),
-               styles: s.getTime() === m.semanaHoje ? celHoje : { fontSize: 5.5 } };
+    m.semanas.map(function(s, i){
+      // semana estreita: só dd/mm, que é o que cabe
+      var estreita = largSem[i] < PDF_SEM_LARGA_MIN;
+      return { content: dois(s.getDate()) + '/' + dois(s.getMonth()+1) + (estreita ? '' : '/' + s.getFullYear()),
+               styles: s.getTime() === m.semanaHoje ? celHoje : { fontSize: estreita ? 5 : 5.5 } };
     }),
     linhaW([])
   ];
@@ -1185,7 +1212,7 @@ function gerarPdf(m){
         // o texto fica no conteúdo só para o AutoTable calcular a altura da linha
         content: tecs ? tecs.map(function(t){ return t.rot; }).join('\n') : '',
         tecs: tecs,
-        styles: { fillColor: rgbDe(l.cor, clarear), fontSize: 5.6, halign:'center' }
+        styles: { fillColor: rgbDe(l.cor, clarear), fontSize: PDF_FONTE_TECS, halign:'center' }
       });
     });
     return linha;
@@ -1243,7 +1270,14 @@ function desenharTecs(doc, cell, tecs, corSai){
   tecs.forEach(function(t, i){
     var y = topo + lh * (i + 0.5);
     if(t.sai) doc.setTextColor(corSai[0], corSai[1], corSai[2]); else doc.setTextColor(18, 34, 47);
-    doc.text(t.rot, cx, y, { align:'center', baseline:'middle' });
+    // Garantia: nome maior que a célula (só acima do teto de largura) é
+    // cortado com ".." em vez de invadir a semana do lado.
+    var txt = t.rot, cabe = cell.width - 1.5;
+    if(doc.getTextWidth(txt) > cabe){
+      while(txt.length > 1 && doc.getTextWidth(txt + '..') > cabe) txt = txt.slice(0, -1);
+      txt = txt.replace(/\s+$/, '') + '..';
+    }
+    doc.text(txt, cx, y, { align:'center', baseline:'middle' });
   });
   doc.setTextColor(18, 34, 47);
 }
