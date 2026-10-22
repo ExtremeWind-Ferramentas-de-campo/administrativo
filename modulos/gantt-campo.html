@@ -1100,7 +1100,7 @@ var PDF_SEM_LARGA_MAX = 70;   // mm — teto (nome maior que isso é cortado)
 
 function larguraSemanasPdf(m){
   var medidor = new window.jspdf.jsPDF({ unit:'mm' });
-  medidor.setFont('helvetica', 'normal');
+  medidor.setFont('helvetica', 'bold');          // os nomes saem em negrito, que é mais largo
   medidor.setFontSize(PDF_FONTE_TECS);
   return m.semanas.map(function(s, i){
     var maior = 0;
@@ -1126,11 +1126,14 @@ function gerarPdf(m){
   var h = Math.max(210, Math.round(w * 0.62));
   var formato = { orientation:'landscape', unit:'mm', format:[w, h] };
 
-  var VERMELHO = [217, 44, 32], SAI = [192, 27, 16];
+  // SAI: vermelho escuro de propósito — o vermelho vivo some no fundo colorido
+  // impresso (contraste ~3); este fica acima de 4,4 em todas as cores de cliente.
+  var VERMELHO = [217, 44, 32], SAI = [140, 0, 0];
   var iHoje = m.semanas.findIndex(function(s){ return s.getTime() === m.semanaHoje; });
   var colHoje = iHoje > -1 ? fixas.length + iHoje : -1;
 
-  var estiloBase = { font:'helvetica', fontSize: 6, cellPadding: 1, lineColor:[219, 230, 240], lineWidth: 0.2,
+  // Tudo em negrito: impresso, o traço fino some no fundo colorido.
+  var estiloBase = { font:'helvetica', fontStyle:'bold', fontSize: 6, cellPadding: 1, lineColor:[219, 230, 240], lineWidth: 0.2,
                      textColor:[18, 34, 47], overflow:'linebreak', valign:'middle' };
   var cab = { fillColor:[234, 240, 246], textColor:[14, 32, 51], fontStyle:'bold', halign:'center' };
   var celHoje = { fillColor: VERMELHO, textColor:[255, 255, 255], fontStyle:'bold', halign:'center' };
@@ -1172,7 +1175,7 @@ function gerarPdf(m){
   var doc = new window.jspdf.jsPDF(formato);
   doc.setFontSize(13); doc.setFont('helvetica', 'bold');
   doc.text('Gantt de Campo - Extreme Wind', margem, 11);
-  doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8); doc.setFont('helvetica', 'bold');
   doc.text(txtPdf('Gerado em ' + dataBonita(hojeISO()) + ' ' + new Date().toTimeString().slice(0, 5) +
     '   |   ' + resumoFiltrosTxt()), margem, 16);
   doc.text(txtPdf('Hoje: ' + m.hoje.planejadas + ' equipes planejadas (' + m.hoje.andamento + ' em andamento + ' +
@@ -1206,13 +1209,16 @@ function gerarPdf(m){
     l.cels.forEach(function(c){
       if(!c.dentro){ linha.push({ content:'' }); return; }
       // mesma lógica de tom da tela: a iniciar e previsto mais claros, concluído apagado
-      var clarear = l.sit === 'aIniciar' ? 0.78 : l.sit === 'concluido' ? 0.6 : c.previsto ? 0.4 : 0.15;
+      // Fundo sempre claro o bastante para ler o nome impresso. A ordem de tom
+      // continua a da tela: em andamento mais forte, previsto/concluído mais
+      // claros, a iniciar quase branco.
+      var clarear = l.sit === 'aIniciar' ? 0.85 : l.sit === 'concluido' ? 0.72 : c.previsto ? 0.7 : 0.5;
       var tecs = c.mostra ? c.tecs.map(function(t){ return { rot: txtPdf(t.rot), sai: t.sai }; }) : null;
       linha.push({
         // o texto fica no conteúdo só para o AutoTable calcular a altura da linha
         content: tecs ? tecs.map(function(t){ return t.rot; }).join('\n') : '',
         tecs: tecs,
-        styles: { fillColor: rgbDe(l.cor, clarear), fontSize: PDF_FONTE_TECS, halign:'center' }
+        styles: { fillColor: rgbDe(l.cor, clarear), fontSize: PDF_FONTE_TECS, halign:'left' }
       });
     });
     return linha;
@@ -1259,13 +1265,13 @@ function gerarPdf(m){
   return doc;
 }
 
-/* Nomes centralizados na célula; quem sai fica em vermelho (sem risco). */
+/* Nomes em negrito, alinhados à esquerda; quem sai fica em vermelho. */
 function desenharTecs(doc, cell, tecs, corSai){
   var fs = cell.styles.fontSize;
   var lh = fs * doc.getLineHeightFactor() * 25.4 / 72;
   var topo = cell.y + (cell.height - lh * tecs.length) / 2;
-  var cx = cell.x + cell.width / 2;
-  doc.setFont('helvetica', 'normal');
+  var x = cell.x + 1;
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(fs);
   tecs.forEach(function(t, i){
     var y = topo + lh * (i + 0.5);
@@ -1277,7 +1283,7 @@ function desenharTecs(doc, cell, tecs, corSai){
       while(txt.length > 1 && doc.getTextWidth(txt + '..') > cabe) txt = txt.slice(0, -1);
       txt = txt.replace(/\s+$/, '') + '..';
     }
-    doc.text(txt, cx, y, { align:'center', baseline:'middle' });
+    doc.text(txt, x, y, { baseline:'middle' });
   });
   doc.setTextColor(18, 34, 47);
 }
