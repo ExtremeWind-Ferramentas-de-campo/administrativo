@@ -75,6 +75,7 @@
   .sb-topo{display:flex;align-items:center;gap:8px;justify-content:space-between}
   .sb-motivo{font-size:.85rem;background:var(--azul-fraco);border-radius:8px;padding:7px 9px;white-space:pre-wrap;word-break:break-word}
   .sb-quem{font-size:.75rem;color:var(--faint)}
+  .sb .etiqueta{align-self:flex-start}
 
   .modal-sb{position:fixed;inset:0;z-index:70;background:rgba(10,20,35,.5);display:none;align-items:center;justify-content:center;padding:16px}
   .modal-sb.aberto{display:flex}
@@ -588,14 +589,21 @@ function desenhar(res){
       html += '<h2 class="secao-tit">Em stand by (' + emStandby.length + ')</h2>';
       html += '<div class="standby-lista">';
       emStandby.sort(function(a,b){ return String(a.parque).localeCompare(String(b.parque)); }).forEach(function(p){
-        html += '<div class="sb">' +
+        // TECNICO: o próprio técnico respondeu "Sim" no report do app de campo.
+        // Não tem Desfazer (é o report dele), mas tem o PDF.
+        var doTecnico = p.standbyOrigem === 'TECNICO';
+        var pdfOk = doTecnico && /^https?:\/\//i.test(p.link || '');
+        html += '<div class="sb' + (doTecnico ? ' sb-tecnico' : '') + '">' +
           '<div class="sb-topo">' +
             '<div><div class="cob-parque">' + esc(p.parque) + '</div>' +
               '<div class="cob-meta">' + esc(p.cliente || 'sem cliente') + (p.supervisor ? ' · sup. ' + esc(p.supervisor) : '') + '</div></div>' +
-            '<button class="btn btn--vazado btn--pequeno" type="button" data-desfazer-sb="' + esc(p.parque) + '">Desfazer</button>' +
+            (doTecnico
+              ? (pdfOk ? '<button class="btn btn--pequeno" type="button" data-link="' + esc(p.link) + '">Abrir PDF</button>' : '')
+              : '<button class="btn btn--vazado btn--pequeno" type="button" data-desfazer-sb="' + esc(p.parque) + '">Desfazer</button>') +
           '</div>' +
-          '<div class="sb-motivo">' + esc(p.standbyMotivo) + '</div>' +
-          (p.standbyPor ? '<div class="sb-quem">por ' + esc(p.standbyPor) + '</div>' : '') +
+          (doTecnico ? '<span class="etiqueta etiqueta--azul">Informado pelo técnico no report</span>' : '') +
+          (p.standbyMotivo ? '<div class="sb-motivo">' + esc(p.standbyMotivo) + '</div>' : '') +
+          (p.standbyPor ? '<div class="sb-quem">' + (doTecnico ? 'report enviado por ' : 'por ') + esc(p.standbyPor) + '</div>' : '') +
         '</div>';
       });
       html += '</div>';
@@ -639,6 +647,7 @@ function desenhar(res){
         '</div>' +
         '<div class="rdo-linha">' +
           '<span class="etiqueta">' + esc(dataBonita(r.data)) + '</span>' +
+          (r.standby ? '<span class="etiqueta etiqueta--azul">Stand by</span>' : '') +
         '</div>' +
         (r.supervisor ? '<div class="rdo-cliente">Supervisor: ' + esc(r.supervisor) + '</div>' : '') +
         ((r.autorNome || r.autor)
