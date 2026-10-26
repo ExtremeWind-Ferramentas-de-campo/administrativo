@@ -403,154 +403,193 @@ function acaoEhsAutorizar_(p) {
 
 
 /* ---------------------------------------------------------------------------
-   STAND BY — parque que não precisava enviar o report no dia
+   STAND BY e AUTORIZADO — marcações da cobrança do dia, numa aba só
    ---------------------------------------------------------------------------
-   Mesmo esquema do Autorizado: aba EHS_STANDBY na planilha do portal, uma
-   linha por data + parque, criada sozinha. Marcar exige motivo; desfazer
-   apaga a linha. Se o report chegar depois, ele vence: o parque aparece como
-   enviado e a marcação é ignorada.
+   Os dois botões da cobrança tiram o parque da lista com uma observação:
+     STANDBY     o parque não precisava enviar o report no dia
+     AUTORIZADO  o report foi feito no modelo do CLIENTE, fora do nosso app,
+                 então nada chegou na aba Reports EHS; o parque aparece em
+                 "Reportes encontrados" como autorizado
+   Ficam na aba EHS_STANDBY_AUTORIZADOS da planilha do portal (nasce sozinha),
+   uma linha por data + parque, com a coluna "tipo" dizendo qual botão foi.
+   Um parque tem uma marcação por dia: marcar o outro botão troca o tipo.
+   Desfazer apaga a linha. Se o report do nosso modelo chegar depois, ele
+   vence: o parque aparece como enviado e a marcação é ignorada.
+   (Não confundir com EHS_AUTORIZACOES, que é o Sim/Não do report que chegou.)
+
+   Antes eram duas abas (EHS_STANDBY e EHS_AUTORIZADOS) com o mesmo cabeçalho.
+   Na primeira vez que a aba nova é criada, as linhas das antigas são copiadas
+   para ela e as antigas são renomeadas com "(antiga)" — nada é apagado.
    --------------------------------------------------------------------------- */
 
-const ABA_EHS_STANDBY = 'EHS_STANDBY';
-const COLUNAS_EHS_STANDBY = ['chave', 'data', 'parque', 'motivo', 'matricula', 'atualizado_em'];
+const ABA_EHS_MARCACOES = 'EHS_STANDBY_AUTORIZADOS';
+const COLUNAS_EHS_MARCACOES = ['chave', 'data', 'parque', 'observacao', 'tipo', 'matricula', 'atualizado_em'];
+const TIPOS_MARCACAO = ['STANDBY', 'AUTORIZADO'];
+const ABAS_MARCACAO_ANTIGAS = [['EHS_STANDBY', 'STANDBY'], ['EHS_AUTORIZADOS', 'AUTORIZADO']];
 const STANDBY_MOTIVO_MAX = 300;
 
-function abaStandbyEHS_(criar) {
+/* criar = true: cria se não existir. Sem criar, ainda assim cria quando
+   alguma aba antiga existe — senão a primeira leitura depois da atualização
+   não enxergaria as marcações que já estavam lá. */
+function abaMarcacoesEHS_(criar, comTrava) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let aba = ss.getSheetByName(ABA_EHS_STANDBY);
-  if (!aba && criar) {
-    aba = ss.insertSheet(ABA_EHS_STANDBY);
-    aba.getRange(1, 1, 1, COLUNAS_EHS_STANDBY.length).setValues([COLUNAS_EHS_STANDBY]).setFontWeight('bold');
-    aba.setFrozenRows(1);
-    aba.getRange('A:B').setNumberFormat('@');
+  let aba = ss.getSheetByName(ABA_EHS_MARCACOES);
+  if (aba) { corrigirDatasMarcacoesEHS_(aba, comTrava); return aba; }
+
+  const antigas = ABAS_MARCACAO_ANTIGAS
+    .map(function (a) { return { aba: ss.getSheetByName(a[0]), tipo: a[1] }; })
+    .filter(function (a) { return a.aba; });
+  if (!criar && !antigas.length) return null;
+
+  try {
+    aba = ss.insertSheet(ABA_EHS_MARCACOES);
+  } catch (e) {
+    return ss.getSheetByName(ABA_EHS_MARCACOES);   // outra execução criou ao mesmo tempo
+  }
+  aba.getRange(1, 1, 1, COLUNAS_EHS_MARCACOES.length).setValues([COLUNAS_EHS_MARCACOES]).setFontWeight('bold');
+  aba.setFrozenRows(1);
+  aba.getRange('A:A').setNumberFormat('@');
+  aba.getRange('B:B').setNumberFormat('dd/mm/yyyy');  // data de verdade, exibida dd/mm/aaaa
+  aba.getRange('F:F').setNumberFormat('@');           // matrícula: preserva zero à esquerda
+  aba.getRange('G:G').setNumberFormat('dd/mm/yyyy hh:mm');
+  PropertiesService.getScriptProperties().setProperty('EHS_MARCACOES_DATAS_OK', '1');
+
+  // migração: chave | data | parque | texto | matricula | atualizado_em  ->  + tipo
+  // A data sai da chave ("aaaa-mm-dd|parque"): a coluna B das abas antigas
+  // podia vir como Date e virava texto longo ("Mon Oct 19 2026 ...").
+  const linhas = [];
+  antigas.forEach(function (a) {
+    if (a.aba.getLastRow() >= 2) {
+      a.aba.getRange(2, 1, a.aba.getLastRow() - 1, 6).getValues().forEach(function (l) {
+        if (!String(l[0]).trim()) return;
+        linhas.push([String(l[0]), dataDaChaveEHS_(l[0]) || l[1], l[2], l[3], a.tipo,
+                     String(l[4]).replace(/^'/, ''), l[5]]);
+      });
+    }
+  });
+  if (linhas.length) aba.getRange(2, 1, linhas.length, COLUNAS_EHS_MARCACOES.length).setValues(linhas);
+  antigas.forEach(function (a) {
+    try { a.aba.setName(a.aba.getName() + ' (antiga)'); } catch (e) { /* nome já usado: deixa */ }
+  });
+  if (antigas.length) {
+    registrar_('', 'EHS_MARCACOES', 'MIGRADO', linhas.length + ' linha(s) de ' +
+      antigas.map(function (a) { return a.tipo; }).join(' e '));
   }
   return aba;
 }
 
-/** -> { chaveTexto(parque): { motivo, matricula, em } } da data pedida */
-function lerStandbyEHS_(dataIso) {
-  const aba = abaStandbyEHS_(false);
+/* A chave é "aaaa-mm-dd|parque" e nunca muda de formato. É dela que sai o
+   dia da marcação — a coluna B é só para leitura humana (dd/mm/aaaa). */
+function isoDaChaveEHS_(chave) {
+  const m = String(chave || '').match(/^(\d{4}-\d{2}-\d{2})\|/);
+  return m ? m[1] : '';
+}
+/** "aaaa-mm-dd|parque" -> Date (meia-noite no fuso do script) para a coluna B */
+function dataDaChaveEHS_(chave) {
+  const iso = isoDaChaveEHS_(chave);
+  return iso ? Utilities.parseDate(iso, Session.getScriptTimeZone(), 'yyyy-MM-dd') : null;
+}
+
+/* Uma vez só: a aba criada pela primeira versão gravou a coluna B como texto
+   ("Mon Oct 19 2026 00:00:00 GMT-0300 ..." nas linhas migradas,
+   "2026-10-19" nas novas). Regrava B como data a partir da chave e aplica o
+   formato dd/mm/aaaa. Marcada nas propriedades para não repetir. */
+function corrigirDatasMarcacoesEHS_(aba, comTrava) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('EHS_MARCACOES_DATAS_OK')) return;
+  // comTrava: quem chamou (gravarMarcacaoEHS_) já segura a trava do script
+  const trava = comTrava ? null : LockService.getScriptLock();
+  if (trava && !trava.tryLock(10000)) return;    // tenta de novo na próxima chamada
+  try {
+    if (props.getProperty('EHS_MARCACOES_DATAS_OK')) return;
+    aba.getRange('B:B').setNumberFormat('dd/mm/yyyy');
+    aba.getRange('G:G').setNumberFormat('dd/mm/yyyy hh:mm');
+    const n = aba.getLastRow() - 1;
+    if (n > 0) {
+      const chaves = aba.getRange(2, 1, n, 1).getValues();
+      const atuais = aba.getRange(2, 2, n, 1).getValues();
+      const novas = chaves.map(function (c, i) { return [dataDaChaveEHS_(c[0]) || atuais[i][0]]; });
+      aba.getRange(2, 2, n, 1).setValues(novas);
+    }
+    props.setProperty('EHS_MARCACOES_DATAS_OK', '1');
+    registrar_('', 'EHS_MARCACOES', 'DATAS_CORRIGIDAS', Math.max(0, n) + ' linha(s)');
+  } finally {
+    if (trava) trava.releaseLock();
+  }
+}
+
+/** -> { chaveTexto(parque): { parque, observacao, matricula, em } } da data e do tipo pedidos */
+function lerMarcacoesEHS_(dataIso, tipo) {
+  const aba = abaMarcacoesEHS_(false);
   const mapa = {};
   if (!aba || aba.getLastRow() < 2) return mapa;
-  aba.getRange(2, 1, aba.getLastRow() - 1, COLUNAS_EHS_STANDBY.length).getDisplayValues()
+  aba.getRange(2, 1, aba.getLastRow() - 1, COLUNAS_EHS_MARCACOES.length).getDisplayValues()
     .forEach(function (l) {
-      if (String(l[1]) !== dataIso || !String(l[3]).trim()) return;
-      mapa[chaveTexto_(l[2])] = { motivo: String(l[3]), matricula: String(l[4]), em: String(l[5]) };
+      if (isoDaChaveEHS_(l[0]) !== dataIso || !String(l[3]).trim()) return;
+      if (String(l[4]).toUpperCase() !== tipo) return;
+      mapa[chaveTexto_(l[2])] = { parque: String(l[2]), observacao: String(l[3]), matricula: String(l[5]), em: String(l[6]) };
     });
   return mapa;
+}
+
+/** Stand by do dia: { chaveTexto(parque): { motivo, matricula, em } } */
+function lerStandbyEHS_(dataIso) {
+  const m = lerMarcacoesEHS_(dataIso, 'STANDBY');
+  Object.keys(m).forEach(function (k) { m[k].motivo = m[k].observacao; });
+  return m;
+}
+
+/** Autorizados do dia (modelo do cliente): { chaveTexto(parque): { parque, observacao, matricula, em } } */
+function lerAutorizadosEHS_(dataIso) {
+  return lerMarcacoesEHS_(dataIso, 'AUTORIZADO');
+}
+
+/* Grava ou desfaz a marcação de um parque no dia. texto vazio = desfazer
+   (só apaga se a linha for do mesmo tipo: desfazer o stand by não pode
+   apagar um autorizado). */
+function gravarMarcacaoEHS_(p, tipo, texto) {
+  const matricula = validarSessao_(p.token);
+  if (!matricula) return { ok: false, motivo: 'SESSAO' };
+
+  const data = dataISO_(p.data);
+  const parque = String(p.parque || '').replace(/\s+/g, ' ').trim();
+  const obs = String(texto || '').replace(/\s+/g, ' ').trim().slice(0, STANDBY_MOTIVO_MAX);
+  if (!data || !parque || TIPOS_MARCACAO.indexOf(tipo) === -1) return { ok: false, motivo: 'DADOS_INVALIDOS' };
+
+  const trava = LockService.getScriptLock();
+  if (!trava.tryLock(20000)) return { ok: false, motivo: 'OCUPADO' };
+  try {
+    const aba = abaMarcacoesEHS_(true, true);
+    const chave = chaveAutoriz_(data, parque);
+    let linha = -1, tipoAtual = '';
+    if (aba.getLastRow() >= 2) {
+      const vals = aba.getRange(2, 1, aba.getLastRow() - 1, 5).getDisplayValues();
+      for (let i = 0; i < vals.length; i++) {
+        if (String(vals[i][0]) === chave) { linha = i + 2; tipoAtual = String(vals[i][4]).toUpperCase(); break; }
+      }
+    }
+    if (!obs) {
+      if (linha > -1 && tipoAtual === tipo) aba.deleteRow(linha);
+    } else {
+      const nova = [chave, dataDaChaveEHS_(chave), parque, obs, tipo, String(matricula), new Date()];
+      if (linha > -1) aba.getRange(linha, 1, 1, nova.length).setValues([nova]);
+      else aba.appendRow(nova);
+    }
+    registrar_(matricula, 'EHS_' + tipo, 'OK', data + ' | ' + parque + ' | ' + (obs || 'DESFEITO'));
+    return { ok: true, data: data, parque: parque, tipo: tipo, observacao: obs };
+  } finally {
+    trava.releaseLock();
+  }
 }
 
 /** { data, parque, motivo } -> { ok }   motivo vazio = desfazer o stand by */
 function acaoEhsStandby_(p) {
-  const matricula = validarSessao_(p.token);
-  if (!matricula) return { ok: false, motivo: 'SESSAO' };
-
-  const data = dataISO_(p.data);
-  const parque = String(p.parque || '').replace(/\s+/g, ' ').trim();
-  const motivo = String(p.motivo || '').replace(/\s+/g, ' ').trim().slice(0, STANDBY_MOTIVO_MAX);
-  if (!data || !parque) return { ok: false, motivo: 'DADOS_INVALIDOS' };
-
-  const trava = LockService.getScriptLock();
-  if (!trava.tryLock(20000)) return { ok: false, motivo: 'OCUPADO' };
-  try {
-    const aba = abaStandbyEHS_(true);
-    const chave = chaveAutoriz_(data, parque);
-    let linha = -1;
-    if (aba.getLastRow() >= 2) {
-      const chaves = aba.getRange(2, 1, aba.getLastRow() - 1, 1).getDisplayValues();
-      for (let i = 0; i < chaves.length; i++) {
-        if (String(chaves[i][0]) === chave) { linha = i + 2; break; }
-      }
-    }
-    if (!motivo) {
-      if (linha > -1) aba.deleteRow(linha);
-    } else {
-      const nova = [chave, data, parque, motivo, "'" + matricula, new Date()];
-      if (linha > -1) aba.getRange(linha, 1, 1, nova.length).setValues([nova]);
-      else aba.appendRow(nova);
-    }
-    registrar_(matricula, 'EHS_STANDBY', 'OK', data + ' | ' + parque + ' | ' + (motivo || 'DESFEITO'));
-    return { ok: true, data: data, parque: parque, motivo: motivo };
-  } finally {
-    trava.releaseLock();
-  }
+  return gravarMarcacaoEHS_(p, 'STANDBY', p.motivo);
 }
 
-
-/* ---------------------------------------------------------------------------
-   AUTORIZADO SEM REPORT NO SISTEMA — parque que mandou o report no modelo do
-   CLIENTE (fora do nosso app), então nada chegou na aba Reports EHS.
-   ---------------------------------------------------------------------------
-   Mesmo esquema do Stand by: aba EHS_AUTORIZADOS na planilha do portal, uma
-   linha por data + parque, criada sozinha. Marcar exige observação; desfazer
-   apaga a linha. O parque sai da cobrança e aparece em "Reportes
-   encontrados" como autorizado. Se o report do nosso modelo chegar depois,
-   ele vence e a marcação deixa de aparecer.
-   (Não confundir com EHS_AUTORIZACOES, que é o Sim/Não do report que chegou.)
-   --------------------------------------------------------------------------- */
-
-const ABA_EHS_AUTORIZADOS = 'EHS_AUTORIZADOS';
-const COLUNAS_EHS_AUTORIZADOS = ['chave', 'data', 'parque', 'observacao', 'matricula', 'atualizado_em'];
-
-function abaAutorizadosEHS_(criar) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let aba = ss.getSheetByName(ABA_EHS_AUTORIZADOS);
-  if (!aba && criar) {
-    aba = ss.insertSheet(ABA_EHS_AUTORIZADOS);
-    aba.getRange(1, 1, 1, COLUNAS_EHS_AUTORIZADOS.length).setValues([COLUNAS_EHS_AUTORIZADOS]).setFontWeight('bold');
-    aba.setFrozenRows(1);
-    aba.getRange('A:B').setNumberFormat('@');
-  }
-  return aba;
-}
-
-/** -> { chaveTexto(parque): { observacao, matricula, em } } da data pedida */
-function lerAutorizadosEHS_(dataIso) {
-  const aba = abaAutorizadosEHS_(false);
-  const mapa = {};
-  if (!aba || aba.getLastRow() < 2) return mapa;
-  aba.getRange(2, 1, aba.getLastRow() - 1, COLUNAS_EHS_AUTORIZADOS.length).getDisplayValues()
-    .forEach(function (l) {
-      if (String(l[1]) !== dataIso || !String(l[3]).trim()) return;
-      mapa[chaveTexto_(l[2])] = { parque: String(l[2]), observacao: String(l[3]), matricula: String(l[4]), em: String(l[5]) };
-    });
-  return mapa;
-}
-
-/** { data, parque, observacao } -> { ok }   observação vazia = desfazer */
+/** { data, parque, observacao } -> { ok }   observação vazia = desfazer o autorizado */
 function acaoEhsAutorizadoManual_(p) {
-  const matricula = validarSessao_(p.token);
-  if (!matricula) return { ok: false, motivo: 'SESSAO' };
-
-  const data = dataISO_(p.data);
-  const parque = String(p.parque || '').replace(/\s+/g, ' ').trim();
-  const obs = String(p.observacao || '').replace(/\s+/g, ' ').trim().slice(0, STANDBY_MOTIVO_MAX);
-  if (!data || !parque) return { ok: false, motivo: 'DADOS_INVALIDOS' };
-
-  const trava = LockService.getScriptLock();
-  if (!trava.tryLock(20000)) return { ok: false, motivo: 'OCUPADO' };
-  try {
-    const aba = abaAutorizadosEHS_(true);
-    const chave = chaveAutoriz_(data, parque);
-    let linha = -1;
-    if (aba.getLastRow() >= 2) {
-      const chaves = aba.getRange(2, 1, aba.getLastRow() - 1, 1).getDisplayValues();
-      for (let i = 0; i < chaves.length; i++) {
-        if (String(chaves[i][0]) === chave) { linha = i + 2; break; }
-      }
-    }
-    if (!obs) {
-      if (linha > -1) aba.deleteRow(linha);
-    } else {
-      const nova = [chave, data, parque, obs, "'" + matricula, new Date()];
-      if (linha > -1) aba.getRange(linha, 1, 1, nova.length).setValues([nova]);
-      else aba.appendRow(nova);
-    }
-    registrar_(matricula, 'EHS_AUTORIZADO_MANUAL', 'OK', data + ' | ' + parque + ' | ' + (obs || 'DESFEITO'));
-    return { ok: true, data: data, parque: parque, observacao: obs };
-  } finally {
-    trava.releaseLock();
-  }
+  return gravarMarcacaoEHS_(p, 'AUTORIZADO', p.observacao);
 }
 
 

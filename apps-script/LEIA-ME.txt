@@ -9,6 +9,7 @@ GitHub não usa nada daqui; quem roda é o editor do Apps Script.
                      incluindo DATA DE FINALIZAÇÃO e SITUAÇÃO
   StatusEHS.gs       Status RD EHS (aba "Reports EHS" da planilha do RDO)
   Avaliacao.gs       Avaliação de projetos concluídos (matriz e banco no Dropbox)
+  StatusEquipes.gs   Status diário das equipes (aba EQUIPES_STATUS)
   Materiais.gs       Solicitação de materiais  <- COPIAR DO EDITOR
 
 Materiais.gs não veio neste pacote: a cópia que havia aqui era antiga (sem

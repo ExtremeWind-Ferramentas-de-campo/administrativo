@@ -415,6 +415,10 @@ function doPost(e) {
       case 'ehsAutorizar':           resposta = acaoEhsAutorizar_(corpo);          break;
       case 'ehsStandby':             resposta = acaoEhsStandby_(corpo);            break;
       case 'ehsAutorizadoManual':    resposta = acaoEhsAutorizadoManual_(corpo);   break;
+
+      // Status das equipes — implementado em StatusEquipes.gs
+      case 'equipesStatus':          resposta = acaoEquipesStatus_(corpo);         break;
+      case 'equipesMarcar':          resposta = acaoEquipesMarcar_(corpo);         break;
       case 'ehsArquivos':            resposta = acaoEhsArquivos_(corpo);           break;
 
       // Avaliação de projetos — implementado em Avaliacao.gs

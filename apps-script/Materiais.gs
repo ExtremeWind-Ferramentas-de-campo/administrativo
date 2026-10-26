@@ -295,11 +295,14 @@ function acaoMateriaisAnexar_(p) {
 const CACHE_MINIATURA_SEG = 21600;   // 6 h, o teto do CacheService
 const CACHE_IDS_ANEXOS_SEG = 300;
 
-/** Conjunto dos ids de anexo citados pelos cards. */
-function idsDeAnexosConhecidos_() {
-  const guardado = lerGrande_('mat_ids_anexos');
-  if (guardado) {
-    try { return JSON.parse(guardado); } catch (e) { /* cache ruim: refaz */ }
+/** Ids de anexo citados pelos cards: { id: 't' (miniatura) | 'o' (original de foto) | 'a' (outro anexo) }.
+ *  forcar = relê a aba, ignorando o cache (foto anexada há menos de 5 min). */
+function idsDeAnexosConhecidos_(forcar) {
+  if (!forcar) {
+    const guardado = lerGrande_(CHAVE_IDS_ANEXOS);
+    if (guardado) {
+      try { return JSON.parse(guardado); } catch (e) { /* cache ruim: refaz */ }
+    }
   }
 
   const aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_MAT_CARDS);
@@ -311,51 +314,104 @@ function idsDeAnexosConhecidos_() {
     try {
       const card = JSON.parse(dados[l][4]);
       (card.attachments || []).forEach(function (a) {
-        if (a.thumbId) ids[String(a.thumbId)] = true;
-        if (a.driveId) ids[String(a.driveId)] = true;
+        if (a.thumbId) ids[String(a.thumbId)] = 't';
+        if (a.driveId) ids[String(a.driveId)] = /^image\//.test(a.type || '') ? 'o' : 'a';
       });
     } catch (e) { /* linha corrompida: ignora */ }
   }
 
-  guardarGrande_('mat_ids_anexos', JSON.stringify(ids), CACHE_IDS_ANEXOS_SEG);
+  guardarGrande_(CHAVE_IDS_ANEXOS, JSON.stringify(ids), CACHE_IDS_ANEXOS_SEG);
   return ids;
 }
+/* v2: o valor passou a dizer o tipo do id (antes era só true). */
+const CHAVE_IDS_ANEXOS = 'mat_ids_anexos_v2';
 
+/* Tempo máximo gasto baixando miniaturas numa chamada. O que não couber volta
+   em "pendentes" e o quadro pede de novo — melhor que estourar o limite de
+   execução e perder o lote inteiro. */
+const MINIATURAS_MAX_MS = 20000;
+
+/**
+ * { ids: [id] } -> { ok, mapa: { id: base64 }, tipos: { id: mime }, pendentes: [id] }
+ *
+ * O id pode ser:
+ *  - a miniatura gerada no navegador (thumbId) — o caso normal;
+ *  - o ORIGINAL de uma foto sem miniatura (ex.: HEIC do iPhone, que o
+ *    navegador não consegue reduzir). Nesse caso volta a miniatura que o
+ *    próprio Drive gera do arquivo; se o Drive ainda não gerou, o id vai para
+ *    "pendentes" e o quadro tenta de novo mais tarde.
+ */
 function acaoMateriaisMiniaturas_(p) {
   const matricula = validarSessao_(p.token);
   if (!matricula) return { ok: false, motivo: 'SESSAO' };
 
   const ids = (p.ids || []).slice(0, 60).map(String);
-  if (!ids.length) return { ok: true, mapa: {} };
+  if (!ids.length) return { ok: true, mapa: {}, tipos: {}, pendentes: [] };
 
-  const cache = CacheService.getScriptCache();
-  const mapa = {};
+  const mapa = {}, tipos = {}, pendentes = [];
 
   // 1. o que já está no cache sai sem tocar no Drive
   const faltando = [];
   ids.forEach(function (id) {
     const guardado = lerGrande_('thumb_' + id);
-    if (guardado) mapa[id] = guardado; else faltando.push(id);
+    if (guardado) {
+      const sep = guardado.indexOf('|');
+      // formato novo "mime|base64"; o antigo era só o base64 de um JPEG
+      if (sep > 0 && sep < 40) { tipos[id] = guardado.slice(0, sep); mapa[id] = guardado.slice(sep + 1); }
+      else { tipos[id] = 'image/jpeg'; mapa[id] = guardado; }
+    } else faltando.push(id);
   });
-  if (!faltando.length) return { ok: true, mapa: mapa };
+  if (!faltando.length) return { ok: true, mapa: mapa, tipos: tipos, pendentes: pendentes };
 
-  // 2. o resto é baixado, uma ida ao Drive por arquivo
-  const conhecidos = idsDeAnexosConhecidos_();
+  // 2. o resto é baixado, uma ida ao Drive por arquivo. Id que não está na
+  //    lista guardada pode ser de foto anexada agora há pouco: relê uma vez.
+  let conhecidos = idsDeAnexosConhecidos_(false);
+  if (faltando.some(function (id) { return !conhecidos[id]; })) conhecidos = idsDeAnexosConhecidos_(true);
+
+  const inicio = Date.now();
   faltando.forEach(function (id) {
-    if (!conhecidos[id]) return;
+    const tipoId = conhecidos[id];
+    if (!tipoId || tipoId === 'a') return;                 // não é foto de nenhum card: não entrega
+    if (Date.now() - inicio > MINIATURAS_MAX_MS) { pendentes.push(id); return; }
     try {
-      const b64 = Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes());
-      mapa[id] = b64;
-      guardarGrande_('thumb_' + id, b64, CACHE_MINIATURA_SEG);
-    } catch (e) { /* miniatura sumiu: o card cai no ícone */ }
+      const arquivo = DriveApp.getFileById(id);
+      const blob = tipoId === 't' ? arquivo.getBlob() : arquivo.getThumbnail();
+      if (!blob) { pendentes.push(id); return; }             // Drive ainda gerando a miniatura
+      const mime = blob.getContentType() || 'image/jpeg';
+      const b64 = Utilities.base64Encode(blob.getBytes());
+      mapa[id] = b64; tipos[id] = mime;
+      guardarGrande_('thumb_' + id, mime + '|' + b64, CACHE_MINIATURA_SEG);
+    } catch (e) { /* arquivo sumiu do Drive: o card mostra "foto indisponível" */ }
   });
 
-  return { ok: true, mapa: mapa };
+  return { ok: true, mapa: mapa, tipos: tipos, pendentes: pendentes };
 }
 
 /** Menu/manutenção: esquece a lista de ids de anexo (use se um card sumir do quadro). */
 function limparCacheAnexos() {
-  CacheService.getScriptCache().remove('mat_ids_anexos_n');
+  CacheService.getScriptCache().remove(CHAVE_IDS_ANEXOS + '_n');
+}
+
+/** Diagnóstico à mão: quantas fotos os cards têm, quantas sem miniatura e
+ *  quantas apontam para arquivo que não existe mais no Drive. */
+function testarFotosMateriais() {
+  const ids = idsDeAnexosConhecidos_(true);
+  let fotos = 0, semMini = 0, sumidos = 0;
+  const aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_MAT_CARDS);
+  aba.getDataRange().getValues().slice(1).forEach(function (l) {
+    if (!l[0]) return;
+    try {
+      (JSON.parse(l[4]).attachments || []).forEach(function (a) {
+        if (!/^image\//.test(a.type || '')) return;
+        fotos++;
+        if (!a.thumbId) semMini++;
+        const alvo = a.thumbId || a.driveId;
+        try { DriveApp.getFileById(String(alvo)); } catch (e) { sumidos++; }
+      });
+    } catch (e) { /* linha corrompida */ }
+  });
+  Logger.log('Ids conhecidos: ' + Object.keys(ids).length + ' | fotos nos cards: ' + fotos +
+             ' | sem miniatura: ' + semMini + ' | arquivo sumido do Drive: ' + sumidos);
 }
 
 
