@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Status das Equipes — Extreme Wind</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#2b7fd0">
+<link rel="stylesheet" href="../assets/base.css">
+<style>
+  .filtros{
+    display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    background:var(--card);border:1px solid var(--linha);border-radius:var(--raio);
+    padding:16px;box-shadow:var(--sombra);margin-bottom:22px;align-items:end;
+  }
+  .filtros .campo{margin:0}
+  .filtros .acoes{display:flex;gap:8px}
+  .filtros .acoes .btn{flex:1}
+
+  .placar{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:22px}
+  .placar-item{background:var(--card);border:1px solid var(--linha);border-left:4px solid var(--c);border-radius:12px;padding:14px 16px;box-shadow:var(--sombra)}
+  .placar-num{font-size:1.7rem;font-weight:800;line-height:1;color:var(--c)}
+  .placar-rot{font-size:.74rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+
+  .dia-info{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.9rem;color:var(--muted);margin-bottom:16px}
+  .dia-info strong{color:var(--ink)}
+
+  /* cores das situações */
+  .st-ATIVIDADE{--st:var(--ok);--st-fraco:var(--ok-fraco)}
+  .st-STANDBY{--st:var(--azul);--st-fraco:var(--azul-fraco)}
+  .st-ABSENTEISMO{--st:var(--erro);--st-fraco:var(--erro-fraco)}
+  .st-GARANTIA{--st:var(--alerta);--st-fraco:var(--alerta-fraco)}
+
+  .grade-eq{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))}
+  .eq{
+    background:var(--card);border:1px solid var(--linha);border-left:5px solid var(--c);
+    border-radius:var(--raio);padding:14px 16px;box-shadow:var(--sombra);display:flex;flex-direction:column;gap:10px;
+  }
+  .eq-topo{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+  .eq-parque{font-weight:800;font-size:1rem;line-height:1.25}
+  .eq-meta{font-size:.8rem;color:var(--muted);margin-top:2px}
+  .eq-cliente{font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--c)}
+  .eq-atual{font-size:.72rem;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap;background:var(--st-fraco);color:var(--st)}
+  .eq-atual.vazio{background:var(--card-2);color:var(--faint)}
+
+  .opcoes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .opcoes button{
+    font:inherit;font-size:.84rem;font-weight:700;min-height:38px;border-radius:10px;cursor:pointer;
+    border:1px solid var(--linha);background:var(--card-2);color:var(--muted);
+  }
+  .opcoes button:hover{border-color:var(--st);color:var(--ink)}
+  .opcoes button:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+  .opcoes button[aria-pressed="true"]{background:var(--st);border-color:var(--st);color:#fff}
+
+  .eq textarea{
+    width:100%;min-height:64px;resize:vertical;font:inherit;font-size:.86rem;padding:8px 10px;
+    border:1px solid var(--linha);border-radius:10px;background:var(--card-2);color:var(--ink);
+  }
+  .eq textarea:focus{outline:2px solid var(--azul);outline-offset:1px}
+  .eq textarea.falta{border-color:var(--erro)}
+  .eq-obs-rot{font-size:.74rem;font-weight:700;color:var(--muted)}
+  .eq-rodape{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}
+  .eq-quem{font-size:.74rem;color:var(--faint)}
+  .eq-limpar{border:0;background:none;color:var(--muted);font:inherit;font-size:.76rem;text-decoration:underline;cursor:pointer;padding:4px}
+  .eq-limpar:hover{color:var(--erro)}
+
+  .carregando{text-align:center;padding:40px;color:var(--muted);font-size:.9rem}
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-marca">
+    <span class="topo-titulo">Status das Equipes</span>
+    <span class="topo-sub">Supervisão de Campo</span>
+  </div>
+  <div class="topo-espaco"></div>
+  <span class="topo-sub" id="quemSou"></span>
+  <a class="topo-btn" href="supervisao-campo.html">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <span class="rotulo">Voltar</span>
+  </a>
+</header>
+
+<main class="conteudo">
+  <div class="aviso" id="avisoTopo"></div>
+
+  <div class="filtros">
+    <div class="campo">
+      <label for="f-data">Data</label>
+      <input id="f-data" type="date">
+    </div>
+    <div class="campo">
+      <label for="f-cliente">Cliente</label>
+      <select id="f-cliente"><option value="">Todos</option></select>
+    </div>
+    <div class="campo">
+      <label for="f-parque">Parque</label>
+      <select id="f-parque"><option value="">Todos</option></select>
+    </div>
+    <div class="acoes">
+      <button class="btn" id="btBuscar" type="button">Buscar</button>
+      <button class="btn btn--vazado" id="btOntem" type="button">Ontem</button>
+      <button class="btn btn--vazado" id="btHoje" type="button">Hoje</button>
+    </div>
+  </div>
+
+  <div id="painel"><div class="carregando">Carregando…</div></div>
+</main>
+
+<div class="bloqueio" id="bloqueio" hidden>
+  <div class="bloqueio-cx">
+    <p class="bloqueio-msg" id="bloqueioMsg"></p>
+    <button class="btn" id="bloqueioAcao" type="button">Ir para o portal</button>
+  </div>
+</div>
+<div class="recado" id="recado" hidden></div>
+
+<script src="../config/config.js"></script>
+<script src="../assets/base.js"></script>
+<script>
+/* ============================================================================
+   STATUS DAS EQUIPES
+   Todo dia o responsável marca, para cada parque em andamento, se a equipe
+   está em Atividade, Stand by, Absenteísmo ou Garantia. Fora Atividade, a
+   observação é obrigatória. Grava na aba EQUIPES_STATUS da planilha do
+   portal (StatusEquipes.gs). Os parques são os mesmos da cobrança do Status
+   RDO: projeto em andamento que já tinha começado na data escolhida.
+   ============================================================================ */
+
+Object.assign(MENSAGENS_MODULO, {
+  FALTA_OBSERVACAO:    'Escreva a observação: ela é obrigatória para essa opção.',
+  PROJETO_INEXISTENTE: 'Este parque não está mais em Projetos em Andamento.'
+});
+
+var OPCOES = [];          // [{ valor, rotulo, obs }] — vem do servidor
+var DATA_NA_TELA = '';
+var PROJETOS = [];
+
+function avisoTopo(txt, tipo){
+  var el = document.getElementById('avisoTopo');
+  if(!txt){ el.removeAttribute('data-tipo'); el.textContent = ''; return; }
+  el.textContent = txt; el.setAttribute('data-tipo', tipo || 'erro');
+}
+
+function opcao(valor){ return OPCOES.filter(function(o){ return o.valor === valor; })[0] || null; }
+
+function preencherFiltros(){
+  // mesma lista do Status RDO: clientes/parques do RDO + dos projetos
+  return chamar('rdoFiltros', {})
+    .then(function(res){
+      if(!res || !res.ok) return;
+      var sc = document.getElementById('f-cliente'), sp = document.getElementById('f-parque');
+      (res.clientes || []).forEach(function(c){ var o = document.createElement('option'); o.value = c; o.textContent = c; sc.appendChild(o); });
+      (res.parques || []).forEach(function(p){ var o = document.createElement('option'); o.value = p; o.textContent = p; sp.appendChild(o); });
+    })
+    .catch(function(){ /* filtros vazios não impedem a consulta */ });
+}
+
+function buscar(){
+  var painel = document.getElementById('painel');
+  painel.innerHTML = '<div class="carregando">Carregando as equipes…</div>';
+  avisoTopo('');
+  return chamar('equipesStatus', {
+    data:    document.getElementById('f-data').value,
+    cliente: document.getElementById('f-cliente').value,
+    parque:  document.getElementById('f-parque').value
+  })
+  .then(function(res){
+    if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
+    OPCOES = res.opcoes || [];
+    DATA_NA_TELA = res.data;
+    PROJETOS = res.projetos || [];
+    desenhar();
+  })
+  .catch(function(err){
+    if(err && err.motivo === 'SESSAO') return;
+    painel.innerHTML = '';
+    avisoTopo(traduzirErro(err) + (err && err.detalhe ? ' (' + err.detalhe + ')' : ''), 'erro');
+  });
+}
+
+function desenhar(){
+  var painel = document.getElementById('painel');
+  var html = '<div class="dia-info"><strong>' + esc(dataBonita(DATA_NA_TELA)) + '</strong>' +
+             '<span>· ' + esc(diaDaSemana(DATA_NA_TELA)) + '</span></div>';
+
+  if(!PROJETOS.length){
+    html += (document.getElementById('f-cliente').value || document.getElementById('f-parque').value)
+      ? '<div class="vazio">Nenhum parque em andamento com esse cliente/parque nesta data.</div>'
+      : '<div class="vazio">Nenhum parque em andamento nesta data. Os parques vêm de <strong>Projetos em Andamento</strong>.</div>';
+    painel.innerHTML = html;
+    return;
+  }
+
+  var cont = { sem: 0 };
+  OPCOES.forEach(function(o){ cont[o.valor] = 0; });
+  PROJETOS.forEach(function(p){
+    if(p.marcacao && cont[p.marcacao.status] !== undefined) cont[p.marcacao.status]++; else cont.sem++;
+  });
+  var cores = { ATIVIDADE:'var(--ok)', STANDBY:'var(--azul)', ABSENTEISMO:'var(--erro)', GARANTIA:'var(--alerta)' };
+  html += '<div class="placar">' +
+    '<div class="placar-item" style="--c:var(--ink)"><div class="placar-num">' + PROJETOS.length + '</div><div class="placar-rot">Parques</div></div>' +
+    OPCOES.map(function(o){
+      return '<div class="placar-item" style="--c:' + (cores[o.valor] || 'var(--azul)') + '"><div class="placar-num">' + cont[o.valor] +
+             '</div><div class="placar-rot">' + esc(o.rotulo) + '</div></div>';
+    }).join('') +
+    '<div class="placar-item" style="--c:var(--faint)"><div class="placar-num">' + cont.sem + '</div><div class="placar-rot">Sem marcação</div></div>' +
+  '</div>';
+
+  html += '<div class="grade-eq">' + PROJETOS.map(cartao).join('') + '</div>';
+  painel.innerHTML = html;
+  painel.querySelectorAll('.eq').forEach(atualizarCartao);
+}
+
+function cartao(p, i){
+  var m = p.marcacao;
+  var atual = m ? opcao(m.status) : null;
+  return '<div class="eq" data-i="' + i + '" style="--c:' + corDoCliente(p.cliente) + '">' +
+    '<div class="eq-topo"><div>' +
+      '<div class="eq-parque">' + esc(p.parque || '(sem parque)') + '</div>' +
+      '<div class="eq-cliente">' + esc(p.cliente || 'sem cliente') + '</div>' +
+      '<div class="eq-meta">' + (p.supervisor ? 'Sup. ' + esc(p.supervisor) : 'sem supervisor') +
+        (p.tipoReparo ? ' · ' + esc(p.tipoReparo) : '') + '</div>' +
+    '</div>' +
+    '<span class="eq-atual ' + (atual ? 'st-' + atual.valor : 'vazio') + '">' + (atual ? esc(atual.rotulo) : 'Sem marcação') + '</span>' +
+    '</div>' +
+    '<div class="opcoes" role="group" aria-label="Situação da equipe">' +
+      OPCOES.map(function(o){
+        return '<button type="button" class="st-' + o.valor + '" data-st="' + o.valor + '" aria-pressed="' + (!!m && m.status === o.valor) + '">' +
+               esc(o.rotulo) + '</button>';
+      }).join('') +
+    '</div>' +
+    '<label class="eq-obs-rot" for="obs-' + i + '">Observação <span class="eq-obs-req"></span></label>' +
+    '<textarea id="obs-' + i + '" maxlength="500" placeholder="O que está acontecendo com a equipe hoje?">' + esc(m ? m.observacao : '') + '</textarea>' +
+    '<div class="eq-rodape">' +
+      '<span class="eq-quem">' + (m && m.por ? 'por ' + esc(m.por) + (m.em ? ' · ' + esc(m.em) : '') : '') + '</span>' +
+      '<span>' +
+        (m ? '<button type="button" class="eq-limpar" data-limpar="1">Apagar marcação</button>' : '') +
+        '<button type="button" class="btn btn--pequeno" data-salvar="1" disabled>Salvar</button>' +
+      '</span>' +
+    '</div>' +
+  '</div>';
+}
+
+/* Estado do cartão: opção escolhida e se o Salvar pode ser apertado. */
+function escolhida(el){
+  var b = el.querySelector('.opcoes button[aria-pressed="true"]');
+  return b ? b.getAttribute('data-st') : '';
+}
+function atualizarCartao(el){
+  var p = PROJETOS[+el.getAttribute('data-i')];
+  var st = escolhida(el);
+  var o = opcao(st);
+  var ta = el.querySelector('textarea');
+  var obs = ta.value.trim();
+  var precisa = !!(o && o.obs);
+  el.querySelector('.eq-obs-req').textContent = precisa ? '(obrigatória)' : (st ? '(opcional)' : '');
+  ta.classList.toggle('falta', precisa && !obs);
+  var m = p.marcacao;
+  var mudou = !m ? !!st : (st !== m.status || obs !== String(m.observacao || '').trim());
+  el.querySelector('[data-salvar]').disabled = !st || !mudou || (precisa && !obs);
+}
+
+function salvar(el, apagar){
+  var p = PROJETOS[+el.getAttribute('data-i')];
+  var st = apagar ? '' : escolhida(el);
+  var obs = apagar ? '' : el.querySelector('textarea').value.trim();
+  if(apagar && !confirm('Apagar a marcação de ' + p.parque + ' em ' + dataBonita(DATA_NA_TELA) + '?')) return;
+  var bt = el.querySelector('[data-salvar]');
+  bt.disabled = true; bt.textContent = 'Salvando…';
+  chamar('equipesMarcar', { data: DATA_NA_TELA, parque: p.parque, status: st, observacao: obs })
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
+      p.marcacao = st ? { status: st, observacao: obs, por: (SESSAO && SESSAO.nome) || 'você', em: 'agora' } : null;
+      recado(p.parque + ': ' + (st ? opcao(st).rotulo : 'marcação apagada') + '.', 'ok');
+      desenhar();
+    })
+    .catch(function(err){
+      bt.textContent = 'Salvar';
+      atualizarCartao(el);
+      if(err && err.motivo === 'SESSAO') return;
+      recado(traduzirErro(err), 'erro');
+    });
+}
+
+/* ---------- eventos (um ouvinte só, no painel) ---------- */
+(function(){
+  var painel = document.getElementById('painel');
+  painel.addEventListener('click', function(e){
+    var el = e.target.closest('.eq');
+    if(!el) return;
+    var op = e.target.closest('.opcoes button');
+    if(op){
+      el.querySelectorAll('.opcoes button').forEach(function(b){ b.setAttribute('aria-pressed', String(b === op)); });
+      atualizarCartao(el);
+      var o = opcao(op.getAttribute('data-st'));
+      if(o && o.obs && !el.querySelector('textarea').value.trim()) el.querySelector('textarea').focus();
+      return;
+    }
+    if(e.target.closest('[data-salvar]')){ salvar(el, false); return; }
+    if(e.target.closest('[data-limpar]')){ salvar(el, true); return; }
+  });
+  painel.addEventListener('input', function(e){
+    var el = e.target.closest('.eq');
+    if(el && e.target.tagName === 'TEXTAREA') atualizarCartao(el);
+  });
+})();
+
+document.getElementById('btBuscar').addEventListener('click', buscar);
+document.getElementById('btHoje').addEventListener('click', function(){
+  document.getElementById('f-data').value = hojeISO();
+  document.getElementById('f-cliente').value = '';
+  document.getElementById('f-parque').value = '';
+  buscar();
+});
+/* Ontem troca só a data: cliente e parque escolhidos continuam valendo. */
+document.getElementById('btOntem').addEventListener('click', function(){
+  document.getElementById('f-data').value = ontemISO();
+  buscar();
+});
+['f-cliente','f-parque','f-data'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', buscar);
+});
+
+if(iniciarModulo()){
+  document.getElementById('f-data').value = hojeISO();
+  Promise.all([preencherFiltros(), buscar()]);
+}
+</script>
+</body>
+</html>
