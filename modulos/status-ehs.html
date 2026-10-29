@@ -58,6 +58,13 @@
   .autoriz-par button[aria-pressed="true"][data-valor="NAO"]{background:var(--erro-fraco);color:var(--erro)}
   .autoriz-par button:disabled{cursor:wait;opacity:.6}
   .autoriz-quem{font-size:.76rem;color:var(--faint)}
+  /* situação do envio automático para os grupos do WhatsApp */
+  .zap-auto{flex:1 0 100%;font-size:.76rem;font-weight:700}
+  .zap-auto:empty{display:none}
+  .zap-auto-fila{color:var(--alerta)}
+  .zap-auto-ok{color:var(--ok)}
+  .zap-auto-erro{color:var(--erro)}
+  .zap-auto-neutro{color:var(--faint)}
 
   .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   /* Stand by e Autorizado */
@@ -249,7 +256,7 @@ function buscar(){
 /* Autorizado (Sim / Não) — só no card de report que tem PDF.
    Vale para parque + data DO REPORT (não a do filtro). Clicar de novo na
    opção marcada desmarca: serve para o clique sem querer. */
-function htmlAutoriz(parque, data, valor, quem){
+function htmlAutoriz(parque, data, valor, quem, zap, zapDetalhe){
   var b = function(v, rot){
     return '<button type="button" data-valor="' + v + '" aria-pressed="' + (valor === v) + '"' +
            ' title="' + (valor === v ? 'Clique de novo para desmarcar' : rot) + '">' + rot + '</button>';
@@ -258,7 +265,27 @@ function htmlAutoriz(parque, data, valor, quem){
     '<span class="autoriz-rot">Autorizado</span>' +
     '<span class="autoriz-par" role="group" aria-label="Autorizado">' + b('SIM','Sim') + b('NAO','Não') + '</span>' +
     '<span class="autoriz-quem">' + (valor && quem ? 'por ' + esc(quem) : '') + '</span>' +
+    '<span class="zap-auto" data-zap-auto>' + textoZapAuto(zap, zapDetalhe) + '</span>' +
   '</div>';
+}
+
+/* Situação do envio automático para os grupos (ZapEHS.gs). Autorizado = Sim
+   põe o report na fila; o servidor envia em até ~1 minuto. */
+var ZAP_AUTO = {
+  NA_FILA:    ['fila',   'WhatsApp: na fila, enviando em instantes'],
+  PENDENTE:   ['fila',   'WhatsApp: na fila, enviando em instantes'],
+  ENVIANDO:   ['fila',   'WhatsApp: enviando para os grupos…'],
+  ENVIADO:    ['ok',     'WhatsApp: enviado aos grupos ✓'],
+  JA_ENVIADO: ['ok',     'WhatsApp: já tinha sido enviado aos grupos ✓'],
+  ERRO:       ['erro',   'WhatsApp: falhou'],
+  FALHOU:     ['erro',   'WhatsApp: não entrou na fila'],
+  CANCELADO:  ['neutro', 'WhatsApp: envio cancelado']
+};
+function textoZapAuto(zap, detalhe){
+  var z = ZAP_AUTO[zap];
+  if(!z) return '';
+  return '<span class="zap-auto-' + z[0] + '"' + (detalhe ? ' title="' + esc(detalhe) + '"' : '') + '>' +
+         esc(z[1] + (zap === 'ERRO' && detalhe ? ' — ' + detalhe : '')) + '</span>';
 }
 
 function marcarAutoriz(grupo, clicado){
@@ -289,7 +316,10 @@ function marcarAutoriz(grupo, clicado){
       if(quem) quem.textContent = valor ? 'por ' + ((SESSAO && SESSAO.nome) || 'você') : '';
       var zap = grupo.parentNode && grupo.parentNode.querySelector('.zap');
       if(zap){ zap.hidden = (valor !== 'SIM'); }
-      recado(parque + ': ' + (valor === 'SIM' ? 'autorizado' : valor === 'NAO' ? 'não autorizado' : 'marcação removida') + '.', 'ok');
+      var auto = grupo.querySelector('[data-zap-auto]');
+      if(auto && res.zap) auto.innerHTML = textoZapAuto(res.zap, '');
+      recado(parque + ': ' + (valor === 'SIM' ? 'autorizado' : valor === 'NAO' ? 'não autorizado' : 'marcação removida') +
+             (res.zap === 'NA_FILA' ? ' — envio para os grupos do WhatsApp em instantes.' : '.'), 'ok');
     })
     .catch(function(err){
       pintar(antes);
@@ -656,7 +686,7 @@ function desenhar(res){
           ? '<div class="rdo-abrir">Abrir PDF ' +
             '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></div>'
           : '<div class="rdo-cliente" style="color:var(--faint)">Sem link de PDF nesta linha</div>') +
-        (temLink ? htmlAutoriz(r.parque, r.data, r.autorizado, r.autorizadoPor) : '') +
+        (temLink ? htmlAutoriz(r.parque, r.data, r.autorizado, r.autorizadoPor, r.zap, r.zapDetalhe) : '') +
         (temLink && r.temArquivos ? htmlZap(r) : '') +
       '</div>';
     });
