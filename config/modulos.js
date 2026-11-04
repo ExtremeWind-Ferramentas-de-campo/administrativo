@@ -31,6 +31,17 @@
 const MODULOS = [
 
   {
+    cod:      'DSP',
+    nome:     'Disponibilidade dos Técnicos',
+    desc:     'Quem já preencheu, quem falta e lembrete no WhatsApp',
+    url:      'modulos/disponibilidade-tecnicos.html',
+    perfis:   ['ADMIN','SUPERVISOR','DIRETORIA','USUARIO'],
+    novaAba:  false,
+    icone:    'fas fa-calendar-check',
+    cor:      '#2b7fd0'
+  },
+
+  {
     cod:      'SOL',
     nome:     'Solicitação de Materiais',
     desc:     'Solicitar, separar, enviar e confirmar entrega',

@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Disponibilidade dos Técnicos — Extreme Wind</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#2b7fd0">
+<link rel="stylesheet" href="../assets/base.css">
+<style>
+  .placar{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:20px}
+  .placar-item{background:var(--card);border:1px solid var(--linha);border-left:4px solid var(--c);border-radius:12px;padding:14px 16px;box-shadow:var(--sombra);
+    text-align:left;font:inherit;color:inherit;cursor:pointer}
+  .placar-item:hover{border-color:var(--c)}
+  .placar-item[aria-pressed="true"]{background:var(--card-2);outline:2px solid var(--c);outline-offset:-2px}
+  .placar-item:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+  .placar-num{font-size:1.7rem;font-weight:800;line-height:1;color:var(--c);font-variant-numeric:tabular-nums}
+  .placar-rot{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+  .placar-pct{font-size:.78rem;color:var(--faint);margin-top:2px}
+
+  .semanas{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:18px;font-size:.84rem;color:var(--muted)}
+  .semanas strong{color:var(--ink)}
+  .sem-chip{background:var(--card);border:1px solid var(--linha);border-radius:999px;padding:4px 11px;font-size:.78rem;font-weight:700;color:var(--muted)}
+  .sem-chip.atual{border-color:var(--azul);color:var(--azul)}
+
+  .envio{background:var(--card);border:1px solid var(--linha);border-radius:var(--raio);padding:14px 16px;box-shadow:var(--sombra);
+    margin-bottom:18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .envio-txt{flex:1;min-width:220px;font-size:.88rem;color:var(--muted)}
+  .envio-txt strong{color:var(--ink)}
+  .barra{height:8px;border-radius:99px;background:var(--card-2);border:1px solid var(--linha);overflow:hidden;margin-top:8px}
+  .barra span{display:block;height:100%;background:var(--ok);transition:width .4s}
+  .zap-ico{width:18px;height:18px;vertical-align:-3px;margin-right:6px}
+  .btn-zap{background:#1f9d55}
+
+  .ferramentas{display:grid;gap:12px;grid-template-columns:minmax(0,1fr) auto;margin-bottom:12px;align-items:end}
+  .ferramentas .campo{margin:0}
+  @media(max-width:620px){ .ferramentas{grid-template-columns:1fr} }
+
+  .tabela-cx{background:var(--card);border:1px solid var(--linha);border-radius:var(--raio);box-shadow:var(--sombra);overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:.86rem;min-width:760px}
+  th{position:sticky;top:0;background:var(--card-2);text-align:left;font-size:.7rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+     color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--linha);white-space:nowrap}
+  th.sem{text-align:center}
+  th .sem-dt{display:block;font-weight:600;letter-spacing:0;text-transform:none;color:var(--faint)}
+  td{padding:10px 12px;border-bottom:1px solid var(--linha);vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  .tec-nome{font-weight:700;min-width:200px}
+  .tec-mat{font-size:.74rem;color:var(--faint)}
+  .tel{font-family:var(--mono);font-size:.8rem;white-space:nowrap}
+  .tel.falta{color:var(--erro);font-family:var(--ff);font-weight:700;font-size:.76rem}
+  td.sem{text-align:center}
+  .v{display:inline-block;min-width:42px;padding:3px 8px;border-radius:7px;font-size:.74rem;font-weight:800}
+  .v-S{background:var(--ok-fraco);color:var(--ok)}
+  .v-N{background:var(--erro-fraco);color:var(--erro)}
+  .v-0{background:var(--card-2);color:var(--faint);border:1px dashed var(--linha)}
+  .peq{font-size:.76rem;color:var(--muted);white-space:nowrap}
+  .lem-ERRO{color:var(--erro)}
+  .lem-PENDENTE{color:var(--alerta)}
+  .lem-ENVIADO{color:var(--ok)}
+  .bt-linha{border:1px solid var(--linha);background:none;color:var(--muted);font:inherit;font-size:.76rem;font-weight:700;
+    border-radius:8px;padding:5px 9px;cursor:pointer;white-space:nowrap}
+  .bt-linha:hover{border-color:#1f9d55;color:#1f9d55}
+  .bt-linha:disabled{opacity:.4;cursor:default}
+
+  .previa{background:var(--card-2);border:1px solid var(--linha);border-radius:12px;padding:12px 14px;font-size:.86rem;
+    white-space:pre-wrap;word-break:break-word;margin-top:6px}
+  .previa-rot{font-size:.78rem;font-weight:700;color:var(--muted);margin-top:4px}
+  .resumo-envio{font-size:.88rem;color:var(--muted);margin-bottom:14px;line-height:1.55}
+  .resumo-envio strong{color:var(--ink)}
+  .carregando{text-align:center;padding:40px;color:var(--muted);font-size:.9rem}
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-marca">
+    <span class="topo-titulo">Disponibilidade dos Técnicos</span>
+    <span class="topo-sub">Próximas 4 semanas</span>
+  </div>
+  <div class="topo-espaco"></div>
+  <span class="topo-sub" id="quemSou"></span>
+  <button class="topo-btn" id="btAtualizar" type="button" title="Recarregar">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+    <span class="rotulo">Atualizar</span>
+  </button>
+  <a class="topo-btn" href="../index.html">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <span class="rotulo">Voltar</span>
+  </a>
+</header>
+
+<main class="conteudo">
+  <div class="aviso" id="avisoTopo"></div>
+  <div id="painel"><div class="carregando">Carregando…</div></div>
+</main>
+
+<div class="veu" id="veuEnvio" hidden>
+  <div class="janela" role="dialog" aria-modal="true" aria-labelledby="envioTit">
+    <div class="janela-cab">
+      <div class="janela-tit" id="envioTit">Lembrete no WhatsApp</div>
+      <button class="fechar" type="button" data-fechar aria-label="Fechar">×</button>
+    </div>
+    <div class="resumo-envio" id="envioResumo"></div>
+    <div class="campo">
+      <label for="envioMsg">Mensagem</label>
+      <textarea id="envioMsg" maxlength="1000" rows="7"></textarea>
+      <span class="dica"><strong>{nome}</strong> vira o primeiro nome do técnico · <strong>{link}</strong> vira o endereço do Ferramentas de Campo (se estiver configurado). Negrito no WhatsApp: *assim*.</span>
+    </div>
+    <div class="previa-rot">Como chega para <span id="previaNome"></span>:</div>
+    <div class="previa" id="previa"></div>
+    <div class="janela-rodape">
+      <button class="btn btn--vazado esquerda" type="button" id="btPadrao">Voltar ao texto padrão</button>
+      <button class="btn btn--vazado" type="button" data-fechar>Cancelar</button>
+      <button class="btn btn-zap" type="button" id="btConfirmar">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<div class="bloqueio" id="bloqueio" hidden>
+  <div class="bloqueio-cx">
+    <p class="bloqueio-msg" id="bloqueioMsg"></p>
+    <button class="btn" id="bloqueioAcao" type="button">Ir para o portal</button>
+  </div>
+</div>
+<div class="recado" id="recado" hidden></div>
+
+<script src="../config/config.js"></script>
+<script src="../assets/base.js"></script>
+<script>
+/* ============================================================================
+   DISPONIBILIDADE DOS TÉCNICOS
+   Lista da MINI MASTER x respostas que o técnico dá no Ferramentas de Campo
+   (Meus Dados > Disponibilidade). "Falta" = alguma das próximas 4 semanas sem
+   resposta. O lembrete vai pela Z-API no privado de cada técnico; o servidor
+   põe na fila e o gatilho envia aos poucos (DisponibilidadeTecnicos.gs).
+   ============================================================================ */
+
+Object.assign(MENSAGENS_MODULO, {
+  DISP_INDISPONIVEL: 'Não consegui ler a planilha de disponibilidade do Ferramentas de Campo.',
+  SEM_DESTINATARIO:  'Nenhum técnico com telefone válido na MINI MASTER para receber.',
+  JA_NA_FILA:        'Esses técnicos já estão na fila de envio. Aguarde terminar.'
+});
+
+var DADOS = null;           // resposta do servidor
+var FILTRO = '';            // '', 'COMPLETO', 'FALTA', 'NUNCA', 'SEMTEL'
+var BUSCA = '';
+var ENVIO_ALVO = null;      // null = todos; ['matricula'] = um só
+var TIMER_ENVIO = null;
+var DEMO = /[?&]demo=1/.test(location.search);
+
+function avisoTopo(txt, tipo){
+  var el = document.getElementById('avisoTopo');
+  if(!txt){ el.removeAttribute('data-tipo'); el.textContent = ''; return; }
+  el.textContent = txt; el.setAttribute('data-tipo', tipo || 'erro');
+}
+
+function telBonito(t){
+  var d = soDigitos(t);
+  if(!/^55\d{10,11}$/.test(d)) return t;
+  var ddd = d.slice(2,4), n = d.slice(4);
+  return '(' + ddd + ') ' + n.slice(0, n.length - 4) + '-' + n.slice(-4);
+}
+function primeiroNome(nome){
+  var p = String(nome || '').split(' ')[0];
+  return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+}
+function pct(a, b){ return b ? Math.round(a * 100 / b) + '%' : '—'; }
+
+/* ---------- servidor (ou dados de demonstração com ?demo=1) ---------- */
+function pedir(acao, dados){
+  if(DEMO) return Promise.resolve(demo(acao, dados));
+  return chamar(acao, dados);
+}
+
+function carregar(silencioso){
+  if(!silencioso){
+    document.getElementById('painel').innerHTML = '<div class="carregando">Lendo a MINI MASTER e a planilha de disponibilidade…</div>';
+  }
+  avisoTopo('');
+  return pedir('disponibilidadeStatus', {})
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
+      DADOS = res;
+      desenhar();
+      acompanharEnvio();
+    })
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      if(!silencioso) document.getElementById('painel').innerHTML = '';
+      avisoTopo(traduzirErro(err) + (err && err.detalhe ? ' (' + err.detalhe + ')' : ''), 'erro');
+    });
+}
+
+/* Enquanto houver mensagem na fila, recarrega a cada 15 s para mostrar o progresso. */
+function acompanharEnvio(){
+  if(TIMER_ENVIO){ clearTimeout(TIMER_ENVIO); TIMER_ENVIO = null; }
+  if(DADOS && DADOS.envio && DADOS.envio.pendentes > 0){
+    TIMER_ENVIO = setTimeout(function(){ carregar(true); }, 15000);
+  }
+}
+
+/* ---------- tela ---------- */
+function contagem(){
+  var t = DADOS.tecnicos, c = { total: t.length, COMPLETO: 0, FALTA: 0, NUNCA: 0, SEMTEL: 0 };
+  t.forEach(function(x){
+    if(x.situacao === 'COMPLETO') c.COMPLETO++; else c.FALTA++;
+    if(x.situacao === 'NUNCA') c.NUNCA++;
+    if(!x.telefone) c.SEMTEL++;
+  });
+  return c;
+}
+
+function passa(t){
+  if(FILTRO === 'COMPLETO' && t.situacao !== 'COMPLETO') return false;
+  if(FILTRO === 'FALTA' && t.situacao === 'COMPLETO') return false;
+  if(FILTRO === 'NUNCA' && t.situacao !== 'NUNCA') return false;
+  if(FILTRO === 'SEMTEL' && t.telefone) return false;
+  if(BUSCA){
+    var b = BUSCA.toLowerCase();
+    if(String(t.nome).toLowerCase().indexOf(b) < 0 && String(t.matricula).indexOf(b) < 0) return false;
+  }
+  return true;
+}
+
+var ORDEM = { NUNCA: 0, PARCIAL: 1, COMPLETO: 2 };
+
+function desenhar(){
+  var c = contagem();
+  var sem = DADOS.semanas;
+  var html = '';
+
+  html += '<div class="placar">' +
+    itemPlacar('', 'var(--ink)', c.total, 'Técnicos', '') +
+    itemPlacar('COMPLETO', 'var(--ok)', c.COMPLETO, 'Em dia', pct(c.COMPLETO, c.total)) +
+    itemPlacar('FALTA', 'var(--alerta)', c.FALTA, 'Falta preencher', pct(c.FALTA, c.total)) +
+    itemPlacar('NUNCA', 'var(--erro)', c.NUNCA, 'Nunca preencheu', pct(c.NUNCA, c.total)) +
+    itemPlacar('SEMTEL', 'var(--faint)', c.SEMTEL, 'Sem telefone', c.SEMTEL ? 'não recebem' : '') +
+  '</div>';
+
+  html += '<div class="semanas"><strong>Semanas cobradas:</strong>' + sem.map(function(s){
+    return '<span class="sem-chip' + (s.atual ? ' atual' : '') + '">W' + s.n + ' · ' + esc(s.ini) + '–' + esc(s.fim) + (s.atual ? ' (atual)' : '') + '</span>';
+  }).join('') + '</div>';
+
+  html += caixaEnvio(c);
+
+  html += '<div class="ferramentas">' +
+    '<div class="campo"><label for="busca">Buscar técnico</label>' +
+    '<input id="busca" type="search" placeholder="Nome ou matrícula" value="' + esc(BUSCA) + '"></div>' +
+  '</div>';
+
+  html += '<div class="tabela-cx"><table><thead><tr>' +
+    '<th>Técnico</th><th>WhatsApp</th>' +
+    sem.map(function(s){ return '<th class="sem">W' + s.n + '<span class="sem-dt">' + esc(s.ini) + '</span></th>'; }).join('') +
+    '<th>Atualizado</th><th>Lembrete</th>' + (DADOS.podeEnviar ? '<th></th>' : '') +
+  '</tr></thead><tbody id="corpo"></tbody></table></div>';
+
+  document.getElementById('painel').innerHTML = html;
+  desenharLinhas();
+
+  document.getElementById('busca').addEventListener('input', function(e){
+    BUSCA = e.target.value.trim();
+    desenharLinhas();
+  });
+}
+
+function itemPlacar(chave, cor, num, rot, sub){
+  return '<button type="button" class="placar-item" data-filtro="' + chave + '" aria-pressed="' + (FILTRO === chave) + '" style="--c:' + cor + '">' +
+    '<div class="placar-num">' + num + '</div><div class="placar-rot">' + esc(rot) + '</div>' +
+    '<div class="placar-pct">' + esc(sub || ' ') + '</div></button>';
+}
+
+function caixaEnvio(c){
+  var e = DADOS.envio;
+  var txt;
+  if(!e){
+    txt = 'Nenhum lembrete enviado ainda por aqui.';
+  }else{
+    var feitos = e.enviados + e.erros + (e.cancelados || 0);
+    txt = '<strong>Último lembrete:</strong> ' + esc(e.em) + (e.por ? ' por ' + esc(e.por) : '') + ' · ' +
+          '<strong>' + e.enviados + '</strong> de ' + e.total + ' enviados' +
+          (e.pendentes ? ' · <strong>' + e.pendentes + '</strong> na fila (envio em andamento, com pausa entre as mensagens)' : '') +
+          (e.erros ? ' · <span class="lem-ERRO"><strong>' + e.erros + '</strong> com erro</span>' : '') +
+          '<div class="barra"><span style="width:' + (e.total ? Math.round(feitos * 100 / e.total) : 0) + '%"></span></div>';
+  }
+  var comTel = c.total - c.SEMTEL;
+  var bt = DADOS.podeEnviar
+    ? '<button class="btn btn-zap" type="button" id="btEnviarTodos"' + (comTel ? '' : ' disabled') + '>' + iconeZap() +
+      'Enviar lembrete a todos (' + comTel + ')</button>'
+    : '<span class="peq">Só ADMIN e SUPERVISOR enviam lembretes.</span>';
+  return '<div class="envio"><div class="envio-txt">' + txt + '</div>' + bt + '</div>';
+}
+
+function iconeZap(){
+  return '<svg class="zap-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.2c0-.1-.2-.2-.5-.3z"/></svg>';
+}
+
+function desenharLinhas(){
+  var sem = DADOS.semanas;
+  var lista = DADOS.tecnicos.filter(passa).sort(function(a, b){
+    return (ORDEM[a.situacao] - ORDEM[b.situacao]) || a.nome.localeCompare(b.nome, 'pt-BR');
+  });
+  var corpo = document.getElementById('corpo');
+  var cols = 4 + sem.length + (DADOS.podeEnviar ? 1 : 0);
+  if(!lista.length){
+    corpo.innerHTML = '<tr><td colspan="' + cols + '"><div class="vazio">Nenhum técnico neste filtro.</div></td></tr>';
+    return;
+  }
+  corpo.innerHTML = lista.map(function(t){
+    var l = t.lembrete;
+    var lem = !l ? '<span class="peq">—</span>'
+      : '<span class="peq lem-' + esc(l.status) + '"' + (l.detalhe ? ' title="' + esc(l.detalhe) + '"' : '') + '>' +
+        ({ ENVIADO: 'Enviado', PENDENTE: 'Na fila', ERRO: 'Erro', CANCELADO: 'Cancelado' }[l.status] || esc(l.status)) +
+        (l.em ? '<br>' + esc(l.em) : '') + '</span>';
+    return '<tr>' +
+      '<td><div class="tec-nome">' + esc(t.nome) + '</div><div class="tec-mat">Mat. ' + esc(t.matricula) + '</div></td>' +
+      '<td>' + (t.telefone ? '<span class="tel">' + esc(telBonito(t.telefone)) + '</span>'
+                           : '<span class="tel falta" title="' + esc(t.telefoneCru ? 'Na planilha: ' + t.telefoneCru : 'Coluna vazia na MINI MASTER') + '">' +
+                             (t.telefoneCru ? 'Número inválido' : 'Sem telefone') + '</span>') + '</td>' +
+      sem.map(function(s){
+        var v = t.valores[s.chave];
+        return '<td class="sem"><span class="v v-' + (v || '0') + '">' + (v === 'S' ? 'SIM' : v === 'N' ? 'NÃO' : '—') + '</span></td>';
+      }).join('') +
+      '<td><span class="peq">' + (t.atualizadoEm ? esc(t.atualizadoEm) : 'nunca') + '</span></td>' +
+      '<td>' + lem + '</td>' +
+      (DADOS.podeEnviar ? '<td><button type="button" class="bt-linha" data-mat="' + esc(t.matricula) + '"' +
+        (t.telefone && !(l && l.status === 'PENDENTE') ? '' : ' disabled') + ' title="Mandar o lembrete só para este técnico">Enviar</button></td>' : '') +
+    '</tr>';
+  }).join('');
+}
+
+/* ---------- janela de envio ---------- */
+function abrirEnvio(matriculas){
+  ENVIO_ALVO = matriculas;
+  var alvo = matriculas
+    ? DADOS.tecnicos.filter(function(t){ return matriculas.indexOf(t.matricula) > -1; })
+    : DADOS.tecnicos;
+  var com = alvo.filter(function(t){ return t.telefone; });
+  var sem = alvo.length - com.length;
+  var r;
+  if(matriculas){
+    r = 'Vai para <strong>' + esc(com[0] ? com[0].nome : '') + '</strong> no WhatsApp ' + esc(telBonito(com[0] ? com[0].telefone : '')) + '.';
+  }else{
+    var emDia = com.filter(function(t){ return t.situacao === 'COMPLETO'; }).length;
+    r = 'Vai para <strong>' + com.length + ' técnicos</strong> no privado do WhatsApp' +
+        (emDia ? ' — inclusive os ' + emDia + ' que já estão em dia' : '') + '.' +
+        (sem ? '<br><strong>' + sem + '</strong> sem telefone válido na MINI MASTER ficam de fora.' : '') +
+        '<br>O envio é feito aos poucos (uma mensagem a cada 4–8 s) para o número não ser bloqueado: ' +
+        'leva uns <strong>' + Math.max(1, Math.ceil(com.length * 6 / 60)) + ' min</strong>. Pode fechar a tela.';
+  }
+  document.getElementById('envioResumo').innerHTML = r;
+  document.getElementById('previaNome').textContent = com[0] ? com[0].nome : 'o técnico';
+  var ta = document.getElementById('envioMsg');
+  if(!ta.value) ta.value = DADOS.mensagemPadrao || '';
+  atualizarPrevia();
+  document.getElementById('btConfirmar').disabled = !com.length;
+  document.getElementById('btConfirmar').innerHTML = iconeZap() + (matriculas ? 'Enviar' : 'Enviar para ' + com.length);
+  document.getElementById('veuEnvio').hidden = false;
+  ta.focus();
+}
+function fecharEnvio(){ document.getElementById('veuEnvio').hidden = true; }
+
+function atualizarPrevia(){
+  var nome = document.getElementById('previaNome').textContent;
+  var txt = document.getElementById('envioMsg').value
+    .replace(/\{nome\}/g, primeiroNome(nome))
+    .replace(/\{link\}/g, '\n\n[link do Ferramentas de Campo]');
+  document.getElementById('previa').textContent = txt;
+}
+
+function confirmarEnvio(){
+  var bt = document.getElementById('btConfirmar');
+  bt.disabled = true; bt.textContent = 'Colocando na fila…';
+  var corpo = { mensagem: document.getElementById('envioMsg').value };
+  if(ENVIO_ALVO) corpo.matriculas = ENVIO_ALVO;
+  pedir('disponibilidadeLembrar', corpo)
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
+      fecharEnvio();
+      recado(res.naFila + ' lembrete(s) na fila de envio.' + (res.jaNaFila ? ' ' + res.jaNaFila + ' já estavam na fila.' : ''), 'ok');
+      return carregar(true);
+    })
+    .catch(function(err){
+      bt.disabled = false; bt.innerHTML = iconeZap() + 'Enviar';
+      if(err && err.motivo === 'SESSAO') return;
+      recado(traduzirErro(err), 'erro');
+    });
+}
+
+/* ---------- eventos ---------- */
+document.getElementById('painel').addEventListener('click', function(e){
+  var p = e.target.closest('[data-filtro]');
+  if(p){
+    var f = p.getAttribute('data-filtro');
+    FILTRO = (FILTRO === f) ? '' : f;
+    document.querySelectorAll('[data-filtro]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-filtro') === FILTRO)); });
+    desenharLinhas();
+    return;
+  }
+  if(e.target.closest('#btEnviarTodos')){ abrirEnvio(null); return; }
+  var l = e.target.closest('.bt-linha');
+  if(l){ abrirEnvio([l.getAttribute('data-mat')]); return; }
+});
+document.querySelectorAll('[data-fechar]').forEach(function(b){ b.addEventListener('click', fecharEnvio); });
+document.getElementById('veuEnvio').addEventListener('click', function(e){ if(e.target === this) fecharEnvio(); });
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') fecharEnvio(); });
+document.getElementById('envioMsg').addEventListener('input', atualizarPrevia);
+document.getElementById('btPadrao').addEventListener('click', function(){
+  document.getElementById('envioMsg').value = DADOS.mensagemPadrao || '';
+  atualizarPrevia();
+});
+document.getElementById('btConfirmar').addEventListener('click', confirmarEnvio);
+document.getElementById('btAtualizar').addEventListener('click', function(){ carregar(false); });
+
+/* ---------- demonstração (abra com ?demo=1 para ver a tela sem servidor) ---------- */
+function demo(acao, dados){
+  if(acao === 'disponibilidadeLembrar'){
+    var n = dados.matriculas ? 1 : DEMO_DADOS.tecnicos.filter(function(t){ return t.telefone; }).length;
+    DEMO_DADOS.envio = { lote: 'x', em: '04/11/2026 15:02', por: 'Demonstração', total: n, enviados: 0, pendentes: n, erros: 0, cancelados: 0 };
+    return { ok: true, naFila: n, jaNaFila: 0 };
+  }
+  return JSON.parse(JSON.stringify(DEMO_DADOS));
+}
+var DEMO_DADOS = (function(){
+  var sem = [{chave:'2026-W45',n:45,ini:'02/11',fim:'08/11',atual:true},{chave:'2026-W46',n:46,ini:'09/11',fim:'15/11'},
+             {chave:'2026-W47',n:47,ini:'16/11',fim:'22/11'},{chave:'2026-W48',n:48,ini:'23/11',fim:'29/11'}];
+  var nomes = ['ANTÔNIO CARLOS SILVA','BRUNO FERREIRA LIMA','CARLOS EDUARDO SOUZA','DIEGO ALVES COSTA','EDSON PEREIRA',
+               'FÁBIO RODRIGUES','GABRIEL SANTOS','HUGO NASCIMENTO','IGOR MOREIRA','JOÃO PAULO ARAÚJO','LUCAS MELO','MARCOS VIEIRA'];
+  var tec = nomes.map(function(n, i){
+    var v = {}, tipo = i % 4;
+    sem.forEach(function(s, j){ if(tipo === 0 || (tipo === 1 && j < 2)) v[s.chave] = (i + j) % 3 ? 'S' : 'N'; });
+    var falt = sem.length - Object.keys(v).length;
+    return { matricula: String(1000 + i), nome: n, telefone: i === 7 ? '' : '5581' + (988000000 + i * 1371),
+             telefoneCru: i === 7 ? '' : '', valores: v, atualizadoEm: tipo < 2 ? '0' + (i % 9 + 1) + '/11/2026 08:1' + i % 10 : '',
+             faltam: falt, situacao: tipo === 2 || tipo === 3 ? 'NUNCA' : (falt ? 'PARCIAL' : 'COMPLETO'),
+             lembrete: i % 5 === 0 ? { status: 'ENVIADO', em: '28/10/2026 09:30', detalhe: '' } : null };
+  });
+  return { ok: true, semanas: sem, tecnicos: tec, envio: null, podeEnviar: true, colTelefone: 'TELEFONE',
+           mensagemPadrao: 'Olá, {nome}! Tudo bem?\n\nAqui é da Extreme Wind. Precisamos que você atualize a sua *disponibilidade* das próximas semanas no portal Ferramentas de Campo, em *Meus Dados > Disponibilidade*.{link}\n\nLeva menos de um minuto. Obrigado!' };
+})();
+
+if(DEMO){
+  document.getElementById('quemSou').textContent = 'Demonstração';
+  carregar(false);
+}else if(iniciarModulo()){
+  carregar(false);
+}
+</script>
+</body>
+</html>

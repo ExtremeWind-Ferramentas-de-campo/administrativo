@@ -10,7 +10,33 @@ GitHub não usa nada daqui; quem roda é o editor do Apps Script.
   StatusEHS.gs       Status RD EHS (aba "Reports EHS" da planilha do RDO)
   Avaliacao.gs       Avaliação de projetos concluídos (matriz e banco no Dropbox)
   StatusEquipes.gs   Status diário das equipes (aba EQUIPES_STATUS)
+  ZapEHS.gs          Envio automático do report de EHS aos grupos do WhatsApp (Z-API)
+  ZapDownload.gs     Download das fotos de grupos do WhatsApp para o Dropbox
+                     (12 - FOTOS WHATS APP/CLIENTE/PARQUE/Wnn/dd-mm-aaaa)
   Materiais.gs       Solicitação de materiais  <- COPIAR DO EDITOR
+  DisponibilidadeTecnicos.gs
+                     Painel de disponibilidade dos técnicos (MINI MASTER x
+                     planilha do Ferramentas de Campo) e lembrete no privado
+                     do WhatsApp pela Z-API (fila DISP_ZAP_FILA, gatilho 1 min)
+
+INSTALAR A DISPONIBILIDADE DOS TÉCNICOS (nov/2026)
+  1. No editor: Arquivo > + > Script, nome "DisponibilidadeTecnicos", cole o
+     arquivo daqui. Cole também o Codigo.gs novo (2 linhas no doPost).
+  2. Propriedades do script:
+       ID_DISPONIBILIDADE      link da planilha de disponibilidade (o mesmo
+                               valor do DISP_SHEET do Ferramentas de Campo).
+                               A conta do portal precisa ter acesso a ela.
+       LINK_FERRAMENTAS_CAMPO  (opcional) endereço do portal de campo; entra
+                               na mensagem no lugar de {link}.
+       MINIMASTER_COL_TELEFONE (opcional) letra da coluna do telefone, se a
+                               detecção pelo cabeçalho não achar.
+  3. Rode instalarDisponibilidadeTecnicos() (cria a fila e o gatilho).
+  4. Rode testarDisponibilidadeTecnicos() e confira no Registro de execução
+     a coluna de telefone achada e quem ficou sem número válido.
+  5. Implantar > Gerenciar implantações > editar > Nova versão.
+  6. Suba config/modulos.js e modulos/disponibilidade-tecnicos.html no GitHub.
+  Para cancelar um envio em andamento: na aba DISP_ZAP_FILA troque PENDENTE
+  por CANCELADO. A tela abre com dados fictícios em ...?demo=1.
 
 Materiais.gs não veio neste pacote: a cópia que havia aqui era antiga (sem
 repararAnexosFantasma e sem o cache de miniaturas). Abra o Materiais no

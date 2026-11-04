@@ -139,6 +139,15 @@ function onOpen() {
     .addSeparator()
     .addItem('Avaliação: conferir matriz', 'menuMatrizAval')
     .addItem('Avaliação: regravar planilha no Dropbox', 'atualizarBancoAvaliacoesDropbox')
+    .addSeparator()
+    .addItem('WhatsApp EHS: instalar (abas e gatilho)', 'instalarZapEHS')
+    .addItem('WhatsApp EHS: listar grupos da Z-API', 'listarGruposZap')
+    .addItem('WhatsApp EHS: enviar fila agora', 'processarFilaZapEHS')
+    .addSeparator()
+    .addItem('Fotos WhatsApp: instalar (abas e gatilho)', 'instalarZapDownload')
+    .addItem('Fotos WhatsApp: conferir configuração', 'testarZapDownload')
+    .addItem('Fotos WhatsApp: baixar fila agora', 'processarDownloadsZap')
+    .addItem('Fotos WhatsApp: tentar de novo os erros', 'reprocessarErrosZapDownload')
     .addToUi();
 }
 
@@ -382,6 +391,10 @@ function doGet() {
 }
 
 function doPost(e) {
+  // Webhook da Z-API (fotos dos grupos) — implementado em ZapDownload.gs.
+  // Vem sem "acao": é reconhecido pelo ?zapdl=<segredo> da URL.
+  if (e && e.parameter && e.parameter.zapdl) return webhookZapDownload_(e);
+
   let resposta;
   try {
     const corpo = JSON.parse(e.postData.contents);
@@ -425,6 +438,10 @@ function doPost(e) {
       case 'avaliacaoCarregar':      resposta = acaoAvaliacaoCarregar_(corpo);     break;
       case 'avaliacaoAbrir':         resposta = acaoAvaliacaoAbrir_(corpo);        break;
       case 'avaliacaoSalvar':        resposta = acaoAvaliacaoSalvar_(corpo);       break;
+
+      // Disponibilidade dos técnicos — implementado em DisponibilidadeTecnicos.gs
+      case 'disponibilidadeStatus':  resposta = acaoDisponibilidadeStatus_(corpo); break;
+      case 'disponibilidadeLembrar': resposta = acaoDisponibilidadeLembrar_(corpo); break;
 
       default:               resposta = { ok: false, motivo: 'ACAO_DESCONHECIDA' };
     }

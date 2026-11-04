@@ -25,7 +25,7 @@
    =========================================================================== */
 
 const ABA_EHS_PADRAO = 'Reports EHS';
-const CACHE_EHS_CHAVE = 'ehs_reports_v3';   // v3: entrou o caminho do PDF (botão WhatsApp)
+const CACHE_EHS_CHAVE = 'ehs_reports_v4';   // v4: entrou o stand by informado no report
 
 function idPlanilhaEHS_() { return idPlanilhaRDO_(); }
 function abaNomeEHS_() { return prop_('ABA_EHS_REPORTS', ABA_EHS_PADRAO); }
@@ -44,8 +44,22 @@ const COLUNAS_EHS = {
   autor:      ['matricula_login', 'matricula'],
   supervisor: ['supervisor'],
   recebido:   ['recebido_em'],
-  caminho:    ['caminho_pdf']
+  caminho:    ['caminho_pdf'],
+  // Pergunta do app de campo no início do report (ehs/report-diario, campo
+  // uid 54 "TEVE STAND BY?", Sim/Não; motivo = uid 55 "MOTIVO DO STAND BY").
+  // O cabeçalho da coluna é o rótulo da pergunta. Opcional: sem a coluna, nada
+  // muda. Se o rótulo mudar no formulário, acrescente aqui (sem acento,
+  // minúsculo, espaços e "?" viram "_" e somem das pontas).
+  standby:       ['teve_stand_by', 'stand_by', 'standby', 'em_stand_by', 'esta_em_stand_by', 'equipe_em_stand_by'],
+  standbyMotivo: ['motivo_stand_by', 'motivo_standby', 'motivo_do_stand_by', 'justificativa_stand_by',
+                  'observacao_stand_by', 'obs_stand_by']
 };
+
+/* "Sim", "S", "X", "TRUE"... = está em stand by. Vazio ou "Não" = não está. */
+function ehSimStandby_(v) {
+  const t = chaveTexto_(v);
+  return /^(sim|s|x|true|verdadeiro|yes|1)$/.test(t) || t.indexOf('sim') === 0;
+}
 
 /* Só data, parque e link seguram o funcionamento. Os outros podem faltar
    sem derrubar a tela — o filtro de cliente fica vazio e o card não diz quem
@@ -67,11 +81,21 @@ function abaEHS_() {
   return aba;
 }
 
+/* Stand by só por nome EXATO: na busca "que contém", "motivo_stand_by" ou uma
+   pergunta do formulário com "stand by" no texto roubariam a coluna Sim/Não. */
+const COLUNAS_EHS_SO_EXATAS = ['standby', 'standbyMotivo'];
+
 function detectarColunasEHS_(cabecalho) {
   const norm = cabecalho.map(normalizarCab_);
   const mapa = {};
   Object.keys(COLUNAS_EHS).forEach(function (campo) {
-    mapa[campo] = acharColuna_(norm, COLUNAS_EHS[campo]);
+    if (COLUNAS_EHS_SO_EXATAS.indexOf(campo) > -1) {
+      const achada = COLUNAS_EHS[campo].map(function (a) { return norm.indexOf(a); })
+        .filter(function (i) { return i > -1; })[0];
+      mapa[campo] = achada === undefined ? -1 : achada;
+    } else {
+      mapa[campo] = acharColuna_(norm, COLUNAS_EHS[campo]);
+    }
   });
   return mapa;
 }
@@ -126,7 +150,9 @@ function lerEHS_() {
       autor:      txt(l, mapa.autor),
       supervisor: txt(l, mapa.supervisor),
       recebido:   txt(l, mapa.recebido),
-      caminho:    txt(l, mapa.caminho)
+      caminho:    txt(l, mapa.caminho),
+      standby:    ehSimStandby_(txt(l, mapa.standby)),
+      standbyMotivo: txt(l, mapa.standbyMotivo)
     });
   }
 
@@ -209,22 +235,31 @@ function acaoEhsStatus_(p) {
         const n = quemFez(r);
         if (n && autores.indexOf(n) === -1) autores.push(n);
       });
+      // Stand by informado pelo TÉCNICO no próprio report (pergunta do app de
+      // campo). Vale quando todos os reports do parque no dia dizem "Sim": se
+      // algum disse "Não", a equipe trabalhou e o parque conta como enviado.
+      const sbTecnico = achados.length > 0 && achados.every(function (r) { return r.standby; });
+      const sbPortal = standby[chaveTexto_(pr.parque)];
+      const motivoTec = achados.map(function (r) { return r.standbyMotivo; }).filter(String)[0] || '';
       return {
         id: pr.id, codigo: pr.codigo, parque: pr.parque, cliente: pr.cliente,
         tipoReparo: pr.tipoReparo,
         supervisor: (pr.supervisor && pr.supervisor.nome) ? pr.supervisor.nome
                   : (comLink ? comLink.supervisor : ''),
-        estado: achados.length ? 'ENVIADO'
+        estado: sbTecnico ? 'STANDBY'
+              : achados.length ? 'ENVIADO'
               : manuais[chaveTexto_(pr.parque)] ? 'AUTORIZADO'
-              : standby[chaveTexto_(pr.parque)] ? 'STANDBY'
+              : sbPortal ? 'STANDBY'
               : (fds ? 'NAO_OBRIGATORIO' : 'FALTA'),
         link: comLink ? comLink.link : '',
         autor: autores.join(', '),
         qtd: achados.length,
-        standbyMotivo: achados.length ? '' : ((standby[chaveTexto_(pr.parque)] || {}).motivo || ''),
-        standbyPor: achados.length ? '' : (function (sb) {
-          return sb ? (nomePorMatricula[soNumero_(sb.matricula)] || sb.matricula || '') : '';
-        })(standby[chaveTexto_(pr.parque)])
+        // origem do stand by: TECNICO (veio no report, tem PDF) ou PORTAL (botão)
+        standbyOrigem: sbTecnico ? 'TECNICO' : (!achados.length && sbPortal ? 'PORTAL' : ''),
+        standbyMotivo: sbTecnico ? motivoTec
+                     : achados.length ? '' : ((sbPortal || {}).motivo || ''),
+        standbyPor: sbTecnico ? autores.join(', ')
+                  : achados.length ? '' : (sbPortal ? (nomePorMatricula[soNumero_(sbPortal.matricula)] || sbPortal.matricula || '') : '')
       };
     });
 
@@ -237,8 +272,15 @@ function acaoEhsStatus_(p) {
 
   // Autorizado é por parque + data do PRÓPRIO report (vale também quando a
   // consulta é sem data e a lista traz vários dias).
+  // situação do envio automático para o WhatsApp (ZapEHS.gs), por report
+  let zapSit = {};
+  try { if (typeof situacaoZapEHS_ === 'function') zapSit = situacaoZapEHS_(); } catch (e) { /* sem fila */ }
+
   relatorios.forEach(function (r) {
     r.autorNome = quemFez(r);
+    const z = zapSit[chaveAutoriz_(r.data, r.parque)] || {};
+    r.zap = z.status || '';
+    r.zapDetalhe = z.detalhe || '';
     const a = autorizacoes[chaveAutoriz_(r.data, r.parque)] || {};
     r.autorizado = a.valor || '';
     r.autorizadoPor = a.valor ? (nomePorMatricula[soNumero_(a.matricula)] || a.matricula || '') : '';
@@ -395,7 +437,18 @@ function acaoEhsAutorizar_(p) {
     }
 
     registrar_(matricula, 'EHS_AUTORIZAR', 'OK', data + ' | ' + parque + ' | ' + (valor || 'DESMARCADO'));
-    return { ok: true, data: data, parque: parque, autorizado: valor };
+
+    // Envio automático para os grupos do WhatsApp (ZapEHS.gs): Sim põe na
+    // fila, Não/desmarcar cancela o que ainda não foi. Falha aqui não desfaz
+    // a marcação — o envio pode ser refeito com reenviarZapEHS().
+    let zap = '';
+    try {
+      if (typeof enfileirarZapEHS_ === 'function') zap = enfileirarZapEHS_(data, parque, valor, matricula, false);
+    } catch (e) {
+      zap = 'FALHOU';
+      registrar_(matricula, 'EHS_ZAP', 'FALHA_FILA', data + ' | ' + parque + ' | ' + String(e.message).slice(0, 200));
+    }
+    return { ok: true, data: data, parque: parque, autorizado: valor, zap: zap };
   } finally {
     trava.releaseLock();
   }
