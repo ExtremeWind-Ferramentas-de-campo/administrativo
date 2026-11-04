@@ -136,6 +136,16 @@ body{
 .janela-rodape{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:22px}
 .janela-rodape .esquerda{margin-right:auto}
 
+/* ---------- lista de marcar (montarChecklist, base.js) ---------- */
+.checklist{border:1px solid var(--linha);border-radius:12px;background:var(--card-2);overflow:hidden}
+.ck-lista{max-height:190px;overflow-y:auto;border-top:1px solid var(--linha)}
+.checklist .ck-item{display:flex;align-items:center;gap:9px;padding:8px 12px;margin:0;font-size:.86rem;font-weight:500;cursor:pointer;color:var(--ink)}
+.checklist .ck-item:hover{background:var(--azul-fraco)}
+.checklist .ck-item input{width:17px;height:17px;min-height:0;padding:0;margin:0;border:0;accent-color:var(--azul);flex:none;cursor:pointer}
+.checklist .ck-todos{font-weight:700}
+.ck-rot{flex:1;min-width:0}
+.ck-qtd{font-size:.74rem;font-weight:700;color:var(--faint);font-variant-numeric:tabular-nums}
+
 /* ---------- avisos ---------- */
 .aviso{display:none;font-size:.85rem;font-weight:600;border-radius:10px;padding:11px 13px;margin-bottom:16px;line-height:1.45}
 .aviso[data-tipo="erro"]{display:block;color:var(--erro);background:var(--erro-fraco)}

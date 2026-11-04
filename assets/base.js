@@ -191,6 +191,47 @@ function diaDaSemana(iso){
 
 function soDigitos(t){ return String(t == null ? '' : t).replace(/\D/g,''); }
 
+/* ---------------------------------------------------------------------------
+   LISTA DE MARCAR (checklist com "Todos")
+   cx       elemento onde a lista é montada
+   opcoes   [{ valor, rotulo, qtd? }]
+   marcados lista de valores já marcados; null = todos
+   aoMudar  função chamada a cada clique, recebe a lista de valores marcados
+   -> { valores(): [...] }
+   --------------------------------------------------------------------------- */
+function montarChecklist(cx, opcoes, marcados, aoMudar){
+  var sel = {};
+  opcoes.forEach(function(o){ sel[o.valor] = !marcados || marcados.indexOf(o.valor) > -1; });
+  var total = opcoes.reduce(function(s, o){ return s + (o.qtd || 0); }, 0);
+  cx.innerHTML = '<div class="checklist">' +
+    '<label class="ck-item ck-todos"><input type="checkbox" data-todos> <span class="ck-rot">Todos</span>' +
+      (total ? '<span class="ck-qtd">' + total + '</span>' : '') + '</label>' +
+    '<div class="ck-lista">' + opcoes.map(function(o, i){
+      return '<label class="ck-item"><input type="checkbox" data-i="' + i + '"' + (sel[o.valor] ? ' checked' : '') + '> ' +
+             '<span class="ck-rot">' + esc(o.rotulo) + '</span>' +
+             (o.qtd !== undefined ? '<span class="ck-qtd">' + o.qtd + '</span>' : '') + '</label>';
+    }).join('') + '</div></div>';
+  var todos = cx.querySelector('[data-todos]');
+  function valores(){ return opcoes.filter(function(o){ return sel[o.valor]; }).map(function(o){ return o.valor; }); }
+  function sincronizar(){
+    var n = valores().length;
+    todos.checked = n === opcoes.length;
+    todos.indeterminate = n > 0 && n < opcoes.length;
+  }
+  cx.querySelector('.checklist').addEventListener('change', function(e){
+    if(e.target === todos){
+      opcoes.forEach(function(o){ sel[o.valor] = todos.checked; });
+      cx.querySelectorAll('[data-i]').forEach(function(c){ c.checked = todos.checked; });
+    }else if(e.target.hasAttribute('data-i')){
+      sel[opcoes[+e.target.getAttribute('data-i')].valor] = e.target.checked;
+    }
+    sincronizar();
+    if(aoMudar) aoMudar(valores());
+  });
+  sincronizar();
+  return { valores: valores };
+}
+
 /* Arranca a página: confere a sessão e chama iniciar() da página. */
 function iniciarModulo(){
   var botao = document.getElementById('bloqueioAcao');

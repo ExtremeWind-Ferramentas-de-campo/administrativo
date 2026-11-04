@@ -31,14 +31,14 @@
 const MODULOS = [
 
   {
-    cod:      'DSP',
-    nome:     'Disponibilidade dos Técnicos',
-    desc:     'Quem já preencheu, quem falta e lembrete no WhatsApp',
-    url:      'modulos/disponibilidade-tecnicos.html',
+    cod:      'MSG',
+    nome:     'Mensagens e Avisos',
+    desc:     'Disponibilidade dos técnicos e mensagens no WhatsApp',
+    url:      'modulos/mensagens-avisos.html',
     perfis:   ['ADMIN','SUPERVISOR','DIRETORIA','USUARIO'],
     novaAba:  false,
-    icone:    'fas fa-calendar-check',
-    cor:      '#2b7fd0'
+    icone:    'fas fa-comments',
+    cor:      '#1f9d55'
   },
 
   {
