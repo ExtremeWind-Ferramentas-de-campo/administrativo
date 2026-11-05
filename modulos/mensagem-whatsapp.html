@@ -18,7 +18,8 @@
   .zap-ico{width:18px;height:18px;vertical-align:-3px;margin-right:6px}
   .btn-zap{background:#1f9d55}
 
-  .ferramentas{display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,320px);margin-bottom:12px;align-items:start}
+  .ferramentas{display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,260px) minmax(0,300px);margin-bottom:12px;align-items:start}
+  @media(max-width:900px){ .ferramentas{grid-template-columns:1fr 1fr} .ferramentas .campo:first-child{grid-column:1/-1} }
   .ferramentas .campo{margin:0}
   @media(max-width:620px){ .ferramentas{grid-template-columns:1fr} }
   .dd{position:relative}
@@ -49,6 +50,12 @@
   .bt-linha:disabled{opacity:.4;cursor:default}
   .contador{font-size:.82rem;color:var(--muted);margin:0 2px 8px}
 
+  .filtros-envio{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}
+  .janela{max-width:760px}
+  .res-tag{display:inline-block;font-size:.66rem;font-weight:800;letter-spacing:.04em;padding:1px 6px;border-radius:5px;
+    background:var(--card-2);border:1px solid var(--linha);color:var(--muted);margin-top:3px}
+  .res-tag.desq{background:var(--erro-fraco);color:var(--erro);border-color:transparent}
+  .cargo{display:block;font-size:.7rem;color:var(--faint)}
   .filtro-rot{font-size:.78rem;font-weight:700;color:var(--muted);margin-bottom:6px}
   .resumo-envio{font-size:.88rem;color:var(--muted);margin:14px 0;line-height:1.55}
   .resumo-envio strong{color:var(--ink)}
@@ -96,9 +103,9 @@
       <div class="janela-tit" id="envioTit">Mensagem no WhatsApp</div>
       <button class="fechar" type="button" data-fechar aria-label="Fechar">×</button>
     </div>
-    <div id="envioFiltros">
-      <div class="filtro-rot">Para quais funções?</div>
-      <div id="ckFuncaoEnvio"></div>
+    <div id="envioFiltros" class="filtros-envio">
+      <div><div class="filtro-rot">Função</div><div id="ckFuncaoEnvio"></div></div>
+      <div><div class="filtro-rot">Resumo Chico Ventania</div><div id="ckResumoEnvio"></div></div>
     </div>
     <div class="resumo-envio" id="envioResumo"></div>
     <div class="campo">
@@ -151,7 +158,8 @@ Object.assign(MENSAGENS_MODULO, {
 var DADOS = null;
 var BUSCA = '';
 var FUNCOES_TELA = null;          // null = todas
-var CK_FUNCAO_TELA = null, CK_FUNCAO_ENVIO = null;
+var RESUMOS_TELA = null;          // null = padrão (todos menos DESQUALIFICADO)
+var CK_FUNCAO_TELA = null, CK_FUNCAO_ENVIO = null, CK_RESUMO_TELA = null, CK_RESUMO_ENVIO = null;
 var ENVIO_ALVO = null;            // null = todos (por função); [matricula] = um só
 var ANEXOS = [];                  // [{ id, nome, bytes, tipo, estado:'subindo'|'ok'|'erro', path, erro }]
 var TIMER_ENVIO = null;
@@ -226,6 +234,9 @@ function desenhar(){
       '<div class="campo"><label>Função</label>' +
         '<details class="dd" id="ddFuncao"><summary><span class="dd-resumo" id="ddResumo">Todas</span></summary>' +
         '<div class="dd-corpo" id="ckFuncaoTela"></div></details></div>' +
+      '<div class="campo"><label>Resumo Chico Ventania</label>' +
+        '<details class="dd" id="ddRes"><summary><span class="dd-resumo" id="ddResResumo"></span></summary>' +
+        '<div class="dd-corpo" id="ckResumoTela"></div></details></div>' +
     '</div>' +
     '<div class="contador" id="contador"></div>' +
     '<div class="tabela-cx"><table><thead><tr>' +
@@ -240,6 +251,14 @@ function desenhar(){
     desenharLinhas();
   });
   resumoDd(ops);
+  var opsRes = opcoesResumo(DADOS.contatos);
+  CK_RESUMO_TELA = montarChecklist(document.getElementById('ckResumoTela'), opsRes, RESUMOS_TELA, function(v){
+    RESUMOS_TELA = v;
+    resumoDdRes(opsRes);
+    desenharLinhas();
+  });
+  RESUMOS_TELA = CK_RESUMO_TELA.valores();
+  resumoDdRes(opsRes);
   document.getElementById('busca').addEventListener('input', function(e){ BUSCA = e.target.value.trim(); desenharLinhas(); });
   atualizarEnvioCaixa();
   desenharLinhas();
@@ -251,6 +270,16 @@ function resumoDd(ops){
   else if(!FUNCOES_TELA.length) el.textContent = 'Nenhuma';
   else if(FUNCOES_TELA.length === 1) el.textContent = FUNCOES_TELA[0];
   else el.textContent = FUNCOES_TELA.length + ' de ' + ops.length + ' funções';
+}
+
+function resumoDdRes(ops){
+  var el = document.getElementById('ddResResumo');
+  var v = RESUMOS_TELA || [];
+  var comuns = ops.filter(function(o){ return !o.separado; }).length;
+  var temDesq = v.indexOf(RESUMO_DESQUALIFICADO) > -1;
+  var n = v.length - (temDesq ? 1 : 0);
+  el.textContent = (n === comuns ? 'Todos' : !n ? 'Nenhum' : n === 1 ? v.filter(function(x){ return x !== RESUMO_DESQUALIFICADO; })[0] : n + ' de ' + comuns) +
+                   (temDesq ? ' + desqualificados' : ' (sem desqualificados)');
 }
 
 function atualizarEnvioCaixa(){
@@ -266,7 +295,7 @@ function atualizarEnvioCaixa(){
   }
   var bt = DADOS.podeEnviar
     ? '<button class="btn btn-zap" type="button" id="btEnviarTodos">' + iconeZap() + 'Enviar a todos</button>'
-    : '<span class="peq">Só ADMIN e SUPERVISOR enviam mensagens.</span>';
+    : '<span class="peq">Seu perfil não tem permissão para enviar mensagens.</span>';
   document.getElementById('caixaEnvio').innerHTML = '<div class="envio"><div class="envio-txt">' + txt + '</div>' + bt + '</div>';
 }
 
@@ -274,6 +303,7 @@ function visiveis(){
   var b = BUSCA.toLowerCase(), bd = soDigitos(BUSCA);
   return DADOS.contatos.filter(function(t){
     if(FUNCOES_TELA && FUNCOES_TELA.indexOf(funcaoDe(t)) < 0) return false;
+    if(RESUMOS_TELA && RESUMOS_TELA.indexOf(resumoDe(t)) < 0) return false;
     if(!b) return true;
     return String(t.nome).toLowerCase().indexOf(b) > -1 || String(t.matricula).indexOf(b) > -1 ||
            (bd.length >= 3 && String(t.telefone).indexOf(bd) > -1);
@@ -297,7 +327,9 @@ function desenharLinhas(){
         (u.em ? '<br>' + esc(u.em) : '') + '</span>';
     return '<tr>' +
       '<td><div class="tec-nome">' + esc(t.nome) + '</div><div class="tec-mat">Mat. ' + esc(t.matricula) + '</div></td>' +
-      '<td><span class="fun">' + esc(t.funcao || '—') + '</span></td>' +
+      '<td><span class="fun">' + esc(t.funcao || '—') + '</span>' +
+        (t.cargo && t.cargo !== t.funcao ? '<span class="cargo">' + esc(t.cargo) + '</span>' : '') +
+        (t.resumo ? '<span class="res-tag' + (t.resumo === RESUMO_DESQUALIFICADO ? ' desq' : '') + '">' + esc(t.resumo) + '</span>' : '') + '</td>' +
       '<td>' + (t.telefone ? '<span class="tel">' + esc(telBonito(t.telefone)) + '</span>'
         : '<span class="tel falta" title="' + esc(t.telefoneCru ? 'Na planilha: ' + t.telefoneCru : 'Coluna vazia na MINI MASTER') + '">' +
           (t.telefoneCru ? 'Número inválido' : 'Sem telefone') + '</span>') + '</td>' +
@@ -312,7 +344,13 @@ function desenharLinhas(){
 function destinatarios(){
   if(ENVIO_ALVO) return DADOS.contatos.filter(function(t){ return ENVIO_ALVO.indexOf(t.matricula) > -1; });
   var fun = CK_FUNCAO_ENVIO ? CK_FUNCAO_ENVIO.valores() : [];
-  return DADOS.contatos.filter(function(t){ return fun.indexOf(funcaoDe(t)) > -1; });
+  var res = CK_RESUMO_ENVIO ? CK_RESUMO_ENVIO.valores() : [];
+  return DADOS.contatos.filter(function(t){ return fun.indexOf(funcaoDe(t)) > -1 && res.indexOf(resumoDe(t)) > -1; });
+}
+/* Individual: só se o filtro da tela estiver mostrando os desqualificados. */
+function incluiDesqualificados(){
+  if(ENVIO_ALVO) return !!RESUMOS_TELA && RESUMOS_TELA.indexOf(RESUMO_DESQUALIFICADO) > -1;
+  return !!CK_RESUMO_ENVIO && CK_RESUMO_ENVIO.valores().indexOf(RESUMO_DESQUALIFICADO) > -1;
 }
 
 function abrirEnvio(matriculas){
@@ -321,6 +359,7 @@ function abrirEnvio(matriculas){
   if(!matriculas){
     // começa com as funções escolhidas no filtro da tela
     CK_FUNCAO_ENVIO = montarChecklist(document.getElementById('ckFuncaoEnvio'), opcoesFuncao(DADOS.contatos), FUNCOES_TELA, atualizarJanela);
+    CK_RESUMO_ENVIO = montarChecklist(document.getElementById('ckResumoEnvio'), opcoesResumo(DADOS.contatos), RESUMOS_TELA, atualizarJanela);
   }
   document.getElementById('dicaAnexo').textContent = 'Fotos (JPG/PNG), PDF ou vídeo MP4 · até ' + LIMITES.mb + ' MB cada · no máximo ' + LIMITES.qtd + ' arquivos.';
   atualizarJanela();
@@ -339,7 +378,9 @@ function atualizarJanela(){
   }else if(!com.length){
     r = '<strong>Ninguém selecionado.</strong> Marque ao menos uma função.';
   }else{
+    var desq = com.filter(function(t){ return t.resumo === RESUMO_DESQUALIFICADO; }).length;
     r = 'Vai para <strong>' + com.length + ' pessoa(s)</strong> no privado do WhatsApp.' +
+        (desq ? '<br><span class="lem-ERRO"><strong>Atenção:</strong> inclui ' + desq + ' DESQUALIFICADO(S).</span>' : '') +
         (sem ? ' <strong>' + sem + '</strong> sem telefone válido ficam de fora.' : '') +
         '<br>Envio aos poucos (uma pessoa a cada 4–8 s) para o número não ser bloqueado: uns <strong>' +
         Math.max(1, Math.ceil(com.length * (6 + ANEXOS.length * 2) / 60)) + ' min</strong>. Pode fechar a tela.';
@@ -439,7 +480,8 @@ function confirmarEnvio(){
   pedir('mensagemEnviar', {
     mensagem: texto,
     anexos: ANEXOS.filter(function(a){ return a.estado === 'ok'; }).map(function(a){ return { path: a.path, nome: a.nome }; }),
-    matriculas: com.map(function(t){ return t.matricula; })
+    matriculas: com.map(function(t){ return t.matricula; }),
+    incluirDesqualificados: incluiDesqualificados()
   }).then(function(res){
     if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
     fecharEnvio();
@@ -461,8 +503,10 @@ document.getElementById('painel').addEventListener('click', function(e){
   if(l) abrirEnvio([l.getAttribute('data-mat')]);
 });
 document.addEventListener('click', function(e){
-  var dd = document.getElementById('ddFuncao');
-  if(dd && dd.open && !dd.contains(e.target)) dd.open = false;
+  ['ddFuncao', 'ddRes'].forEach(function(id){
+    var dd = document.getElementById(id);
+    if(dd && dd.open && !dd.contains(e.target)) dd.open = false;
+  });
 });
 document.querySelectorAll('[data-fechar]').forEach(function(b){ b.addEventListener('click', fecharEnvio); });
 document.getElementById('veuEnvio').addEventListener('click', function(e){ if(e.target === this) fecharEnvio(); });
@@ -484,10 +528,13 @@ document.getElementById('btAtualizar').addEventListener('click', function(){ car
 var DEMO_DADOS = (function(){
   var nomes = ['ANTÔNIO CARLOS SILVA','BRUNO FERREIRA LIMA','CARLOS EDUARDO SOUZA','DIEGO ALVES COSTA','EDSON PEREIRA',
                'FÁBIO RODRIGUES','GABRIEL SANTOS','HUGO NASCIMENTO','IGOR MOREIRA','JOÃO PAULO ARAÚJO','LUCAS MELO','MARCOS VIEIRA'];
-  var fun = ['TÉCNICO EÓLICO I','TÉCNICO EÓLICO II','ELETRICISTA','SUPERVISOR',''];
+  var cargo = ['REPARADOR II','TÉCNICO EM COMPÓSITOS','LÍDER ESPECIALISTA EM COMPÓSITOS','ANALISTA','REPARADOR I'];
+  var res = ['ATIVO PARQUE','RESERVAS','DESQUALIFICADO','ADMINISTRATIVO','BANCO DE HORAS','AGUARDANDO CONVOCAÇÃO'];
   return { ok: true, podeEnviar: true, envio: null, limites: LIMITES,
     contatos: nomes.map(function(n, i){
-      return { matricula: String(1000 + i), nome: n, funcao: fun[i % 5], telefone: i === 7 ? '' : '5581' + (988000000 + i * 1371),
+      var r = res[i % 6];
+      return { matricula: String(1000 + i), nome: n, cargo: cargo[i % 5], resumo: r,
+               funcao: r === 'ADMINISTRATIVO' ? 'ADMINISTRATIVO' : (i % 5 === 3 ? 'ANALISTA' : 'TÉCNICO'), telefone: i === 7 ? '' : '5581' + (988000000 + i * 1371),
                telefoneCru: '', ultimo: i % 4 === 0 ? { status: 'ENVIADO', em: '03/11/2026 10:15', detalhe: '' } : null };
     }) };
 })();
