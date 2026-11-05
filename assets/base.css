@@ -143,6 +143,8 @@ body{
 .checklist .ck-item:hover{background:var(--azul-fraco)}
 .checklist .ck-item input{width:17px;height:17px;min-height:0;padding:0;margin:0;border:0;accent-color:var(--azul);flex:none;cursor:pointer}
 .checklist .ck-todos{font-weight:700}
+.checklist .ck-separado{border-top:1px dashed var(--linha);color:var(--erro)}
+.checklist .ck-separado em{font-style:normal;font-size:.72rem;color:var(--faint)}
 .ck-rot{flex:1;min-width:0}
 .ck-qtd{font-size:.74rem;font-weight:700;color:var(--faint);font-variant-numeric:tabular-nums}
 

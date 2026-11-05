@@ -194,34 +194,40 @@ function soDigitos(t){ return String(t == null ? '' : t).replace(/\D/g,''); }
 /* ---------------------------------------------------------------------------
    LISTA DE MARCAR (checklist com "Todos")
    cx       elemento onde a lista é montada
-   opcoes   [{ valor, rotulo, qtd? }]
-   marcados lista de valores já marcados; null = todos
+   opcoes   [{ valor, rotulo, qtd?, separado? }]
+            separado = fica FORA do "Todos": começa desmarcado e só entra
+            quando a pessoa marca ela mesma (ex.: DESQUALIFICADO)
+   marcados lista de valores já marcados; null = todos (menos os separados)
    aoMudar  função chamada a cada clique, recebe a lista de valores marcados
    -> { valores(): [...] }
    --------------------------------------------------------------------------- */
 function montarChecklist(cx, opcoes, marcados, aoMudar){
   var sel = {};
-  opcoes.forEach(function(o){ sel[o.valor] = !marcados || marcados.indexOf(o.valor) > -1; });
-  var total = opcoes.reduce(function(s, o){ return s + (o.qtd || 0); }, 0);
+  opcoes.forEach(function(o){ sel[o.valor] = marcados ? marcados.indexOf(o.valor) > -1 : !o.separado; });
+  var comuns = opcoes.filter(function(o){ return !o.separado; });
+  var total = comuns.reduce(function(s, o){ return s + (o.qtd || 0); }, 0);
+  var item = function(o){
+    var i = opcoes.indexOf(o);
+    return '<label class="ck-item' + (o.separado ? ' ck-separado' : '') + '"><input type="checkbox" data-i="' + i + '"' + (sel[o.valor] ? ' checked' : '') + '> ' +
+           '<span class="ck-rot">' + esc(o.rotulo) + (o.separado ? ' <em>· fora do "Todos"</em>' : '') + '</span>' +
+           (o.qtd !== undefined ? '<span class="ck-qtd">' + o.qtd + '</span>' : '') + '</label>';
+  };
   cx.innerHTML = '<div class="checklist">' +
     '<label class="ck-item ck-todos"><input type="checkbox" data-todos> <span class="ck-rot">Todos</span>' +
       (total ? '<span class="ck-qtd">' + total + '</span>' : '') + '</label>' +
-    '<div class="ck-lista">' + opcoes.map(function(o, i){
-      return '<label class="ck-item"><input type="checkbox" data-i="' + i + '"' + (sel[o.valor] ? ' checked' : '') + '> ' +
-             '<span class="ck-rot">' + esc(o.rotulo) + '</span>' +
-             (o.qtd !== undefined ? '<span class="ck-qtd">' + o.qtd + '</span>' : '') + '</label>';
-    }).join('') + '</div></div>';
+    '<div class="ck-lista">' + comuns.map(item).join('') +
+      opcoes.filter(function(o){ return o.separado; }).map(item).join('') + '</div></div>';
   var todos = cx.querySelector('[data-todos]');
   function valores(){ return opcoes.filter(function(o){ return sel[o.valor]; }).map(function(o){ return o.valor; }); }
   function sincronizar(){
-    var n = valores().length;
-    todos.checked = n === opcoes.length;
-    todos.indeterminate = n > 0 && n < opcoes.length;
+    var n = comuns.filter(function(o){ return sel[o.valor]; }).length;
+    todos.checked = n === comuns.length && n > 0;
+    todos.indeterminate = n > 0 && n < comuns.length;
   }
   cx.querySelector('.checklist').addEventListener('change', function(e){
     if(e.target === todos){
-      opcoes.forEach(function(o){ sel[o.valor] = todos.checked; });
-      cx.querySelectorAll('[data-i]').forEach(function(c){ c.checked = todos.checked; });
+      comuns.forEach(function(o){ sel[o.valor] = todos.checked; });
+      cx.querySelectorAll('[data-i]').forEach(function(c){ c.checked = !!sel[opcoes[+c.getAttribute('data-i')].valor]; });
     }else if(e.target.hasAttribute('data-i')){
       sel[opcoes[+e.target.getAttribute('data-i')].valor] = e.target.checked;
     }
@@ -230,6 +236,28 @@ function montarChecklist(cx, opcoes, marcados, aoMudar){
   });
   sincronizar();
   return { valores: valores };
+}
+
+/* ---------------------------------------------------------------------------
+   RESUMO CHICO VENTANIA (coluna da MINI MASTER) — opções do filtro.
+   As 6 opções combinadas aparecem sempre; outros valores achados na planilha
+   (ADMINISTRATIVO, em branco...) entram depois. DESQUALIFICADO fica fora do
+   "Todos": só recebe mensagem quem marcar essa opção.
+   --------------------------------------------------------------------------- */
+var RESUMOS_FIXOS = ['ATIVO PARQUE','RESERVAS','AGUARDANDO CONVOCAÇÃO','INDISPONIVEL','BANCO DE HORAS'];
+var RESUMO_DESQUALIFICADO = 'DESQUALIFICADO';
+var SEM_RESUMO = '(em branco)';
+function resumoDe(t){ return t.resumo || SEM_RESUMO; }
+function opcoesResumo(lista){
+  var por = {};
+  lista.forEach(function(t){ var r = resumoDe(t); por[r] = (por[r] || 0) + 1; });
+  var extras = Object.keys(por).filter(function(r){
+    return RESUMOS_FIXOS.indexOf(r) < 0 && r !== RESUMO_DESQUALIFICADO && r !== SEM_RESUMO;
+  }).sort();
+  var ordem = RESUMOS_FIXOS.concat(extras);
+  if(por[SEM_RESUMO]) ordem.push(SEM_RESUMO);
+  return ordem.map(function(r){ return { valor: r, rotulo: r, qtd: por[r] || 0 }; })
+    .concat([{ valor: RESUMO_DESQUALIFICADO, rotulo: RESUMO_DESQUALIFICADO, qtd: por[RESUMO_DESQUALIFICADO] || 0, separado: true }]);
 }
 
 /* Arranca a página: confere a sessão e chama iniciar() da página. */
