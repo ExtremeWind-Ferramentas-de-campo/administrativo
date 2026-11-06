@@ -29,13 +29,14 @@
   .dica-fer{font-size:.8rem;color:var(--muted);margin-bottom:10px}
 
   .tabela-cx{background:var(--card);border:1px solid var(--linha);border-radius:var(--raio);box-shadow:var(--sombra);overflow-x:auto}
-  table.ts{border-collapse:collapse;font-size:.8rem;min-width:1320px;width:100%}
+  table.ts{border-collapse:collapse;font-size:.8rem;min-width:1650px;width:100%}
   .ts th{background:#1c3557;color:#fff;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.02em;
     padding:8px 6px;border:1px solid #2c4a72;text-align:center;line-height:1.2;vertical-align:middle}
   .ts th.sb{background:#2b4c7e}
   .ts td{padding:7px 6px;border:1px solid var(--linha);text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap}
   .ts td.txt{text-align:left;white-space:normal;min-width:150px}
   .ts td.obs{min-width:220px}
+  .ts td.nome{min-width:210px;font-size:.74rem;line-height:1.35}
   .ts tr.sem-rdo td{color:var(--faint)}
   .ts tr.dia-100 td.c-dia{color:var(--erro);font-weight:700}
   .ts td.fer{cursor:pointer;user-select:none;font-weight:700;color:var(--muted);position:relative}
@@ -127,6 +128,7 @@ var COLUNAS = [
   { k:'dia',        t:'Dia da semana' },
   { k:'feriado',    t:'Feriado' },
   { k:'tecnicos',   t:'Nº de técnicos' },
+  { k:'nomes',      t:'Nome', txt:1, nome:1 },
   { k:'jornada',    t:'Total jornada', h:1 },
   { k:'ini50',      t:'Hora inic. extra 50%' },
   { k:'fim50',      t:'Hora fim extra 50%' },
@@ -140,9 +142,11 @@ var COLUNAS = [
   { k:'soma',       t:'Soma horas trabalhadas', h:1 },
   { k:'blade',      t:'Blade' },
   { k:'wtg',        t:'WTG' },
+  { k:'tipoReparo', t:'Tipo reparo', txt:1 },
   { k:'atividades', t:'Atividades', txt:1 },
-  { k:'observacoes',t:'Observações', txt:1, obs:1 }
+  { k:'observacoes',t:'Observações / justificativa stand-by', txt:1, obs:1 }
 ];
+var PRIMEIRA_NUM = 5;      // 1ª coluna de horas (depois de Nome)
 var MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 
 function avisoTopo(txt, tipo){
@@ -236,6 +240,7 @@ function valorCelula(d, c){
   if(c.k === 'feriado') return d.feriado ? 'SIM' : 'NÃO';
   if(!d.temRdo) return '';
   if(c.k === 'tecnicos') return String(d.tecnicos || '');
+  if(c.k === 'nomes') return (d.nomes || []).join('\n');
   if(c.h) return horas(d[c.k]);
   return d[c.k] == null ? '' : String(d[c.k]);
 }
@@ -278,7 +283,7 @@ function desenhar(){
         return '<td class="fer' + (d.feriado ? ' sim' : '') + (SEL[d.data] ? ' sel' : '') + '" tabindex="0" role="button" aria-pressed="' + (SEL[d.data] ? 'true' : 'false') +
                '" data-data="' + d.data + '" title="Clique para selecionar">' + v + '</td>';
       }
-      return '<td class="' + (col.k === 'dia' ? 'c-dia ' : '') + (col.txt ? 'txt ' : '') + (col.obs ? 'obs' : '') + '">' + esc(v) + '</td>';
+      return '<td class="' + (col.k === 'dia' ? 'c-dia ' : '') + (col.txt ? 'txt ' : '') + (col.obs ? 'obs ' : '') + (col.nome ? 'nome' : '') + '">' + esc(v).replace(/\n/g, '<br>') + '</td>';
     }).join('') + '</tr>';
   });
 
@@ -292,9 +297,9 @@ function desenhar(){
 }
 
 function linhaTotal(cls, rotulo, v, geral, nTec){
-  var h = '<tr class="' + cls + '"><td class="rot" colspan="' + (geral ? 3 : 4) + '">' + esc(rotulo) + '</td>';
-  if(geral) h += '<td>' + (nTec || 0) + '</td>';
-  COLUNAS.slice(4).forEach(function(col){ h += '<td>' + (col.h ? horas(v[col.k]) : '') + '</td>'; });
+  var h = '<tr class="' + cls + '"><td class="rot" colspan="' + (geral ? 3 : 5) + '">' + esc(rotulo) + '</td>';
+  if(geral) h += '<td>' + (nTec || 0) + '</td><td></td>';
+  COLUNAS.slice(PRIMEIRA_NUM).forEach(function(col){ h += '<td>' + (col.h ? horas(v[col.k]) : '') + '</td>'; });
   return h + '</tr>';
 }
 
@@ -398,16 +403,16 @@ function gerarPdf(){
     return COLUNAS.map(function(col){ return txtPdf(valorCelula(d, col)); });
   });
   var t = TS.totais;
-  var linhaTot = [{ content: 'TOTAL POR TÉCNICO (h)', colSpan: 4 }];
-  var linhaGer = [{ content: txtPdf('TOTAL GERAL - TODOS OS TÉCNICOS (h)'), colSpan: 3 }, String(t.porTecnico.tecnicos || 0)];
-  COLUNAS.slice(4).forEach(function(col){
+  var linhaTot = [{ content: 'TOTAL POR TÉCNICO (h)', colSpan: PRIMEIRA_NUM }];
+  var linhaGer = [{ content: txtPdf('TOTAL GERAL - TODOS OS TÉCNICOS (h)'), colSpan: 3 }, String(t.porTecnico.tecnicos || 0), ''];
+  COLUNAS.slice(PRIMEIRA_NUM).forEach(function(col){
     linhaTot.push(col.h ? horas(t.porTecnico[col.k]) : '');
     linhaGer.push(col.h ? horas(t.geral[col.k]) : '');
   });
 
-  var larg = [13, 19, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 15, 14, 33, 0];
+  var larg = [11, 16, 9, 9, 32, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 12, 11, 20, 25, 0];
   var usado = larg.reduce(function(a, b){ return a + b; }, 0);
-  larg[18] = Math.max(25, W - 2 * M - usado);
+  larg[20] = Math.max(22, W - 2 * M - usado);
   var colStyles = {};
   larg.forEach(function(w, i){ colStyles[i] = { cellWidth: w, halign: COLUNAS[i].txt ? 'left' : 'center' }; });
 
@@ -415,8 +420,8 @@ function gerarPdf(){
     startY: doc.lastAutoTable.finalY + 4, margin: { left: M, right: M }, theme: 'grid',
     head: [COLUNAS.map(function(col){ return txtPdf(col.t.toUpperCase()); })],
     body: corpo, foot: [linhaTot, linhaGer], showFoot: 'lastPage',
-    styles: { fontSize: 6.8, cellPadding: 1.2, lineColor: [170, 185, 205], lineWidth: 0.2, textColor: [14, 32, 51], valign: 'middle', overflow: 'linebreak' },
-    headStyles: { fillColor: NAVY, textColor: 255, fontSize: 5.8, halign: 'center', valign: 'middle', fontStyle: 'bold' },
+    styles: { fontSize: 6, cellPadding: 1, lineColor: [170, 185, 205], lineWidth: 0.2, textColor: [14, 32, 51], valign: 'middle', overflow: 'linebreak' },
+    headStyles: { fillColor: NAVY, textColor: 255, fontSize: 5.2, halign: 'center', valign: 'middle', fontStyle: 'bold' },
     footStyles: { fontStyle: 'bold', halign: 'center' },
     columnStyles: colStyles,
     didParseCell: function(h){
@@ -481,7 +486,9 @@ function demo(acao, dados){
       Object.assign(d, { temRdo: true, tipo: tipo, tecnicos: 3, jornada: trab - e50 - e100, extra50: e50, extra100: e100,
         ini50: e50 ? hh(tipo === 'NORMAL' ? b[1] - e50 : b[0]) : '', fim50: e50 ? hh(b[1]) : '',
         ini100: e100 ? hh(b[0]) : '', fim100: e100 ? hh(b[1]) : '',
-        sbNormal: b[2], sbClima: b[3], sbExtreme: b[4], soma: soma, blade: b[5], wtg: b[6], atividades: b[7], observacoes: b[8] });
+        sbNormal: b[2], sbClima: b[3], sbExtreme: b[4], soma: soma, blade: b[5], wtg: b[6], tipoReparo: b[7], observacoes: b[8],
+        nomes: ['MATEUS GOMES DA SILVA', 'APARECIDO PINTO LAUREANO', 'WILLAMES LEANDRO SILVA DA HORA'],
+        atividades: i % 2 ? 'LIXAMENTO\nLAMINAÇÃO' : 'INSPEÇÃO / IDENTIFICAÇÃO DO DEFEITO' });
       tot.tecnicos += 3;
       Object.keys(ger).forEach(function(k){ tot[k] += d[k]; ger[k] += d[k] * 3; });
     }
