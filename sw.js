@@ -21,7 +21,7 @@
    Ao publicar mudanças, incremente o número abaixo.
    ───────────────────────────────────────────────────────────── */
 const PREFIXO = 'ew-portal-';
-const CACHE = PREFIXO + 'v3';
+const CACHE = PREFIXO + 'v5';
 
 /* Melhor esforço, arquivo por arquivo: um 404 aqui não pode impedir a
    instalação do app inteiro (addAll é tudo-ou-nada). */
@@ -44,7 +44,11 @@ const ARQUIVOS = [
   'modulos/status-ehs.html',
   'modulos/gantt-campo.html',
   'modulos/avaliacao.html',
-  'modulos/status-equipes.html'
+  'modulos/status-equipes.html',
+  'modulos/mensagens-avisos.html',
+  'modulos/disponibilidade-tecnicos.html',
+  'modulos/mensagem-whatsapp.html',
+  'modulos/timesheet-nordex.html'
 ];
 
 const NUNCA_CACHE = [
