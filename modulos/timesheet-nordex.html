@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>TimeSheet Nordex Semanal — Extreme Wind</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#2b7fd0">
+<link rel="stylesheet" href="../assets/base.css">
+<style>
+  .conteudo{max-width:1500px}
+  .filtros{display:grid;gap:12px;grid-template-columns:minmax(0,1.3fr) minmax(0,1.3fr) auto;align-items:end;margin-bottom:18px}
+  .filtros .campo{margin:0}
+  @media(max-width:720px){ .filtros{grid-template-columns:1fr} }
+
+  .ts-cab{background:var(--card);border:1px solid var(--linha);border-radius:var(--raio);box-shadow:var(--sombra);overflow:hidden;margin-bottom:14px}
+  .ts-titulo{background:#1c3557;color:#fff;text-align:center;font-weight:800;letter-spacing:.04em;padding:12px 16px;font-size:1.05rem}
+  .ts-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--linha)}
+  .ts-info div{background:var(--card);padding:10px 14px}
+  .ts-info span{display:block;font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .ts-info strong{font-size:.98rem}
+  .ts-info .destaque strong{color:var(--azul)}
+
+  .barra-fer{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--alerta-fraco);color:var(--ink);
+    border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:.88rem}
+  .barra-fer strong{color:var(--alerta)}
+  .barra-fer .esp{flex:1}
+  .dica-fer{font-size:.8rem;color:var(--muted);margin-bottom:10px}
+
+  .tabela-cx{background:var(--card);border:1px solid var(--linha);border-radius:var(--raio);box-shadow:var(--sombra);overflow-x:auto}
+  table.ts{border-collapse:collapse;font-size:.8rem;min-width:1320px;width:100%}
+  .ts th{background:#1c3557;color:#fff;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.02em;
+    padding:8px 6px;border:1px solid #2c4a72;text-align:center;line-height:1.2;vertical-align:middle}
+  .ts th.sb{background:#2b4c7e}
+  .ts td{padding:7px 6px;border:1px solid var(--linha);text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ts td.txt{text-align:left;white-space:normal;min-width:150px}
+  .ts td.obs{min-width:220px}
+  .ts tr.sem-rdo td{color:var(--faint)}
+  .ts tr.dia-100 td.c-dia{color:var(--erro);font-weight:700}
+  .ts td.fer{cursor:pointer;user-select:none;font-weight:700;color:var(--muted);position:relative}
+  .ts td.fer:hover{background:var(--azul-fraco)}
+  .ts td.fer.sim{color:var(--erro);background:var(--erro-fraco)}
+  .ts td.fer.sel{outline:2px solid var(--azul);outline-offset:-2px;background:var(--azul-fraco)}
+  .ts td.fer:focus-visible{outline:2px solid var(--azul);outline-offset:-2px}
+  .ts tr.tot td{background:#dce6f2;color:#0e2033;font-weight:800}
+  .ts tr.geral td{background:#1c3557;color:#fff;font-weight:800}
+  .ts td.rot{text-align:right;padding-right:10px}
+  :root[data-theme="dark"] .ts tr.tot td{background:#22344b;color:var(--ink)}
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .ts tr.tot td{background:#22344b;color:var(--ink)} }
+
+  .carregando{text-align:center;padding:40px;color:var(--muted);font-size:.9rem}
+  .rodape-ts{font-size:.76rem;color:var(--faint);margin-top:10px}
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-marca">
+    <span class="topo-titulo">TimeSheet Nordex Semanal</span>
+    <span class="topo-sub">Supervisão de Campo</span>
+  </div>
+  <div class="topo-espaco"></div>
+  <span class="topo-sub" id="quemSou"></span>
+  <button class="topo-btn topo-btn--forte" id="btPdf" type="button" disabled>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+    <span class="rotulo">Baixar PDF</span>
+  </button>
+  <a class="topo-btn" href="supervisao-campo.html">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <span class="rotulo">Voltar</span>
+  </a>
+</header>
+
+<main class="conteudo">
+  <div class="aviso" id="avisoTopo"></div>
+
+  <div class="filtros">
+    <div class="campo">
+      <label for="fParque">Projeto / Parque</label>
+      <select id="fParque" disabled><option>Carregando…</option></select>
+    </div>
+    <div class="campo">
+      <label for="fSemana">Semana</label>
+      <select id="fSemana" disabled></select>
+    </div>
+    <button class="btn btn--vazado" id="btAtualizar" type="button">Atualizar</button>
+  </div>
+
+  <div id="painel"><div class="carregando">Lendo a planilha do RDO…</div></div>
+</main>
+
+<div class="bloqueio" id="bloqueio" hidden>
+  <div class="bloqueio-cx">
+    <p class="bloqueio-msg" id="bloqueioMsg"></p>
+    <button class="btn" id="bloqueioAcao" type="button">Ir para o portal</button>
+  </div>
+</div>
+<div class="recado" id="recado" hidden></div>
+
+<script src="../config/config.js"></script>
+<script src="../assets/base.js"></script>
+<script>
+/* ============================================================================
+   TIMESHEET NORDEX SEMANAL
+   Mesmo quadro da aba "Timesheet_semanal" da planilha do RDO, só para parques
+   NORDEX e NORDEX MX. O servidor calcula (TimesheetNordex.gs) com as mesmas
+   regras das fórmulas. A coluna FERIADO pode ser alterada aqui: selecione uma
+   ou mais células e clique em "Marcar SIM" (ou "NÃO"). Feriado e domingo
+   viram 100%.
+   ============================================================================ */
+
+Object.assign(MENSAGENS_MODULO, {
+  PARQUE_NAO_NORDEX: 'Esse parque não é da NORDEX / NORDEX MX.',
+  DADOS_INVALIDOS:   'Escolha o parque e a semana.'
+});
+
+var DEMO = /[?&]demo=1/.test(location.search);
+var PARQUES = [];          // [{parque, cliente, num, semanas:[{ano,semana,ini,fim}]}]
+var TS = null;             // resposta da semana
+var SEL = {};              // datas selecionadas na coluna feriado
+var ULTIMO_SEL = null;
+var SALVANDO = false;
+
+var COLUNAS = [
+  { k:'data',       t:'Data' },
+  { k:'dia',        t:'Dia da semana' },
+  { k:'feriado',    t:'Feriado' },
+  { k:'tecnicos',   t:'Nº de técnicos' },
+  { k:'jornada',    t:'Total jornada', h:1 },
+  { k:'ini50',      t:'Hora inic. extra 50%' },
+  { k:'fim50',      t:'Hora fim extra 50%' },
+  { k:'extra50',    t:'Jornada extra 50%', h:1 },
+  { k:'ini100',     t:'Hora inic. extra 100%' },
+  { k:'fim100',     t:'Hora fim extra 100%' },
+  { k:'extra100',   t:'Jornada extra 100%', h:1 },
+  { k:'sbNormal',   t:'Stand by normal', h:1, sb:1 },
+  { k:'sbClima',    t:'Stand by clima', h:1, sb:1 },
+  { k:'sbExtreme',  t:'Stand by extreme', h:1, sb:1 },
+  { k:'soma',       t:'Soma horas trabalhadas', h:1 },
+  { k:'blade',      t:'Blade' },
+  { k:'wtg',        t:'WTG' },
+  { k:'atividades', t:'Atividades', txt:1 },
+  { k:'observacoes',t:'Observações', txt:1, obs:1 }
+];
+var MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+function avisoTopo(txt, tipo){
+  var el = document.getElementById('avisoTopo');
+  if(!txt){ el.removeAttribute('data-tipo'); el.textContent = ''; return; }
+  el.textContent = txt; el.setAttribute('data-tipo', tipo || 'erro');
+}
+function horas(v){ return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
+function dataCurta(iso){ var p = iso.split('-'); return p[2] + '/' + MESES[Number(p[1]) - 1]; }
+function dataBr(iso){ var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : ''; }
+function rotSemana(s){ return 'Semana ' + s.semana + ' / ' + s.ano + '  ·  ' + dataBr(s.ini).slice(0,5) + ' a ' + dataBr(s.fim).slice(0,5); }
+
+function pedir(acao, dados){
+  if(DEMO) return Promise.resolve(demo(acao, dados));
+  return chamar(acao, dados);
+}
+function erroDe(err){ return traduzirErro(err) + (err && err.detalhe ? ' (' + err.detalhe + ')' : ''); }
+
+/* ---------- filtros ---------- */
+function carregarFiltros(){
+  avisoTopo('');
+  return pedir('tsNordexFiltros', {})
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
+      PARQUES = res.parques || [];
+      var sp = document.getElementById('fParque');
+      if(!PARQUES.length){
+        sp.innerHTML = '<option>Nenhum parque NORDEX com RDO</option>';
+        document.getElementById('painel').innerHTML = '<div class="vazio">Não há relatórios de parques NORDEX / NORDEX MX na planilha do RDO.</div>';
+        return;
+      }
+      var antes = sp.value;
+      sp.innerHTML = PARQUES.map(function(p, i){
+        return '<option value="' + i + '">' + esc(p.parque) + ' — ' + esc(p.cliente) + '</option>';
+      }).join('');
+      var lembrado = lerPref('tsn_parque');
+      var idx = PARQUES.findIndex(function(p){ return p.parque === (antes && PARQUES[antes] ? PARQUES[antes].parque : lembrado); });
+      sp.value = String(idx > -1 ? idx : 0);
+      sp.disabled = false;
+      montarSemanas(true);
+    })
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      document.getElementById('painel').innerHTML = '';
+      avisoTopo(erroDe(err));
+    });
+}
+
+function parqueAtual(){ return PARQUES[Number(document.getElementById('fParque').value)] || null; }
+
+function montarSemanas(manterLembrada){
+  var p = parqueAtual(), ss = document.getElementById('fSemana');
+  if(!p){ ss.innerHTML = ''; ss.disabled = true; return; }
+  var atual = ss.value || (manterLembrada ? lerPref('tsn_semana') : '');
+  ss.innerHTML = p.semanas.map(function(s){
+    var v = s.ano + '-' + s.semana;
+    return '<option value="' + v + '">' + esc(rotSemana(s)) + '</option>';
+  }).join('');
+  if(atual && p.semanas.some(function(s){ return s.ano + '-' + s.semana === atual; })) ss.value = atual;
+  ss.disabled = !p.semanas.length;
+  carregarSemana();
+}
+
+function lerPref(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } }
+function gravarPref(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+/* ---------- semana ---------- */
+function carregarSemana(){
+  var p = parqueAtual(), v = document.getElementById('fSemana').value;
+  if(!p || !v){ TS = null; desenhar(); return; }
+  var a = v.split('-');
+  gravarPref('tsn_parque', p.parque); gravarPref('tsn_semana', v);
+  SEL = {}; ULTIMO_SEL = null;
+  document.getElementById('painel').innerHTML = '<div class="carregando">Calculando a semana…</div>';
+  document.getElementById('btPdf').disabled = true;
+  pedir('tsNordexSemana', { parque: p.parque, ano: Number(a[0]), semana: Number(a[1]) })
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
+      TS = res; desenhar();
+    })
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      TS = null; document.getElementById('painel').innerHTML = '';
+      avisoTopo(erroDe(err));
+    });
+}
+
+function valorCelula(d, c){
+  if(c.k === 'data') return dataCurta(d.data);
+  if(c.k === 'dia') return d.dia;
+  if(c.k === 'feriado') return d.feriado ? 'SIM' : 'NÃO';
+  if(!d.temRdo) return '';
+  if(c.k === 'tecnicos') return String(d.tecnicos || '');
+  if(c.h) return horas(d[c.k]);
+  return d[c.k] == null ? '' : String(d[c.k]);
+}
+
+function desenhar(){
+  var painel = document.getElementById('painel');
+  document.getElementById('btPdf').disabled = !TS;
+  if(!TS){ painel.innerHTML = ''; return; }
+  var c = TS.cab, nSel = Object.keys(SEL).length;
+
+  var h = '<div class="ts-cab"><div class="ts-titulo">TIMESHEET HORAS TRABALHADAS - EXTREME WIND</div><div class="ts-info">' +
+    '<div class="destaque"><span>Projeto / Parque</span><strong>' + esc(c.parque) + '</strong></div>' +
+    '<div><span>Cliente</span><strong>' + esc(c.cliente) + '</strong></div>' +
+    '<div class="destaque"><span>Semana (W)</span><strong>' + c.semana + '</strong></div>' +
+    '<div><span>Ano</span><strong>' + c.ano + '</strong></div>' +
+    '<div><span>Período</span><strong>' + dataBr(c.ini).slice(0,5) + ' a ' + dataBr(c.fim) + '</strong></div>' +
+    '<div><span>Nº TS</span><strong>' + esc(c.numTs) + '</strong></div>' +
+    '</div></div>';
+
+  // A barra fica sempre no lugar (só os botões ligam/desligam) para a tabela
+  // não pular quando a seleção começa.
+  var bloq = (!nSel || SALVANDO) ? ' disabled' : '';
+  h += '<div class="barra-fer"><span>' + (nSel
+      ? '<strong>' + nSel + '</strong> dia(s) selecionado(s) na coluna Feriado'
+      : 'Feriado: clique nas células da coluna <strong>FERIADO</strong> (Shift + clique pega um intervalo) e marque SIM ou NÃO. Feriado conta como 100%.') +
+    '</span><span class="esp"></span>' +
+    '<button class="btn btn--pequeno" type="button" data-fer="1"' + bloq + '>' + (SALVANDO ? 'Salvando…' : 'Marcar SIM') + '</button>' +
+    '<button class="btn btn--pequeno btn--vazado" type="button" data-fer="0"' + bloq + '>Marcar NÃO</button>' +
+    '<button class="btn btn--pequeno btn--vazado" type="button" id="btLimparSel"' + bloq + '>Limpar seleção</button></div>';
+
+  h += '<div class="tabela-cx"><table class="ts"><thead><tr>' + COLUNAS.map(function(col){
+    return '<th' + (col.sb ? ' class="sb"' : '') + '>' + esc(col.t) + '</th>';
+  }).join('') + '</tr></thead><tbody>';
+
+  TS.dias.forEach(function(d){
+    var cls = (d.temRdo ? '' : 'sem-rdo ') + (d.tipo === '100%' ? 'dia-100' : '');
+    h += '<tr class="' + cls + '">' + COLUNAS.map(function(col){
+      var v = valorCelula(d, col);
+      if(col.k === 'feriado'){
+        return '<td class="fer' + (d.feriado ? ' sim' : '') + (SEL[d.data] ? ' sel' : '') + '" tabindex="0" role="button" aria-pressed="' + (SEL[d.data] ? 'true' : 'false') +
+               '" data-data="' + d.data + '" title="Clique para selecionar">' + v + '</td>';
+      }
+      return '<td class="' + (col.k === 'dia' ? 'c-dia ' : '') + (col.txt ? 'txt ' : '') + (col.obs ? 'obs' : '') + '">' + esc(v) + '</td>';
+    }).join('') + '</tr>';
+  });
+
+  var t = TS.totais;
+  h += linhaTotal('tot', 'TOTAL POR TÉCNICO (h)', t.porTecnico, false);
+  h += linhaTotal('geral', 'TOTAL GERAL – TODOS OS TÉCNICOS (h)', t.geral, true, t.porTecnico.tecnicos);
+  h += '</tbody></table></div>';
+  h += '<div class="rodape-ts">Dados da planilha do RDO (abas Relatorios, Atividades e Aux_Analise). Jornada normal seg–sex até ' +
+       horas(c.limite) + ' h; almoço descontado: ' + horas(c.almoco) + ' h.</div>';
+  painel.innerHTML = h;
+}
+
+function linhaTotal(cls, rotulo, v, geral, nTec){
+  var h = '<tr class="' + cls + '"><td class="rot" colspan="' + (geral ? 3 : 4) + '">' + esc(rotulo) + '</td>';
+  if(geral) h += '<td>' + (nTec || 0) + '</td>';
+  COLUNAS.slice(4).forEach(function(col){ h += '<td>' + (col.h ? horas(v[col.k]) : '') + '</td>'; });
+  return h + '</tr>';
+}
+
+/* ---------- feriado: seleção e gravação ---------- */
+document.getElementById('painel').addEventListener('click', function(ev){
+  var td = ev.target.closest('td.fer');
+  if(td){ alternarSel(td.getAttribute('data-data'), ev.shiftKey); return; }
+  var bt = ev.target.closest('[data-fer]');
+  if(bt){ salvarFeriado(bt.getAttribute('data-fer') === '1'); return; }
+  if(ev.target.id === 'btLimparSel'){ SEL = {}; ULTIMO_SEL = null; desenhar(); }
+});
+document.getElementById('painel').addEventListener('keydown', function(ev){
+  var td = ev.target.closest('td.fer');
+  if(td && (ev.key === 'Enter' || ev.key === ' ')){ ev.preventDefault(); alternarSel(td.getAttribute('data-data'), ev.shiftKey); focarFer(td.getAttribute('data-data')); }
+});
+function focarFer(data){ var el = document.querySelector('td.fer[data-data="' + data + '"]'); if(el) el.focus(); }
+
+function alternarSel(data, intervalo){
+  if(SALVANDO) return;
+  if(intervalo && ULTIMO_SEL){
+    var datas = TS.dias.map(function(d){ return d.data; });
+    var a = datas.indexOf(ULTIMO_SEL), b = datas.indexOf(data);
+    if(a > b){ var x = a; a = b; b = x; }
+    for(var i = a; i <= b; i++) SEL[datas[i]] = true;
+  } else if(SEL[data]) delete SEL[data];
+  else SEL[data] = true;
+  ULTIMO_SEL = data;
+  desenhar();
+}
+
+function salvarFeriado(sim){
+  var datas = Object.keys(SEL).sort();
+  if(!datas.length || !TS) return;
+  SALVANDO = true; desenhar();
+  pedir('tsNordexFeriado', { parque: TS.cab.parque, ano: TS.cab.ano, semana: TS.cab.semana, datas: datas, feriado: sim })
+    .then(function(res){
+      if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
+      TS = res; SEL = {}; ULTIMO_SEL = null;
+      recado(datas.length + ' dia(s) marcado(s) como ' + (sim ? 'feriado' : 'não feriado') + '.', 'ok');
+    })
+    .catch(function(err){
+      if(err && err.motivo === 'SESSAO') return;
+      recado(erroDe(err), 'erro');
+    })
+    .then(function(){ SALVANDO = false; desenhar(); });
+}
+
+/* ---------- PDF (jsPDF + AutoTable, baixados só no 1º clique) ---------- */
+var LIBS_PDF = [
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'
+];
+function carregarScript(src){
+  return new Promise(function(ok, falha){
+    if(document.querySelector('script[src="' + src + '"]')) return ok();
+    var s = document.createElement('script');
+    s.src = src; s.onload = ok; s.onerror = function(){ falha(new Error('não carregou ' + src)); };
+    document.head.appendChild(s);
+  });
+}
+function txtPdf(t){ return String(t == null ? '' : t).replace(/[—–]/g, '-').replace(/[^\x00-\xFF]/g, ''); }
+
+function baixarPdf(){
+  if(!TS) return;
+  var bt = document.getElementById('btPdf');
+  bt.disabled = true;
+  carregarScript(LIBS_PDF[0])
+    .then(function(){ return carregarScript(LIBS_PDF[1]); })
+    .then(function(){
+      var c = TS.cab;
+      var nome = 'Timesheet ' + c.parque + ' W' + ('0' + c.semana).slice(-2) + ' ' + c.ano + '.pdf';
+      gerarPdf().save(nome.replace(/[\\/:*?"<>|]/g, '-'));
+    })
+    .catch(function(e){ recado('Não consegui gerar o PDF: ' + e.message, 'erro'); })
+    .then(function(){ bt.disabled = false; });
+}
+
+function gerarPdf(){
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  var W = doc.internal.pageSize.getWidth(), M = 8;
+  var NAVY = [28, 53, 87], SB = [43, 76, 126], CLARO = [220, 230, 242];
+  var c = TS.cab;
+
+  doc.setFillColor.apply(doc, NAVY); doc.rect(M, M, W - 2 * M, 10, 'F');
+  doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+  doc.text('TIMESHEET HORAS TRABALHADAS - EXTREME WIND', W / 2, M + 6.8, { align: 'center' });
+
+  var info = [['PROJETO / PARQUE:', c.parque, 'CLIENTE:', c.cliente],
+              ['SEMANA (W):', String(c.semana), 'ANO:', String(c.ano)],
+              ['Nº TS:', c.numTs, 'PERÍODO:', dataBr(c.ini) + ' a ' + dataBr(c.fim)]];
+  doc.autoTable({
+    startY: M + 12, margin: { left: M, right: M }, tableWidth: 150, theme: 'grid',
+    body: info.map(function(l){ return l.map(txtPdf); }),
+    styles: { fontSize: 8, cellPadding: 1.4, lineColor: [160, 175, 195], lineWidth: 0.2, textColor: [14, 32, 51] },
+    columnStyles: { 0: { fontStyle: 'bold', fillColor: CLARO, cellWidth: 32, halign: 'right' }, 1: { cellWidth: 48, textColor: [20, 70, 160], fontStyle: 'bold' },
+                    2: { fontStyle: 'bold', fillColor: CLARO, cellWidth: 22, halign: 'right' }, 3: { cellWidth: 48 } }
+  });
+
+  var corpo = TS.dias.map(function(d){
+    return COLUNAS.map(function(col){ return txtPdf(valorCelula(d, col)); });
+  });
+  var t = TS.totais;
+  var linhaTot = [{ content: 'TOTAL POR TÉCNICO (h)', colSpan: 4 }];
+  var linhaGer = [{ content: txtPdf('TOTAL GERAL - TODOS OS TÉCNICOS (h)'), colSpan: 3 }, String(t.porTecnico.tecnicos || 0)];
+  COLUNAS.slice(4).forEach(function(col){
+    linhaTot.push(col.h ? horas(t.porTecnico[col.k]) : '');
+    linhaGer.push(col.h ? horas(t.geral[col.k]) : '');
+  });
+
+  var larg = [13, 19, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 15, 14, 33, 0];
+  var usado = larg.reduce(function(a, b){ return a + b; }, 0);
+  larg[18] = Math.max(25, W - 2 * M - usado);
+  var colStyles = {};
+  larg.forEach(function(w, i){ colStyles[i] = { cellWidth: w, halign: COLUNAS[i].txt ? 'left' : 'center' }; });
+
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 4, margin: { left: M, right: M }, theme: 'grid',
+    head: [COLUNAS.map(function(col){ return txtPdf(col.t.toUpperCase()); })],
+    body: corpo, foot: [linhaTot, linhaGer], showFoot: 'lastPage',
+    styles: { fontSize: 6.8, cellPadding: 1.2, lineColor: [170, 185, 205], lineWidth: 0.2, textColor: [14, 32, 51], valign: 'middle', overflow: 'linebreak' },
+    headStyles: { fillColor: NAVY, textColor: 255, fontSize: 5.8, halign: 'center', valign: 'middle', fontStyle: 'bold' },
+    footStyles: { fontStyle: 'bold', halign: 'center' },
+    columnStyles: colStyles,
+    didParseCell: function(h){
+      if(h.section === 'head' && COLUNAS[h.column.index] && COLUNAS[h.column.index].sb) h.cell.styles.fillColor = SB;
+      if(h.section === 'foot'){
+        var ger = h.row.index === 1;
+        h.cell.styles.fillColor = ger ? NAVY : CLARO;
+        h.cell.styles.textColor = ger ? 255 : [14, 32, 51];
+        if(h.column.index === 0) h.cell.styles.halign = 'right';
+      }
+      if(h.section === 'body'){
+        var d = TS.dias[h.row.index];
+        if(h.column.index === 2 && d.feriado){ h.cell.styles.textColor = [176, 42, 30]; h.cell.styles.fontStyle = 'bold'; }
+        if(h.column.index === 1 && d.tipo === '100%'){ h.cell.styles.textColor = [176, 42, 30]; h.cell.styles.fontStyle = 'bold'; }
+      }
+    }
+  });
+
+  var y = doc.lastAutoTable.finalY + 5;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(110);
+  doc.text(txtPdf('Gerado pelo Portal Administrativo em ' + new Date().toLocaleString('pt-BR') +
+           '. Jornada normal seg-sex até ' + horas(c.limite) + ' h; almoço descontado: ' + horas(c.almoco) + ' h. Domingo e feriado = 100%.'), M, y);
+  return doc;
+}
+
+/* ---------- eventos ---------- */
+document.getElementById('fParque').addEventListener('change', function(){
+  document.getElementById('fSemana').value = '';
+  montarSemanas(false);
+});
+document.getElementById('fSemana').addEventListener('change', carregarSemana);
+document.getElementById('btAtualizar').addEventListener('click', carregarFiltros);
+document.getElementById('btPdf').addEventListener('click', baixarPdf);
+
+/* ---------- demonstração (abra com ?demo=1 para ver a tela sem servidor) ---------- */
+var DEMO_FER = {};
+function demo(acao, dados){
+  if(acao === 'tsNordexFiltros'){
+    return { ok: true, parques: [
+      { parque: 'SÃO FERNANDO 1', cliente: 'NORDEX', num: 13, semanas: [{ ano: 2026, semana: 44, ini: '2026-10-26', fim: '2026-11-01' }, { ano: 2026, semana: 43, ini: '2026-10-19', fim: '2026-10-25' }] },
+      { parque: 'DOLORES 1', cliente: 'NORDEX MX', num: 3, semanas: [{ ano: 2026, semana: 44, ini: '2026-10-26', fim: '2026-11-01' }] }
+    ]};
+  }
+  if(acao === 'tsNordexFeriado') dados.datas.forEach(function(d){ DEMO_FER[dados.parque + d] = dados.feriado; });
+  var seg = new Date(Date.UTC(2026, 9, 26 - (44 - dados.semana) * 7));
+  var nomes = ['segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado','domingo'];
+  var base = [[7, 17, 0, 0, 0, '13', '03_07', 'Marcação de SBI', ''], [7, 17, 0, 3.3, 0, '88', '03_07', 'Marcação de SBI', 'Incidência climática (vento)'],
+              [7, 17, 0, 6, 0, '88', '03_07', 'Marcação de SBI', 'Incidência climática (chuva)'], [7, 17, 4, 0, 0, '402400382', '02_05', 'Inspeção Interna', 'Aguardando manutenção e torqueamento'],
+              [7, 16.83, 0, 2, 0, '88', '46088', 'Marcação de SBI', 'Incidência climática (vento)'], [7, 12, 0, 0, 0, '88', '46088', 'Marcação de SBI', ''], null];
+  var dias = [], tot = { tecnicos: 0, jornada: 0, extra50: 0, extra100: 0, sbNormal: 0, sbClima: 0, sbExtreme: 0, soma: 0 }, ger = {};
+  ['jornada','extra50','extra100','sbNormal','sbClima','sbExtreme','soma'].forEach(function(k){ ger[k] = 0; });
+  nomes.forEach(function(n, i){
+    var iso = new Date(seg.getTime() + i * 86400000).toISOString().slice(0, 10);
+    var fer = DEMO_FER[dados.parque + iso] === true;
+    var d = { data: iso, dia: n, feriado: fer, temRdo: false }, b = base[i];
+    if(b){
+      var soma = b[1] - b[0] - 1, trab = Math.max(0, soma - b[2] - b[3] - b[4]);
+      var tipo = (fer || i === 6) ? '100%' : (i === 5 ? 'SÁBADO' : 'NORMAL');
+      var e50 = tipo === 'SÁBADO' ? trab : (tipo === 'NORMAL' ? Math.min(trab, Math.max(0, soma - 9)) : 0);
+      var e100 = tipo === '100%' ? trab : 0;
+      var hh = function(x){ var m = Math.round(x * 60); return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + m % 60).slice(-2); };
+      Object.assign(d, { temRdo: true, tipo: tipo, tecnicos: 3, jornada: trab - e50 - e100, extra50: e50, extra100: e100,
+        ini50: e50 ? hh(tipo === 'NORMAL' ? b[1] - e50 : b[0]) : '', fim50: e50 ? hh(b[1]) : '',
+        ini100: e100 ? hh(b[0]) : '', fim100: e100 ? hh(b[1]) : '',
+        sbNormal: b[2], sbClima: b[3], sbExtreme: b[4], soma: soma, blade: b[5], wtg: b[6], atividades: b[7], observacoes: b[8] });
+      tot.tecnicos += 3;
+      Object.keys(ger).forEach(function(k){ tot[k] += d[k]; ger[k] += d[k] * 3; });
+    }
+    dias.push(d);
+  });
+  var pq = dados.parque === 'DOLORES 1' ? { c: 'NORDEX MX', n: 3 } : { c: 'NORDEX', n: 13 };
+  return { ok: true, cab: { parque: dados.parque, cliente: pq.c, ano: dados.ano, semana: dados.semana,
+           numTs: 'TS ' + ('0' + pq.n).slice(-2) + ' - ' + dados.semana + ' ' + dados.ano, ini: dias[0].data, fim: dias[6].data, limite: 9, almoco: 1 },
+           dias: dias, totais: { porTecnico: tot, geral: ger } };
+}
+
+if(DEMO){
+  document.getElementById('quemSou').textContent = 'Demonstração';
+  carregarFiltros();
+}else if(iniciarModulo()){
+  carregarFiltros();
+}
+</script>
+</body>
+</html>
