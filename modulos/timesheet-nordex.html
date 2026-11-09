@@ -37,7 +37,12 @@
   .ts td.txt{text-align:left;white-space:normal;min-width:150px}
   .ts td.obs{min-width:220px}
   .ts td.nome{min-width:210px;font-size:.74rem;line-height:1.35}
+  /* cores das colunas (iguais no PDF: CORES_PDF) */
+  .ts td.cor-az{background:#dbeafe;color:#0e2033}
+  .ts td.cor-lj{background:#fde4c8;color:#0e2033}
+  .ts td.cor-cz{background:#e7eaee;color:#0e2033}
   .ts tr.sem-rdo td{color:var(--faint)}
+  .ts tr.sem-rdo td.cor-az,.ts tr.sem-rdo td.cor-lj,.ts tr.sem-rdo td.cor-cz{color:#8798a8}
   .ts tr.dia-100 td.c-dia{color:var(--erro);font-weight:700}
   .ts td.fer{cursor:pointer;user-select:none;font-weight:700;color:var(--muted);position:relative}
   .ts td.fer:hover{background:var(--azul-fraco)}
@@ -129,23 +134,24 @@ var COLUNAS = [
   { k:'feriado',    t:'Feriado' },
   { k:'tecnicos',   t:'Nº de técnicos' },
   { k:'nomes',      t:'Nome', txt:1, nome:1 },
-  { k:'jornada',    t:'Total jornada', h:1 },
+  { k:'jornada',    t:'Total jornada', h:1, cor:'cz' },
   { k:'ini50',      t:'Hora inic. extra 50%' },
   { k:'fim50',      t:'Hora fim extra 50%' },
-  { k:'extra50',    t:'Jornada extra 50%', h:1 },
+  { k:'extra50',    t:'Jornada extra 50%', h:1, cor:'lj' },
   { k:'ini100',     t:'Hora inic. extra 100%' },
   { k:'fim100',     t:'Hora fim extra 100%' },
-  { k:'extra100',   t:'Jornada extra 100%', h:1 },
-  { k:'sbNormal',   t:'Stand by normal', h:1, sb:1 },
-  { k:'sbClima',    t:'Stand by clima', h:1, sb:1 },
-  { k:'sbExtreme',  t:'Stand by extreme', h:1, sb:1 },
-  { k:'soma',       t:'Soma horas trabalhadas', h:1 },
+  { k:'extra100',   t:'Jornada extra 100%', h:1, cor:'lj' },
+  { k:'sbNormal',   t:'Stand by normal', h:1, sb:1, cor:'az' },
+  { k:'sbClima',    t:'Stand by clima', h:1, sb:1, cor:'az' },
+  { k:'sbExtreme',  t:'Stand by extreme', h:1, sb:1, cor:'az' },
+  { k:'soma',       t:'Soma horas trabalhadas', h:1, cor:'cz' },
   { k:'blade',      t:'Blade' },
   { k:'wtg',        t:'WTG' },
   { k:'tipoReparo', t:'Tipo reparo', txt:1 },
   { k:'atividades', t:'Atividades', txt:1 },
   { k:'observacoes',t:'Observações / justificativa stand-by', txt:1, obs:1 }
 ];
+var CORES_PDF = { az: [219, 234, 254], lj: [253, 228, 200], cz: [231, 234, 238] };   // mesmas cores da tela
 var PRIMEIRA_NUM = 5;      // 1ª coluna de horas (depois de Nome)
 var MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 
@@ -283,7 +289,7 @@ function desenhar(){
         return '<td class="fer' + (d.feriado ? ' sim' : '') + (SEL[d.data] ? ' sel' : '') + '" tabindex="0" role="button" aria-pressed="' + (SEL[d.data] ? 'true' : 'false') +
                '" data-data="' + d.data + '" title="Clique para selecionar">' + v + '</td>';
       }
-      return '<td class="' + (col.k === 'dia' ? 'c-dia ' : '') + (col.txt ? 'txt ' : '') + (col.obs ? 'obs ' : '') + (col.nome ? 'nome' : '') + '">' + esc(v).replace(/\n/g, '<br>') + '</td>';
+      return '<td class="' + (col.k === 'dia' ? 'c-dia ' : '') + (col.txt ? 'txt ' : '') + (col.obs ? 'obs ' : '') + (col.nome ? 'nome ' : '') + (col.cor ? 'cor-' + col.cor : '') + '">' + esc(v).replace(/\n/g, '<br>') + '</td>';
     }).join('') + '</tr>';
   });
 
@@ -434,6 +440,8 @@ function gerarPdf(){
       }
       if(h.section === 'body'){
         var d = TS.dias[h.row.index];
+        var cor = COLUNAS[h.column.index] && CORES_PDF[COLUNAS[h.column.index].cor];
+        if(cor) h.cell.styles.fillColor = cor;
         if(h.column.index === 2 && d.feriado){ h.cell.styles.textColor = [176, 42, 30]; h.cell.styles.fontStyle = 'bold'; }
         if(h.column.index === 1 && d.tipo === '100%'){ h.cell.styles.textColor = [176, 42, 30]; h.cell.styles.fontStyle = 'bold'; }
       }
@@ -444,7 +452,20 @@ function gerarPdf(){
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(110);
   doc.text(txtPdf('Gerado pelo Portal Administrativo em ' + new Date().toLocaleString('pt-BR') +
            '. Jornada normal seg-sex até ' + horas(c.limite) + ' h; almoço descontado: ' + horas(c.almoco) + ' h. Domingo e feriado = 100%.'), M, y);
+  assinaturaPdf(doc, y + 4, M);
   return doc;
+}
+
+/* Linha de assinatura centralizada, embaixo da tabela (vai para outra folha se não couber). */
+function assinaturaPdf(doc, y, M){
+  var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  var larg = 95, alto = 20;
+  if(y + alto > H - M){ doc.addPage(); y = M + 10; }
+  var linhaY = y + 12, x0 = (W - larg) / 2;
+  doc.setDrawColor(40); doc.setLineWidth(0.3);
+  doc.line(x0, linhaY, x0 + larg, linhaY);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(30);
+  doc.text(txtPdf('ASSINATURA VALIDAÇÃO'), W / 2, linhaY + 4.5, { align: 'center' });
 }
 
 /* ---------- eventos ---------- */
