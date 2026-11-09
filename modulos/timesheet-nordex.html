@@ -325,8 +325,7 @@ function desenhar(){
   h += linhaTotal('tot', 'TOTAL POR TÉCNICO (h)', t.porTecnico, false);
   h += linhaTotal('geral', 'TOTAL GERAL – TODOS OS TÉCNICOS (h)', t.geral, true, t.porTecnico.tecnicos);
   h += '</tbody></table></div>';
-  h += '<div class="rodape-ts">Dados da planilha do RDO (abas Relatorios, Atividades e Aux_Analise). Jornada normal seg–sex até ' +
-       horas(c.limite) + ' h; almoço descontado: ' + horas(c.almoco) + ' h.</div>';
+  h += '<div class="rodape-ts">Dados da planilha do RDO (abas Relatorios, Atividades e Aux_Analise).</div>';
   painel.innerHTML = h;
 }
 
@@ -485,7 +484,7 @@ function gerarPdf(){
   var y = doc.lastAutoTable.finalY + 5;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(110);
   doc.text(txtPdf('Gerado pelo Portal Administrativo em ' + new Date().toLocaleString('pt-BR') +
-           '. Jornada normal seg-sex até ' + horas(c.limite) + ' h; almoço descontado: ' + horas(c.almoco) + ' h. Domingo e feriado = 100%.'), M, y);
+           '.'), M, y);
   assinaturaPdf(doc, y + 4, M);
   return doc;
 }
