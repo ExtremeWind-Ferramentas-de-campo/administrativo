@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>TimeSheet Nordex Semanal — Extreme Wind</title>
+<title>TimeSheet Semanal — Extreme Wind</title>
 <link rel="manifest" href="../manifest.json">
 <meta name="theme-color" content="#2b7fd0">
 <link rel="stylesheet" href="../assets/base.css">
 <style>
   .conteudo{max-width:1500px}
-  .filtros{display:grid;gap:12px;grid-template-columns:minmax(0,1.3fr) minmax(0,1.3fr) auto;align-items:end;margin-bottom:18px}
+  .filtros{display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.3fr) auto;align-items:end;margin-bottom:18px}
   .filtros .campo{margin:0}
   @media(max-width:720px){ .filtros{grid-template-columns:1fr} }
 
@@ -63,7 +63,7 @@
 
 <header class="topo">
   <div class="topo-marca">
-    <span class="topo-titulo">TimeSheet Nordex Semanal</span>
+    <span class="topo-titulo">TimeSheet Semanal</span>
     <span class="topo-sub">Supervisão de Campo</span>
   </div>
   <div class="topo-espaco"></div>
@@ -82,6 +82,10 @@
   <div class="aviso" id="avisoTopo"></div>
 
   <div class="filtros">
+    <div class="campo">
+      <label for="fCliente">Cliente</label>
+      <select id="fCliente" disabled><option>Carregando…</option></select>
+    </div>
     <div class="campo">
       <label for="fParque">Projeto / Parque</label>
       <select id="fParque" disabled><option>Carregando…</option></select>
@@ -108,16 +112,16 @@
 <script src="../assets/base.js"></script>
 <script>
 /* ============================================================================
-   TIMESHEET NORDEX SEMANAL
-   Mesmo quadro da aba "Timesheet_semanal" da planilha do RDO, só para parques
-   NORDEX e NORDEX MX. O servidor calcula (TimesheetNordex.gs) com as mesmas
+   TIMESHEET SEMANAL
+   Mesmo quadro da aba "Timesheet_semanal" da planilha do RDO, para todos os
+   clientes (filtro Cliente). O servidor calcula (TimesheetNordex.gs) com as mesmas
    regras das fórmulas. A coluna FERIADO pode ser alterada aqui: selecione uma
    ou mais células e clique em "Marcar SIM" (ou "NÃO"). Feriado e domingo
    viram 100%.
    ============================================================================ */
 
 Object.assign(MENSAGENS_MODULO, {
-  PARQUE_NAO_NORDEX: 'Esse parque não é da NORDEX / NORDEX MX.',
+  PARQUE_DESCONHECIDO: 'Esse parque não foi encontrado na planilha do RDO.',
   DADOS_INVALIDOS:   'Escolha o parque e a semana.'
 });
 
@@ -151,6 +155,8 @@ var COLUNAS = [
   { k:'atividades', t:'Atividades', txt:1 },
   { k:'observacoes',t:'Observações / justificativa stand-by', txt:1, obs:1 }
 ];
+var ELABORADO_POR = 'Ryan Neves';      // aparecem no PDF, em cima de Atividades
+var EXECUTADO_POR = 'Rebeca Bonner';
 var CORES_PDF = { az: [219, 234, 254], lj: [253, 228, 200], cz: [231, 234, 238] };   // mesmas cores da tela
 var PRIMEIRA_NUM = 5;      // 1ª coluna de horas (depois de Nome)
 var MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
@@ -177,22 +183,25 @@ function carregarFiltros(){
   return pedir('tsNordexFiltros', {})
     .then(function(res){
       if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO', detalhe: res && res.detalhe };
+      var sp = document.getElementById('fParque'), sc = document.getElementById('fCliente');
+      var parqueAntes = parqueAtual() ? parqueAtual().parque : lerPref('tsn_parque');
+      var clienteAntes = sc.disabled ? lerPref('tsn_cliente') : sc.value;
       PARQUES = res.parques || [];
-      var sp = document.getElementById('fParque');
       if(!PARQUES.length){
-        sp.innerHTML = '<option>Nenhum parque NORDEX com RDO</option>';
-        document.getElementById('painel').innerHTML = '<div class="vazio">Não há relatórios de parques NORDEX / NORDEX MX na planilha do RDO.</div>';
+        sc.innerHTML = '<option value="">—</option>';
+        sp.innerHTML = '<option>Nenhum parque com RDO</option>';
+        document.getElementById('painel').innerHTML = '<div class="vazio">Não há relatórios na planilha do RDO.</div>';
         return;
       }
-      var antes = sp.value;
-      sp.innerHTML = PARQUES.map(function(p, i){
-        return '<option value="' + i + '">' + esc(p.parque) + ' — ' + esc(p.cliente) + '</option>';
+      var clientes = [];
+      PARQUES.forEach(function(p){ if(clientes.indexOf(p.cliente) < 0) clientes.push(p.cliente); });
+      clientes.sort();
+      sc.innerHTML = '<option value="">Todos os clientes</option>' + clientes.map(function(c){
+        return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
       }).join('');
-      var lembrado = lerPref('tsn_parque');
-      var idx = PARQUES.findIndex(function(p){ return p.parque === (antes && PARQUES[antes] ? PARQUES[antes].parque : lembrado); });
-      sp.value = String(idx > -1 ? idx : 0);
-      sp.disabled = false;
-      montarSemanas(true);
+      sc.value = clientes.indexOf(clienteAntes) > -1 ? clienteAntes : '';
+      sc.disabled = false;
+      montarParques(parqueAntes);
     })
     .catch(function(err){
       if(err && err.motivo === 'SESSAO') return;
@@ -201,7 +210,26 @@ function carregarFiltros(){
     });
 }
 
-function parqueAtual(){ return PARQUES[Number(document.getElementById('fParque').value)] || null; }
+function parqueAtual(){
+  var v = document.getElementById('fParque').value;
+  return v === '' ? null : (PARQUES[Number(v)] || null);
+}
+
+/* Lista de parques do cliente escolhido (o valor da opção é o índice em PARQUES). */
+function montarParques(preferido){
+  var sp = document.getElementById('fParque'), cli = document.getElementById('fCliente').value;
+  var idxs = [];
+  PARQUES.forEach(function(p, i){ if(!cli || p.cliente === cli) idxs.push(i); });
+  sp.innerHTML = idxs.map(function(i){
+    var p = PARQUES[i];
+    return '<option value="' + i + '">' + esc(p.parque) + (cli ? '' : ' — ' + esc(p.cliente)) + '</option>';
+  }).join('');
+  var achado = idxs.filter(function(i){ return PARQUES[i].parque === preferido; })[0];
+  if(achado != null) sp.value = String(achado);
+  sp.disabled = !idxs.length;
+  gravarPref('tsn_cliente', cli);
+  montarSemanas(true);
+}
 
 function montarSemanas(manterLembrada){
   var p = parqueAtual(), ss = document.getElementById('fSemana');
@@ -419,6 +447,12 @@ function gerarPdf(){
   var larg = [11, 16, 9, 9, 32, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 12, 11, 20, 25, 0];
   var usado = larg.reduce(function(a, b){ return a + b; }, 0);
   larg[20] = Math.max(22, W - 2 * M - usado);
+  // Em cima de Atividades / Observações (espaço livre ao lado do quadro de cima)
+  var xAtiv = M + larg.slice(0, 19).reduce(function(a, b){ return a + b; }, 0);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(14, 32, 51);
+  doc.text(txtPdf('Elaborado por: ' + ELABORADO_POR), xAtiv, M + 17);
+  doc.text(txtPdf('Executado por: ' + EXECUTADO_POR), xAtiv, M + 22.5);
+
   var colStyles = {};
   larg.forEach(function(w, i){ colStyles[i] = { cellWidth: w, halign: COLUNAS[i].txt ? 'left' : 'center' }; });
 
@@ -469,6 +503,10 @@ function assinaturaPdf(doc, y, M){
 }
 
 /* ---------- eventos ---------- */
+document.getElementById('fCliente').addEventListener('change', function(){
+  document.getElementById('fSemana').value = '';
+  montarParques(parqueAtual() ? parqueAtual().parque : '');
+});
 document.getElementById('fParque').addEventListener('change', function(){
   document.getElementById('fSemana').value = '';
   montarSemanas(false);
@@ -483,7 +521,9 @@ function demo(acao, dados){
   if(acao === 'tsNordexFiltros'){
     return { ok: true, parques: [
       { parque: 'SÃO FERNANDO 1', cliente: 'NORDEX', num: 13, semanas: [{ ano: 2026, semana: 44, ini: '2026-10-26', fim: '2026-11-01' }, { ano: 2026, semana: 43, ini: '2026-10-19', fim: '2026-10-25' }] },
-      { parque: 'DOLORES 1', cliente: 'NORDEX MX', num: 3, semanas: [{ ano: 2026, semana: 44, ini: '2026-10-26', fim: '2026-11-01' }] }
+      { parque: 'DOLORES 1', cliente: 'NORDEX MX', num: 3, semanas: [{ ano: 2026, semana: 44, ini: '2026-10-26', fim: '2026-11-01' }] },
+      { parque: 'OITIS MCU 1', cliente: 'GE', num: 10, semanas: [{ ano: 2026, semana: 44, ini: '2026-10-26', fim: '2026-11-01' }] },
+      { parque: 'TUCANO 1', cliente: 'SIEMENS', num: 16, semanas: [{ ano: 2026, semana: 44, ini: '2026-10-26', fim: '2026-11-01' }] }
     ]};
   }
   if(acao === 'tsNordexFeriado') dados.datas.forEach(function(d){ DEMO_FER[dados.parque + d] = dados.feriado; });
@@ -515,7 +555,8 @@ function demo(acao, dados){
     }
     dias.push(d);
   });
-  var pq = dados.parque === 'DOLORES 1' ? { c: 'NORDEX MX', n: 3 } : { c: 'NORDEX', n: 13 };
+  var pp = PARQUES.filter(function(x){ return x.parque === dados.parque; })[0] || { cliente: 'NORDEX', num: 13 };
+  var pq = { c: pp.cliente, n: pp.num };
   return { ok: true, cab: { parque: dados.parque, cliente: pq.c, ano: dados.ano, semana: dados.semana,
            numTs: 'TS ' + ('0' + pq.n).slice(-2) + ' - ' + dados.semana + ' ' + dados.ano, ini: dias[0].data, fim: dias[6].data, limite: 9, almoco: 1 },
            dias: dias, totais: { porTecnico: tot, geral: ger } };
