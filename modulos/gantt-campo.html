@@ -126,6 +126,15 @@
   .pilula.aIniciar{background:var(--alerta-fraco);color:var(--alerta)}
   .pilula.concluido{background:var(--ok-fraco);color:var(--ok)}
   .pilula.semData{background:var(--erro-fraco);color:var(--erro)}
+  .pilula.mobilizacao{background:#e8e1fb;color:#5b3fc0}
+  .pilula.documentacao{background:#dff3f1;color:#0b7a6f}
+  /* Linha de título de cada grupo (Ativos / Previstos) */
+  table.gantt tr.grupo td{
+    background:var(--fundo,#eef1f4);color:var(--texto,#12222f);font-weight:800;font-size:.78rem;
+    letter-spacing:.04em;text-transform:uppercase;padding:7px 10px;border-top:2px solid var(--linha);
+  }
+  table.gantt tr.grupo td .grupo-rot{position:sticky;left:10px}
+  table.gantt tr.grupo td small{font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:8px}
 
   /* células de semana */
   table.gantt td.sem{
@@ -286,6 +295,8 @@
         <option value="todas">Todas</option>
         <option value="andamento">Em andamento</option>
         <option value="aIniciar">A iniciar</option>
+        <option value="mobilizacao">Mobilização</option>
+        <option value="documentacao">Aprovação de documentações</option>
         <option value="concluido">Concluído</option>
       </select>
     </div>
@@ -497,6 +508,9 @@ function chaveMes(d){
    --------------------------------------------------------------------------- */
 function situacao(p){
   if(String(p.status || 'andamento') === 'concluido') return 'concluido';
+  // Na Reunião Diária ainda em Mobilização ou Aprovação de Documentações:
+  // não começou, mesmo que a data de início já tenha passado.
+  if(p.etapa === 'mobilizacao' || p.etapa === 'documentacao') return 'aIniciar';
   if(!p.inicio) return 'aIniciar';
   var hoje = segundaDe(new Date());
   var ini = dataDe(p.inicio);
@@ -604,7 +618,9 @@ function filtrar(){
     if(fs  && nomeSupervisor(p) !== fs) return false;
     // Padrão (vazio) esconde os concluídos: eles só aparecem pedindo no filtro.
     if(!fst && situacao(p) === 'concluido') return false;
-    if(fst && fst !== 'todas' && situacao(p) !== fst) return false;
+    if(fst === 'mobilizacao' || fst === 'documentacao'){
+      if(p.etapa !== fst) return false;
+    }else if(fst && fst !== 'todas' && situacao(p) !== fst) return false;
 
     if(de || ate){
       if(!p.inicio && !p.fim) return false;          // sem data não dá para posicionar
@@ -716,7 +732,9 @@ function classeFixa(i){
    muda a tela de ninguém. Projeto novo, que ainda não tem posição, entra no
    fim. "Ordem original" volta para cliente + parque.
    --------------------------------------------------------------------------- */
-var CHAVE_ORDEM = 'ew_gantt_ordem';
+/* v2 (nov/2026): a ordem padrão mudou (ativos primeiro, depois previstos pela
+   data de início). Chave nova para uma ordem manual antiga não esconder isso. */
+var CHAVE_ORDEM = 'ew_gantt_ordem_v2';
 var ordemSalva = [];
 try{ ordemSalva = JSON.parse(localStorage.getItem(CHAVE_ORDEM) || '[]') || []; }catch(e){ ordemSalva = []; }
 
@@ -727,9 +745,49 @@ function guardarOrdem(){
   }catch(e){ /* sem armazenamento: vale só até recarregar */ }
 }
 
+/* ORDEM PADRÃO (nov/2026)
+     1º ATIVOS (Reunião Diária: Parques Ativos), por fabricante: GE, Siemens,
+        Nordex — e dentro de cada um, pelo nome do parque;
+     2º PREVISTOS (Mobilização e Aprovação de Documentações, ou "a iniciar"),
+        pela data de início mais próxima; sem data vão para o fim do grupo;
+     3º concluídos (só aparecem pedindo no filtro). */
+var ORDEM_FAB = ['GE', 'SIEMENS', 'NORDEX'];
+function fabricanteDe(p){
+  var t = String(p.fabricante || p.cliente || '').toUpperCase();
+  for(var i = 0; i < ORDEM_FAB.length; i++) if(t.indexOf(ORDEM_FAB[i]) > -1) return ORDEM_FAB[i];
+  return t;
+}
+function ordemFab(p){
+  var i = ORDEM_FAB.indexOf(fabricanteDe(p));
+  return i < 0 ? ORDEM_FAB.length : i;
+}
+function grupoDe(p){
+  var s = situacao(p);
+  if(s === 'concluido') return 2;
+  if(p.etapa === 'ativo') return 0;
+  if(p.etapa === 'mobilizacao' || p.etapa === 'documentacao') return 1;
+  return s === 'andamento' ? 0 : 1;
+}
+var ROTULO_GRUPO = [
+  ['Parques ativos', 'GE · Siemens · Nordex'],
+  ['Previstos', 'Mobilização e Aprovação de Documentações, pela data de início'],
+  ['Concluídos', '']
+];
+function inicioOrdem(p){
+  var ini = String(p.inicio || '');
+  if(!ini) return '9999-12-31';
+  var hoje = hojeISO();
+  return ini < hoje ? hoje : ini;      // início vencido conta como "já"
+}
 function ordemPadrao(a, b){
-  var ca = String(a.cliente||''), cb = String(b.cliente||'');
-  if(ca !== cb) return ca.localeCompare(cb, 'pt-BR');
+  var ga = grupoDe(a), gb = grupoDe(b);
+  if(ga !== gb) return ga - gb;
+  if(ga === 1){
+    var ia = inicioOrdem(a), ib = inicioOrdem(b);
+    if(ia !== ib) return ia < ib ? -1 : 1;
+  }
+  var fa = ordemFab(a), fb = ordemFab(b);
+  if(fa !== fb) return fa - fb;
   return String(a.parque||'').localeCompare(String(b.parque||''), 'pt-BR');
 }
 
@@ -774,6 +832,12 @@ function moverLinha(id, dir){
 function intervalo(p){
   if(!p.inicio) return null;          // a iniciar sem data: sem barra para desenhar
   var ini = segundaDe(dataDe(p.inicio));
+  // Previsto com início já vencido na Reunião Diária: ainda não começou,
+  // então a barra começa nesta semana em vez de fingir que rodou no passado.
+  if(p.etapa === 'mobilizacao' || p.etapa === 'documentacao'){
+    var seg = segundaDe(new Date());
+    if(ini < seg) ini = seg;
+  }
   var fim = fimDesenho(p); fim = fim ? segundaDe(fim) : ini;
   if(fim < ini) fim = ini;
   return { ini: ini, fim: fim };
@@ -897,7 +961,10 @@ function celulasFixas(p, sit, cor, pos, total){
     '</div></td>';
 
   var tag  = '<span class="tag-cliente" style="background:' + cor + '">' + esc(p.cliente || '—') + '</span>';
-  var pill = '<span class="pilula ' + sit + '">' + ROTULO_SIT[sit] + '</span>';
+  // A etapa da Reunião Diária fala mais que "a iniciar".
+  var pill = p.etapa === 'mobilizacao' ? '<span class="pilula mobilizacao">Mobilização</span>'
+           : p.etapa === 'documentacao' ? '<span class="pilula documentacao" title="Aprovação de documentações">Aprov. documentação</span>'
+           : '<span class="pilula ' + sit + '">' + ROTULO_SIT[sit] + '</span>';
   var ini  = p.inicio ? dataBonita(p.inicio) : '—';
   // Previsão vem marcada com "prev." para ninguém ler data estimada como fato.
   var fim  = p.fim ? dataBonita(p.fim)
@@ -977,7 +1044,21 @@ function desenhar(){
 
   /* ---- linhas ---- */
   var corpo = '';
+  var grupoAnterior = -1;
+  var nColunas = colunas().length + m.semanas.length;
   m.linhas.forEach(function(l, pos){
+    // Título de grupo só na ordem padrão: com ordem manual os grupos se misturam.
+    if(!ordemSalva.length){
+      var g = grupoDe(l.p);
+      if(g !== grupoAnterior){
+        var qtd = m.linhas.filter(function(x){ return grupoDe(x.p) === g; }).length;
+        corpo += '<tr class="grupo"><td colspan="' + nColunas + '"><span class="grupo-rot">' +
+                 esc(ROTULO_GRUPO[g][0]) + ' (' + qtd + ')' +
+                 (ROTULO_GRUPO[g][1] ? '<small>' + esc(ROTULO_GRUPO[g][1]) + '</small>' : '') +
+                 '</span></td></tr>';
+        grupoAnterior = g;
+      }
+    }
     var td = celulasFixas(l.p, l.sit, l.cor, pos, m.linhas.length);
     l.cels.forEach(function(c){
       var marca = c.ehHoje ? ' hoje-ini hoje-fim' : '';
@@ -1299,11 +1380,60 @@ function normalizar(p){
 
 var revAtual = -1;
 
+/* REUNIÃO DIÁRIA NO GANTT (nov/2026)
+   O servidor manda, junto com os projetos, o retrato de todos os parques da
+   Reunião Diária do app (SyncReuniaoDiaria.gs, a cada 10 minutos):
+     - parque que já tem projeto no portal: o projeto ganha a etapa
+       (ativo / mobilização / aprovação de documentações) e o fabricante;
+     - parque que ainda NÃO tem projeto (previstos): vira uma linha só de
+       leitura, com os técnicos e as datas da Reunião Diária.
+   Datas dos previstos sem projeto: Aprovação de Documentações traz a data
+   prevista de início e, sem término informado, a barra vai 2 meses (mesma
+   regra da Reunião Diária); Mobilização traz a previsão de término e, como
+   início, a data de integração no cliente. */
+function maisMesesIso(iso, n){
+  var d = dataDe(iso); if(!d) return '';
+  return isoDe(new Date(d.getFullYear(), d.getMonth() + n, d.getDate()));
+}
+function mesclarReuniao(lista, rd){
+  if(!Array.isArray(rd) || !rd.length) return lista;
+  var porId = {};
+  lista.forEach(function(p){ porId[String(p.id)] = p; });
+  rd.forEach(function(r){
+    var p = r.projetoId ? porId[String(r.projetoId)] : null;
+    if(p){
+      p.etapa = r.etapa;
+      p.fabricante = r.fabricante;
+      return;
+    }
+    var tecs = (r.tecnicos || []).map(function(t){
+      return { nome: t.nome, matricula: t.matricula || '', nivel: t.nivel || '' };
+    });
+    var ini = r.inicio || '';
+    var fimPrev = r.fimPrevisto || (ini ? maisMesesIso(ini, 2) : '');
+    lista.push({
+      id: 'rd:' + r.rdId, virtual: true, codigo: '',
+      cliente: fabricanteDe({ fabricante: r.fabricante }) || r.fabricante || '',
+      fabricante: r.fabricante, parque: r.nome,
+      tipoReparo: 'Reunião Diária' + (r.cliente ? ' · ' + r.cliente : ''),
+      supervisor: r.supervisor ? { nome: r.supervisor } : null,
+      inicio: ini, fim: '', fimPrevisto: fimPrev, status: 'andamento',
+      etapa: r.etapa, tecnicos: tecs,
+      equipes: tecs.length ? [{ desde: ini || hojeISO(), tecnicos: tecs }] : []
+    });
+  });
+  return lista;
+}
+
+function aplicarResposta(res){
+  projetos = mesclarReuniao((res.projetos || []).map(normalizar), res.reuniao);
+  revAtual = res.rev;
+}
+
 function carregar(){
   return chamar('projetosCarregar', { rev: -1 }).then(function(res){
     if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
-    projetos = (res.projetos || []).map(normalizar);
-    revAtual = res.rev;
+    aplicarResposta(res);
   });
 }
 
@@ -1320,8 +1450,7 @@ function atualizarSeMudou(){
     if(!res || !res.ok || !res.mudou) return;
     var quadro = document.getElementById('quadro');
     var x = quadro ? quadro.scrollLeft : 0, y = quadro ? quadro.scrollTop : 0;
-    projetos = (res.projetos || []).map(normalizar);
-    revAtual = res.rev;
+    aplicarResposta(res);
     montarOpcoes();
     desenhar();
     if(quadro){ quadro.scrollLeft = x; quadro.scrollTop = y; }
