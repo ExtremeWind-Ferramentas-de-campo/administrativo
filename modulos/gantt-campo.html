@@ -1297,11 +1297,35 @@ function normalizar(p){
   return p;
 }
 
+var revAtual = -1;
+
 function carregar(){
   return chamar('projetosCarregar', { rev: -1 }).then(function(res){
     if(!res || !res.ok) throw { motivo: (res && res.motivo) || 'ERRO' };
     projetos = (res.projetos || []).map(normalizar);
+    revAtual = res.rev;
   });
+}
+
+/* ATUALIZAÇÃO AUTOMÁTICA (nov/2026)
+   Os projetos mudam por fora desta tela: em Projetos em Andamento e, a cada
+   10 minutos, pela Reunião Diária do app (SyncReuniaoDiaria.gs). A cada
+   minuto, com a aba visível, pergunta se a revisão mudou — a resposta "não
+   mudou" é leve e não lê a planilha. Mudou: redesenha mantendo filtros e a
+   posição da rolagem. */
+var ATUALIZAR_MS = 60000;
+function atualizarSeMudou(){
+  if(document.hidden || revAtual < 0) return;
+  chamar('projetosCarregar', { rev: revAtual }).then(function(res){
+    if(!res || !res.ok || !res.mudou) return;
+    var quadro = document.getElementById('quadro');
+    var x = quadro ? quadro.scrollLeft : 0, y = quadro ? quadro.scrollTop : 0;
+    projetos = (res.projetos || []).map(normalizar);
+    revAtual = res.rev;
+    montarOpcoes();
+    desenhar();
+    if(quadro){ quadro.scrollLeft = x; quadro.scrollTop = y; }
+  }).catch(function(){ /* falha de rede: tenta de novo no próximo minuto */ });
 }
 
 /* ---------------------------------------------------------------------------
@@ -1418,6 +1442,8 @@ document.getElementById('btHoje').addEventListener('click', function(){
       montarOpcoes();
       desenhar();
       verSemanaAtual(false);
+      setInterval(atualizarSeMudou, ATUALIZAR_MS);
+      document.addEventListener('visibilitychange', atualizarSeMudou);
     })
     .catch(function(err){
       if(err && err.motivo === 'SESSAO') return;
