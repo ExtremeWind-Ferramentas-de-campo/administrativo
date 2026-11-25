@@ -2163,6 +2163,31 @@
     });
 
     /* ================= boot ================= */
+    /* login unico: pede ao site principal (pagina pai) o token e troca por sessao do portal */
+    function trocarSessaoComSite(){
+      if(window.parent === window) return;
+      var ORIGEM_SITE = 'https://extreme-wind-repair.github.io';
+      var tratou = false;
+      function onMsg(ev){
+        if(ev.origin !== ORIGEM_SITE || !ev.data || ev.data.tipo !== 'ew-sessao' || !ev.data.tokenSite || tratou) return;
+        tratou = true;
+        window.removeEventListener('message', onMsg);
+        if(typeof API_URL === 'undefined') return;
+        fetch(API_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, redirect:'follow',
+          body: JSON.stringify({ acao:'sessaoExterna', tokenSite: ev.data.tokenSite }) })
+        .then(function(r){ return r.json(); })
+        .then(function(res){
+          if(!res || !res.ok || !res.token || !res.usuario || !res.usuario.nome) return;
+          var u = res.usuario;
+          try { localStorage.setItem('ew_sessao', JSON.stringify({ token:res.token, nome:u.nome, matricula:u.matricula, perfil:u.perfil })); } catch(e){ return; }
+          location.reload();
+        }).catch(function(){});
+      }
+      window.addEventListener('message', onMsg);
+      try { window.parent.postMessage({ tipo:'ew-pedir-sessao' }, ORIGEM_SITE); } catch(e){}
+      setTimeout(function(){ window.removeEventListener('message', onMsg); }, 4000);
+    }
+    
     document.getElementById('bloqueioAcao').addEventListener('click', function(){
       location.href = '../index.html';
     });
@@ -2172,6 +2197,7 @@
 
       SESSAO = lerSessao();
       if(!SESSAO){
+        trocarSessaoComSite();
         mostrarBloqueio('Este quadro usa o login do portal. Entre pelo portal e abra a Solicitação de Materiais pelo menu.');
         return;
       }
