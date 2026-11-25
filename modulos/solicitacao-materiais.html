@@ -2168,24 +2168,27 @@
       if(window.parent === window) return;
       var ORIGEM_SITE = 'https://extreme-wind-repair.github.io';
       var tratou = false;
+  function st(s){ try { var b = document.getElementById('bloqueio'); if(!b) return; var el = document.getElementById('ssoStatus'); if(!el){ el = document.createElement('div'); el.id = 'ssoStatus'; el.style.cssText = 'font-size:11px;opacity:.7;margin-top:10px;text-align:center'; (b.firstElementChild || b).appendChild(el); } el.textContent = 'login unico: ' + s; } catch(e){} }
       function onMsg(ev){
         if(ev.origin !== ORIGEM_SITE || !ev.data || ev.data.tipo !== 'ew-sessao' || !ev.data.tokenSite || tratou) return;
-        tratou = true;
+        tratou = true; st('2 token recebido, trocando');
         window.removeEventListener('message', onMsg);
         if(typeof API_URL === 'undefined') return;
         fetch(API_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, redirect:'follow',
           body: JSON.stringify({ acao:'sessaoExterna', tokenSite: ev.data.tokenSite }) })
         .then(function(r){ return r.json(); })
         .then(function(res){
+          st('3 portal: ' + (res && res.ok ? 'ok' + (res.usuario && res.usuario.nome ? '' : ' mas sem nome; campos: ' + Object.keys(res.usuario || {}).join(',')) : ((res && res.motivo) || 'sem resposta')));
           if(!res || !res.ok || !res.token || !res.usuario || !res.usuario.nome) return;
           var u = res.usuario;
           try { localStorage.setItem('ew_sessao', JSON.stringify({ token:res.token, nome:u.nome, matricula:u.matricula, perfil:u.perfil })); } catch(e){ return; }
           location.reload();
-        }).catch(function(){});
-      }
-      window.addEventListener('message', onMsg);
+        }).catch(function(e){ st('erro: ' + (e && e.message)); });
+  }
+  window.addEventListener('message', onMsg);
       /* o site principal pode ainda nao ter token (login depois do carregamento): repete o pedido a cada 2 s, ate 10 min */
     var tentativas = 0;
+    st('1 pedindo token ao site');
     var timer = setInterval(function(){
       tentativas++;
       if(tratou || tentativas > 300){ clearInterval(timer); window.removeEventListener('message', onMsg); return; }
