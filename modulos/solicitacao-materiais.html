@@ -2184,8 +2184,14 @@
         }).catch(function(){});
       }
       window.addEventListener('message', onMsg);
+      /* o site principal pode ainda nao ter token (login depois do carregamento): repete o pedido a cada 2 s, ate 10 min */
+    var tentativas = 0;
+    var timer = setInterval(function(){
+      tentativas++;
+      if(tratou || tentativas > 300){ clearInterval(timer); window.removeEventListener('message', onMsg); return; }
       try { window.parent.postMessage({ tipo:'ew-pedir-sessao' }, ORIGEM_SITE); } catch(e){}
-      setTimeout(function(){ window.removeEventListener('message', onMsg); }, 4000);
+    }, 2000);
+    try { window.parent.postMessage({ tipo:'ew-pedir-sessao' }, ORIGEM_SITE); } catch(e){}
     }
     
     document.getElementById('bloqueioAcao').addEventListener('click', function(){
