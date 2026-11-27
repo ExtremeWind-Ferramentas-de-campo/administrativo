@@ -850,6 +850,33 @@
       });
     }
 
+    /* ================= anexo em partes =================
+       Um POST grande demais (arquivo de ~3 MB, que em base64 passa de 4 MB) chega
+       ao Apps Script sem o corpo e cai no doGet. Acima de ~360 KB o arquivo vai
+       em partes de ~360 KB e o servidor junta tudo no fim (materiaisAnexarFim). */
+    var PARTE_ANEXO = 480000; // caracteres de base64 por parte (múltiplo de 4)
+    function enviarAnexo(nome, tipo, base64, thumb){
+      if(base64.length <= PARTE_ANEXO){
+        return chamar('materiaisAnexar', { nome: nome, tipo: tipo, base64: base64, thumbBase64: thumb });
+      }
+      var envio = uid('up');
+      var total = Math.ceil(base64.length / PARTE_ANEXO);
+      var i = 0;
+      function proxima(){
+        if(i >= total){
+          return chamar('materiaisAnexarFim', { envio: envio, total: total, nome: nome, tipo: tipo, thumbBase64: thumb });
+        }
+        var parte = base64.slice(i * PARTE_ANEXO, (i + 1) * PARTE_ANEXO);
+        return chamar('materiaisAnexarParte', { envio: envio, indice: i, total: total, parte: parte })
+          .then(function(res){
+            if(!res || !res.ok) throw new Error('falha na parte ' + (i + 1));
+            i++;
+            return proxima();
+          });
+      }
+      return proxima();
+    }
+
     /* ================= tela de bloqueio ================= */
     function mostrarBloqueio(mensagem, comBotao){
       var el = document.getElementById('bloqueio');
@@ -1428,12 +1455,8 @@
               .then(function(thumb){
                 miniGerada = thumb;
                 var virgula = dadosArquivo.indexOf(',');
-                return chamar('materiaisAnexar', {
-                  nome: f.name,
-                  tipo: f.type || 'application/octet-stream',
-                  base64: dadosArquivo.slice(virgula + 1),
-                  thumbBase64: thumb
-                });
+                return enviarAnexo(f.name, f.type || 'application/octet-stream',
+                  dadosArquivo.slice(virgula + 1), thumb);
               })
               .then(function(res){
                 /* Conferir só o res.ok não basta: uma resposta vinda de outro
